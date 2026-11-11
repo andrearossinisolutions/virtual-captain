@@ -25,7 +25,7 @@ def main():
     if not r:
         return
     brain = Brain(Briefing(ta=r["ta"], accel_agl=r["accel_agl"], mode=r["mode"]))
-    say(f"Briefing ricevuto. Transition altitude {r['ta']} piedi.")
+    say(f"Briefing received. Transition altitude {r['ta']} feet.")
     src = simulated() if "--sim" in sys.argv else None
     aao = AAO()
     sim_t = 0.0
