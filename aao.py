@@ -1,5 +1,6 @@
 """Lettura variabili del simulatore via WebAPI di AAO (Axis and Ohs)."""
 import json
+import os
 import urllib.parse
 import urllib.request
 
@@ -16,7 +17,12 @@ VARS = {
 
 
 class AAO:
-    def __init__(self, base="http://localhost:43380/webapi"):
+    def __init__(self, base=None):
+        base = base or os.environ.get("CAPTAIN_AAO_URL") or "http://localhost:43380/webapi"
+        if not base.rstrip("/").endswith("/webapi"):
+            base = base.rstrip("/") + "/webapi"
+        if not base.startswith("http"):
+            base = "http://" + base
         self.base = base
 
     def read(self) -> dict:

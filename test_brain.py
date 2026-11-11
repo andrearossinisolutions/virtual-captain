@@ -31,9 +31,9 @@ def test_readout():
     f = dict(origin="LIMC", destination="EDDF", runway="35R", ta="6000", v1="140", vr="141", v2="145")
     p = dict(sid="ROBE1A", star="TOP2B")
     t = readout(f, p, "normal")
-    assert t == ("Briefing received. Departure Lima India Mike Charlie runway three five Right, SID ROBE 1 Alpha. "
+    assert t == ("Briefing received. Departure Lima India Mike Charlie runway three five Right via ROBE 1 Alpha. "
                  "Transition altitude 6000 feet. V1 140, rotation 141, V2 145. "
-                 "Arrival Echo Delta Delta Foxtrot, STAR TOP 2 Bravo.")
+                 "Arrival Echo Delta Delta Foxtrot via TOP 2 Bravo.")
     assert readout(f, p, "training").endswith("Check the SID in the FMC before the clearance call.")
     assert readout(dict(ta="5000"), {}, "training") == "Briefing received. Transition altitude 5000 feet."
 

@@ -116,7 +116,7 @@ def readout(fields: dict, plan: dict, mode: str) -> str:
         f"runway {spell_runway(fields['runway'])}" if fields.get("runway") else "") if x)
     sid = (plan or {}).get("sid")
     if dep or sid:
-        parts.append((dep + (", " if dep and sid else "") + (f"SID {spell_proc(sid)}" if sid else "")).strip(", ") + ".")
+        parts.append((dep + (" " if dep and sid else "") + (f"via {spell_proc(sid)}" if sid else "")).strip() + ".")
     if fields.get("ta"):
         parts.append(f"Transition altitude {fields['ta']} feet.")
     speeds = [f"{lbl} {fields[k]}" for k, lbl in (("v1", "V1"), ("vr", "rotation"), ("v2", "V2")) if fields.get(k)]
@@ -125,7 +125,7 @@ def readout(fields: dict, plan: dict, mode: str) -> str:
     star = (plan or {}).get("star")
     if fields.get("destination") or star:
         arr = f"Arrival {spell_icao(fields['destination'])}" if fields.get("destination") else ""
-        parts.append((arr + (", " if arr and star else "") + (f"STAR {spell_proc(star)}" if star else "")) + ".")
+        parts.append((arr + (" " if arr and star else "") + (f"via {spell_proc(star)}" if star else "")).strip() + ".")
     if mode == "training" and sid:
         parts.append("Check the SID in the FMC before the clearance call.")
     return " ".join(parts)

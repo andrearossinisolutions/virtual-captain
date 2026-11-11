@@ -61,7 +61,9 @@ def main():
     def speak(text):
         say(text, on_start=st.add_log)  # nel log (e in grande nella pagina) solo quando inizia la lettura
 
-    aao, brain, src, clock = AAO(), None, None, 0.0
+    aao, brain, src, clock = AAO(arg("--aao")), None, None, 0.0
+    if not sim:
+        print(f"AAO: {aao.base}", flush=True)
     try:
         while True:
             if st.phase != "flying":
