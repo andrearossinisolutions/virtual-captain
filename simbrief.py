@@ -57,6 +57,7 @@ def to_briefing(ofp: dict) -> dict:
         "origin": _g(ofp, "origin", "icao_code"),
         "destination": _g(ofp, "destination", "icao_code"),
         "runway": rwy,
+        "dep_time": _utc_time(_g(ofp, "times", "sched_out")),
         "ta": _num(_g(ofp, "origin", "trans_alt")),
         "cruise_alt": _num(_g(ofp, "general", "initial_altitude")),
         "generated": _g(ofp, "params", "time_generated"),
@@ -73,6 +74,14 @@ def to_briefing(ofp: dict) -> dict:
         for name in ("v1", "vr", "v2"):
             out[name] = _find_speed(pick, name)
     return out
+
+
+def _utc_time(ts):
+    n = _num(ts)
+    if n is None:
+        return None
+    import datetime
+    return datetime.datetime.fromtimestamp(n, datetime.timezone.utc).strftime("%H:%M")
 
 
 def _hhmm(sec):

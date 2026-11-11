@@ -42,8 +42,9 @@ def spell_proc(ident: str) -> str:
 @dataclass
 class Briefing:
     ta: int = 5000
+    thr_red_agl: int = 1500
     accel_agl: int = 1500
-    mode: str = "training"  # or "silent"
+    mode: str = "normal"  # or "training"
     v1: int | None = None
     vr: int | None = None
 
@@ -92,6 +93,9 @@ class Brain:
             if "gear_repeat" not in self.done:
                 self.done.add("gear_repeat")
                 out.append("Gear is still down, gear up")
+        if s["agl"] >= self.b.thr_red_agl:
+            out += self._once("thr_red", "Thrust reduction altitude",
+                              "Thrust reduction altitude: bring the thrust levers back to the climb detent.")
         if s["agl"] >= self.b.accel_agl:
             out += self._once("accel", "Acceleration altitude",
                               "Acceleration altitude: lower the nose, accelerate and retract the flaps on schedule.")

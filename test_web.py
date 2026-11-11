@@ -23,14 +23,14 @@ def test_api_flow():
         assert "Virtual Captain" in call(base, "/")
         s = call(base, "/api/state")
         assert s["phase"] == "briefing" and s["fields"]["ta"] == ""
-        s = call(base, "/api/fields", {"ta": "6000", "accel_agl": "1000", "mode": "silent", "simbrief": "x"})
-        assert s["fields"]["ta"] == "6000" and s["mode"] == "silent"
+        s = call(base, "/api/fields", {"ta": "6000", "accel_agl": "1000", "thr_red_agl": "800", "mode": "training", "simbrief": "x"})
+        assert s["fields"]["ta"] == "6000" and s["mode"] == "training"
         b = st.briefing()
-        assert (b.ta, b.accel_agl, b.mode) == (6000, 1000, "silent")
+        assert (b.ta, b.thr_red_agl, b.accel_agl, b.mode) == (6000, 800, 1000, "training")
         assert call(base, "/api/phase", {"phase": "flying"})["phase"] == "flying"
         # si ricordano solo ID, modalità e accelerazione
         saved = json.loads(cfg.read_text())
-        assert saved == {"accel_agl": "1000", "simbrief": "x", "mode": "silent"}
+        assert saved == {"accel_agl": "1000", "thr_red_agl": "800", "simbrief": "x", "mode": "training"}
         assert State(cfg).fields["ta"] == "" and State(cfg).fields["accel_agl"] == "1000"
     finally:
         srv.shutdown()
@@ -40,7 +40,7 @@ def test_bad_values_use_defaults():
     st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
     st.update({"ta": "abc", "accel_agl": ""})
     b = st.briefing()
-    assert (b.ta, b.accel_agl) == (5000, 1500)
+    assert (b.ta, b.thr_red_agl, b.accel_agl) == (5000, 1500, 1500)
 
 
 
@@ -65,9 +65,16 @@ def test_plan_extraction():
     assert to_briefing({})["plan"]["route"] is None
 
 
+def test_old_mode_values_migrate():
+    import state
+    assert state._mode("silent") == "normal" and state._mode("silenziosa") == "normal"
+    assert state._mode("allenamento") == "training" and state._mode(None) == "normal"
+
+
 if __name__ == "__main__":
     test_api_flow()
     test_bad_values_use_defaults()
     test_firewall_noop_off_windows()
     test_plan_extraction()
+    test_old_mode_values_migrate()
     print("ok")

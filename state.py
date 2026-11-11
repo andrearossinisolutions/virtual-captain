@@ -11,12 +11,12 @@ from brain import Briefing
 from simbrief import fetch_latest, to_briefing
 
 CFG = pathlib.Path.home() / ".virtual-captain.json"
-FIELDS = [("origin", "Departure"), ("destination", "Arrival"), ("runway", "Runway"),
-          ("ta", "TA (ft)"), ("accel_agl", "Acceleration (ft AGL)"),
+FIELDS = [("origin", "Departure"), ("destination", "Arrival"), ("dep_time", "Departure time (UTC)"), ("runway", "Runway"),
+          ("ta", "TA (ft)"), ("thr_red_agl", "Thrust reduction (ft AGL)"), ("accel_agl", "Acceleration (ft AGL)"),
           ("v1", "V1"), ("vr", "VR"), ("v2", "V2"), ("flap", "Flap")]
-FROM_PLAN = ["origin", "destination", "runway", "ta", "v1", "vr", "v2", "flap"]  # accel_agl è solo manuale
-REMEMBERED = ["accel_agl"]  # unico campo dei dati di volo che si ricorda
-MODES = ("training", "silent")
+FROM_PLAN = ["origin", "destination", "dep_time", "runway", "ta", "v1", "vr", "v2", "flap"]  # accel_agl è solo manuale
+REMEMBERED = ["thr_red_agl", "accel_agl"]  # unico campo dei dati di volo che si ricorda
+MODES = ("normal", "training")
 
 
 def _when(ts):
@@ -27,8 +27,8 @@ def _when(ts):
 
 
 def _mode(m):
-    """Valori vecchi (italiano) dal file di configurazione → inglese."""
-    return {"allenamento": "training", "silenziosa": "silent"}.get(m, m if m in MODES else "training")
+    """Normal è il default. Valori vecchi (allenamento/silenziosa/silent) dal file di configurazione → nuovi."""
+    return {"allenamento": "training", "silenziosa": "normal", "silent": "normal"}.get(m, m if m in MODES else "normal")
 
 
 class State:
@@ -89,6 +89,7 @@ class State:
     def _save(self):
         try:
             self.cfg_path.write_text(json.dumps({"accel_agl": self.fields["accel_agl"],
+                                                 "thr_red_agl": self.fields["thr_red_agl"],
                                                  "simbrief": self.simbrief, "mode": self.mode}))
         except OSError:
             pass
@@ -101,7 +102,8 @@ class State:
             except ValueError:
                 return d
         with self.lock:
-            return Briefing(ta=num("ta", 5000), accel_agl=num("accel_agl", 1500), mode=self.mode,
+            return Briefing(ta=num("ta", 5000), thr_red_agl=num("thr_red_agl", 1500),
+                            accel_agl=num("accel_agl", 1500), mode=self.mode,
                             v1=num("v1", None), vr=num("vr", None))
 
     def add_log(self, text: str):

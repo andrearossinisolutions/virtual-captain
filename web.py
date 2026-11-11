@@ -49,12 +49,13 @@ ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{pa
 <section id="cfg">
   <h2>Briefing</h2>
   <div class="card">
-    <div class="row"><div><label for="simbrief">SimBrief ID or username</label><input id="simbrief" autocapitalize="off" autocorrect="off"></div>
-    <div style="flex:0 0 auto;align-self:end"><button id="load">Load latest plan</button></div></div>
+    <div class="row"><div style="flex:2"><label for="simbrief">SimBrief ID or username</label><input id="simbrief" enterkeyhint="next" autocapitalize="off" autocorrect="off"></div>
+    <div style="flex:1"><label for="mode">Mode</label><select id="mode"></select></div></div>
+    <p style="margin:12px 0 0"><button id="load" style="width:100%">Load latest plan</button></p>
     <p id="info"></p>
+    <div class="grid" id="apt"></div>
     <div id="plancfg"></div>
     <div class="grid" id="grid"></div>
-    <div class="grid"><div><label for="mode">Mode</label><select id="mode"></select></div></div>
   </div>
   <button class="big" id="go">Briefing complete</button>
   <p style="margin-top:12px"><button class="ghost" id="end" hidden style="width:100%">End flight (stop reading)</button></p>
@@ -72,11 +73,19 @@ ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{pa
 const $=id=>document.getElementById(id);let lastRev=-1,timer=null,phase="briefing",view="config",last=null;
 async function api(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
   if(!r.ok){const t=await r.text();throw new Error(t||r.status)}return r.json()}
-function build(s){const g=$("grid");g.innerHTML="";for(const [k,l] of s.labels){const d=document.createElement("div");
-  d.innerHTML=`<label>${l}</label><input data-k="${k}" inputmode="${["origin","destination","runway","flap"].includes(k)?"text":"numeric"}" autocomplete="off">`;g.appendChild(d)}
-  $("mode").innerHTML=s.modes.map(m=>`<option>${m}</option>`).join("");
-  document.querySelectorAll("[data-k]").forEach(i=>i.oninput=save);$("mode").onchange=save;$("simbrief").oninput=save}
-function fill(s){document.querySelectorAll("[data-k]").forEach(i=>i.value=s.fields[i.dataset.k]);$("simbrief").value=s.simbrief;$("mode").value=s.mode}
+function build(s){const g=$("grid");g.innerHTML="";$("apt").innerHTML="";for(const [k,l] of s.labels){const d=document.createElement("div");
+  d.innerHTML=`<label>${l}</label><input data-k="${k}" inputmode="${["origin","destination","dep_time","runway","flap"].includes(k)?"text":"numeric"}" autocomplete="off" enterkeyhint="next">`;(k==="origin"||k==="destination"||k==="dep_time"?$("apt"):g).appendChild(d);
+  if(k==="dep_time"){const e=document.createElement("div");e.innerHTML='<label>Local time</label><input id="deploc" disabled>';$("apt").appendChild(e)}}
+  $("mode").innerHTML=s.modes.map(m=>`<option value="${m}">${m[0].toUpperCase()+m.slice(1)}</option>`).join("");
+  document.querySelectorAll("[data-k]").forEach(i=>i.oninput=()=>{save();localTime()});$("mode").onchange=save;document.querySelectorAll("#cfg input").forEach(i=>i.onkeydown=nextField);$("simbrief").oninput=save}
+function localTime(){const el=$("deploc");if(!el)return;const v=(document.querySelector('[data-k="dep_time"]').value||"").trim();
+  const m=v.match(/^(\d{1,2})[:.]?(\d{2})$/);if(!m||+m[1]>23||+m[2]>59){el.value="";return}
+  const n=new Date(),d=new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate(),+m[1],+m[2]));
+  el.value=d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",hour12:false})}
+function nextField(e){if(e.key!=="Enter")return;e.preventDefault();
+  const all=[...document.querySelectorAll("#cfg input:not([disabled])")].filter(i=>i.offsetParent);const n=all[all.indexOf(e.target)+1];
+  if(n){n.focus();n.select&&n.select()}else{e.target.blur()}}
+function fill(s){document.querySelectorAll("[data-k]").forEach(i=>i.value=s.fields[i.dataset.k]);$("simbrief").value=s.simbrief;$("mode").value=s.mode;localTime()}
 function collect(){const o={simbrief:$("simbrief").value,mode:$("mode").value};document.querySelectorAll("[data-k]").forEach(i=>o[i.dataset.k]=i.value);return o}
 function save(){clearTimeout(timer);timer=setTimeout(async()=>{try{const s=await api("/api/fields",collect());lastRev=s.rev}catch(e){}},400)}
 function planHtml(p,open){if(!p||!(p.route||p.waypoints&&p.waypoints.length))return null;
@@ -92,7 +101,7 @@ function planHtml(p,open){if(!p||!(p.route||p.waypoints&&p.waypoints.length))ret
 function plans(s){for(const [id,open] of [["plancfg",false],["planflt",false]]){const el=$(id);const keep=el.querySelector("details")?.open;const b=planHtml(s.plan,keep||open);el.innerHTML="";if(b)el.appendChild(b)}}
 function chips(s){const f=s.fields,c=$("chips");c.innerHTML="";
   const add=(k,v)=>{if(v){const d=document.createElement("span");d.className="chip";d.innerHTML=`<b>${k}</b>`;d.append(v);c.appendChild(d)}};
-  add("RWY",[f.origin,f.runway].filter(Boolean).join(" "));add("TA",f.ta&&f.ta+" ft");add("V1",f.v1);add("VR",f.vr);add("V2",f.v2);add("FLAP",f.flap);add("MODE",s.mode)}
+  add("RWY",[f.origin,f.runway].filter(Boolean).join(" "));add("TA",f.ta&&f.ta+" ft");add("V1",f.v1);add("VR",f.vr);add("V2",f.v2);add("FLAP",f.flap);add("MODE",s.mode[0].toUpperCase()+s.mode.slice(1))}
 function render(){const s=last;if(!s)return;const fly=s.phase==="flying";
   $("cfg").hidden=view!=="config";$("flt").hidden=view!=="flight";
   $("phase").textContent=fly?"✈ Flying — reading the simulator":"📝 Briefing";
