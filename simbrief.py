@@ -49,8 +49,49 @@ def to_briefing(ofp: dict) -> dict:
         runways = [runways]
     pick = next((r for r in runways if r.get("identifier") == rwy), None) or (runways[0] if runways else None)
     if pick:
-        out["v1"] = _num(pick.get("v1_speed"))
-        out["vr"] = _num(pick.get("vr_speed"))
-        out["v2"] = _num(pick.get("v2_speed"))
         out["flap"] = pick.get("flap_setting")
+        for name in ("v1", "vr", "v2"):
+            out[name] = _find_speed(pick, name)
     return out
+
+
+def _find_speed(d, name):
+    """Cerca una chiave che sia name o inizi/finisca con name (v1, v1_speed, speed_v1...), anche annidata."""
+    if isinstance(d, dict):
+        for k, v in d.items():
+            kl = str(k).lower()
+            if kl in (name, f"{name}_speed", f"speed_{name}") and not isinstance(v, (dict, list)):
+                n = _num(v)
+                if n is not None:
+                    return n
+        for v in d.values():
+            r = _find_speed(v, name)
+            if r is not None:
+                return r
+    return None
+
+
+def explore(ofp: dict, words=("v1", "vr", "v2", "flap", "tlr", "takeoff", "flex", "speed")):
+    """Elenca percorso e valore dei campi che sembrano dati di decollo (per capire il formato)."""
+    rows = []
+
+    def walk(d, path):
+        if isinstance(d, dict):
+            for k, v in d.items():
+                walk(v, f"{path}.{k}" if path else str(k))
+        elif isinstance(d, list):
+            for i, v in enumerate(d[:3]):
+                walk(v, f"{path}[{i}]")
+        elif any(w in path.lower() for w in words):
+            rows.append(f"{path} = {str(d)[:60]}")
+
+    walk(ofp, "")
+    return rows
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) < 2:
+        sys.exit("uso: python simbrief.py <ID o username>")
+    for r in explore(fetch_latest(sys.argv[1])):
+        print(r)

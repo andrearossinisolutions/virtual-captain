@@ -1,6 +1,7 @@
 """Finestra Briefing (Tkinter): SimBrief ID, carica piano, campi modificabili."""
 from __future__ import annotations
 import json
+from datetime import datetime
 import pathlib
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -11,6 +12,13 @@ CFG = pathlib.Path.home() / ".virtual-captain.json"
 FIELDS = [("origin", "Partenza"), ("destination", "Arrivo"), ("runway", "Pista"),
           ("ta", "TA (ft)"), ("accel_agl", "Accelerazione (ft AGL)"),
           ("v1", "V1"), ("vr", "VR"), ("v2", "V2"), ("flap", "Flap")]
+
+
+def _when(ts):
+    try:
+        return datetime.fromtimestamp(int(ts)).strftime("%d/%m %H:%M")
+    except (TypeError, ValueError, OSError):
+        return str(ts)
 
 
 def run() -> dict | None:
@@ -37,7 +45,7 @@ def run() -> dict | None:
         for k, v in data.items():
             if k in vars_ and v is not None:
                 vars_[k].set(str(v))
-        info.set(f"{data['origin']} → {data['destination']}  (generato: {data['generated']})")
+        info.set(f"{data['origin']} → {data['destination']}  (generato: {_when(data['generated'])})")
 
     ttk.Button(f, text="Carica ultimo piano", command=load).grid(row=0, column=2, padx=6)
     ttk.Label(f, textvariable=info, foreground="#06c").grid(row=1, column=0, columnspan=3, sticky="w")
