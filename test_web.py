@@ -43,7 +43,18 @@ def test_bad_values_use_defaults():
     assert (b.ta, b.accel_agl) == (5000, 1500)
 
 
+
+
+def test_firewall_noop_off_windows():
+    import firewall
+    import os
+    if os.name != "nt":
+        assert firewall.ensure(8080) is True
+    assert "100.64.0.0/10" in firewall.manual_command(8080)
+
+
 if __name__ == "__main__":
     test_api_flow()
     test_bad_values_use_defaults()
+    test_firewall_noop_off_windows()
     print("ok")

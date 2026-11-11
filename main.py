@@ -1,4 +1,4 @@
-"""Virtual Captain. Uso: python main.py [--sim] [--port 8080] [--host IP]
+"""Virtual Captain. Uso: python main.py [--sim] [--port 8080] [--host IP] [--no-firewall]
 
 Avvia la pagina web del briefing (raggiungibile dal tablet via Tailscale) e, quando dal tablet si preme
 "Briefing complete", legge il simulatore (AAO) e parla. --sim = volo simulato, senza AAO.
@@ -6,6 +6,7 @@ Avvia la pagina web del briefing (raggiungibile dal tablet via Tailscale) e, qua
 import sys
 import time
 
+import firewall
 import web
 from aao import AAO
 from brain import Brain
@@ -48,6 +49,8 @@ def main():
     if not host:
         host = "127.0.0.1"
         print("⚠ Tailscale non trovato: pagina raggiungibile solo da questo PC. Avvia Tailscale o usa --host <IP>.")
+    if "--no-firewall" not in sys.argv:
+        firewall.ensure(port)
     st = State()
     srv = web.serve(st, host, port)
     url = f"http://{host}:{port}"
