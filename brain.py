@@ -34,7 +34,7 @@ class Brain:
             self.airborne_since = now
         if s["vs"] > 200 and s["agl"] > 30 and s["gear"] >= 1:
             out += self._once("posrate", "Positive rate, gear up",
-                              "Positive rate. Gear up: ritira il carrello ora che non si torna a terra.")
+                              "Positive rate. Gear up: retract the gear now, we are not going back to the runway.")
         # carrello ancora giù 10 s dopo il positive rate
         if "posrate" in self.done and s["gear"] >= 1 and now - self.airborne_since > 10:
             if "gear_repeat" not in self.done:
@@ -42,11 +42,11 @@ class Brain:
                 out.append("Gear is still down, gear up")
         if s["agl"] >= self.b.accel_agl:
             out += self._once("accel", "Acceleration altitude",
-                              "Acceleration altitude: abbassa il muso, accelera e ritira i flap come da schedula.")
+                              "Acceleration altitude: lower the nose, accelerate and retract the flaps on schedule.")
         if s["alt"] >= self.b.ta:
             out += self._once("ta", "Transition altitude, standard",
-                              "Transition altitude: imposta lo standard, 1013 o 29.92, e controlla che lo mostrino entrambi gli altimetri.")
+                              "Transition altitude: set standard, 1013 or 29.92, and check both altimeters show it.")
         if s["alt"] >= 10000:
             out += self._once("fl100", "Ten thousand, landing lights and seat belts off",
-                              "Diecimila piedi: spegni le landing lights e i seat belts, da qui sopra non servono più.")
+                              "Ten thousand feet: landing lights and seat belts off, we no longer need them from here.")
         return out
