@@ -1,2 +1,3 @@
 pyttsx3; sys_platform == "win32"
+qrcode
 pytest

@@ -1,11 +1,16 @@
-"""Virtual Captain (MVP salita). Uso: python main.py [--sim]  (--sim = volo simulato, senza AAO)"""
+"""Virtual Captain. Uso: python main.py [--sim] [--port 8080] [--host IP]
+
+Avvia la pagina web del briefing (raggiungibile dal tablet via Tailscale) e, quando dal tablet si preme
+"Briefing complete", legge il simulatore (AAO) e parla. --sim = volo simulato, senza AAO.
+"""
 import sys
 import time
 
-import briefing_ui
+import web
 from aao import AAO
-from brain import Brain, Briefing
+from brain import Brain
 from speak import say, wait
+from state import State
 
 
 def simulated():
@@ -20,30 +25,73 @@ def simulated():
             return
 
 
+def show_qr(url):
+    """QR nel terminale per aprire la pagina dal tablet (serve `pip install qrcode`; senza, solo l'indirizzo)."""
+    try:
+        import qrcode
+        qr = qrcode.QRCode(border=1)
+        qr.add_data(url)
+        qr.make()
+        qr.print_ascii(invert=True)
+    except Exception:  # noqa: BLE001  (libreria assente o terminale senza Unicode)
+        print("(per il QR: pip install qrcode)")
+
+
+def arg(name, default=None):
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
+
+
 def main():
-    r = briefing_ui.run()
-    if not r:
-        return
-    brain = Brain(Briefing(ta=r["ta"], accel_agl=r["accel_agl"], mode=r["mode"]))
-    say(f"Briefing received. Transition altitude {r['ta']} feet.")
-    src = simulated() if "--sim" in sys.argv else None
-    aao = AAO()
-    sim_t = 0.0
-    while True:
-        try:
-            s = next(src) if src else aao.read()
-        except StopIteration:
-            break
-        except Exception as e:  # noqa: BLE001
-            print("AAO not responding:", e)
-            time.sleep(2)
-            continue
-        sim_t = sim_t + 1 if src else time.time()
-        for phrase in brain.update(s, sim_t):
-            say(phrase)
-        time.sleep(0.4 if src else 0.5)
+    sim = "--sim" in sys.argv
+    port = int(arg("--port", 8080))
+    host = arg("--host") or web.tailscale_ip()
+    if not host:
+        host = "127.0.0.1"
+        print("⚠ Tailscale non trovato: pagina raggiungibile solo da questo PC. Avvia Tailscale o usa --host <IP>.")
+    st = State()
+    srv = web.serve(st, host, port)
+    url = f"http://{host}:{port}"
+    print(f"\nVirtual Captain — apri dal tablet:  {url}\n", flush=True)
+    show_qr(url)
+
+    def speak(text):
+        say(text)
+        st.add_log(text)
+
+    aao, brain, src, clock = AAO(), None, None, 0.0
+    try:
+        while True:
+            if st.phase != "flying":
+                brain = None
+                time.sleep(0.3)
+                continue
+            if brain is None:  # appena premuto "Briefing complete"
+                b = st.briefing()
+                brain, src, clock = Brain(b), (simulated() if sim else None), 0.0
+                speak(f"Briefing received. Transition altitude {b.ta} feet.")
+            brain.b = st.briefing()  # modifiche dal tablet valide subito
+            try:
+                s = next(src) if src else aao.read()
+                st.aao_ok = True if not src else None
+            except StopIteration:
+                speak("Simulated flight finished.")
+                st.set_phase("briefing")
+                continue
+            except Exception as e:  # noqa: BLE001
+                st.aao_ok = False
+                print("AAO not responding:", e)
+                time.sleep(2)
+                continue
+            clock = clock + 1 if src else time.time()
+            for phrase in brain.update(s, clock):
+                speak(phrase)
+            time.sleep(0.4 if src else 0.5)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        srv.shutdown()
+        wait()
 
 
 if __name__ == "__main__":
     main()
-    wait()
