@@ -57,6 +57,12 @@ ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{pa
     <div id="plancfg"></div>
     <div class="grid" id="grid"></div>
   </div>
+  <details class="card" id="tech"><summary>Technical settings</summary>
+    <label for="aaourl">AAO address</label>
+    <input id="aaourl" autocapitalize="off" autocorrect="off" placeholder="127.0.0.1:43380">
+    <p style="margin:12px 0 0"><button class="ghost" id="aaotest" style="width:100%">Test connection</button></p>
+    <p id="aaores" class="meta"></p>
+  </details>
   <button class="big" id="go">Briefing complete</button>
   <p style="margin-top:12px"><button class="ghost" id="end" hidden style="width:100%">End flight (stop reading)</button></p>
 </section>
@@ -77,7 +83,7 @@ function build(s){const g=$("grid");g.innerHTML="";$("apt").innerHTML="";for(con
   d.innerHTML=`<label>${l}</label><input data-k="${k}" inputmode="${["origin","destination","dep_time","runway","flap"].includes(k)?"text":"numeric"}" autocomplete="off" enterkeyhint="next">`;(k==="origin"||k==="destination"||k==="dep_time"?$("apt"):g).appendChild(d);
   if(k==="dep_time"){const e=document.createElement("div");e.innerHTML='<label>Local time</label><input id="deploc" disabled>';$("apt").appendChild(e)}}
   $("mode").innerHTML=s.modes.map(m=>`<option value="${m}">${m[0].toUpperCase()+m.slice(1)}</option>`).join("");
-  document.querySelectorAll("[data-k]").forEach(i=>i.oninput=()=>{save();localTime()});$("mode").onchange=save;document.querySelectorAll("#cfg input").forEach(i=>i.onkeydown=nextField);$("simbrief").oninput=save}
+  document.querySelectorAll("[data-k]").forEach(i=>i.oninput=()=>{save();localTime()});$("mode").onchange=save;document.querySelectorAll("#cfg input").forEach(i=>i.onkeydown=nextField);$("simbrief").oninput=save;$("aaourl").oninput=save;$("aaotest").onclick=testAao}
 function localTime(){const el=$("deploc");if(!el)return;const v=(document.querySelector('[data-k="dep_time"]').value||"").trim();
   const m=v.match(/^(\d{1,2})[:.]?(\d{2})$/);if(!m||+m[1]>23||+m[2]>59){el.value="";return}
   const n=new Date(),d=new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate(),+m[1],+m[2]));
@@ -85,8 +91,12 @@ function localTime(){const el=$("deploc");if(!el)return;const v=(document.queryS
 function nextField(e){if(e.key!=="Enter")return;e.preventDefault();
   const all=[...document.querySelectorAll("#cfg input:not([disabled])")].filter(i=>i.offsetParent);const n=all[all.indexOf(e.target)+1];
   if(n){n.focus();n.select&&n.select()}else{e.target.blur()}}
-function fill(s){document.querySelectorAll("[data-k]").forEach(i=>i.value=s.fields[i.dataset.k]);$("simbrief").value=s.simbrief;$("mode").value=s.mode;localTime()}
-function collect(){const o={simbrief:$("simbrief").value,mode:$("mode").value};document.querySelectorAll("[data-k]").forEach(i=>o[i.dataset.k]=i.value);return o}
+async function testAao(){const r=$("aaores");r.textContent="Testing…";
+  try{const x=await api("/api/aao-test",{url:$("aaourl").value});
+    r.textContent=x.ok?`Connected in ${x.ms} ms (${x.url}). Read: `+Object.entries(x.values).map(([k,v])=>k+" "+Math.round(v)).join(", "):`Not responding after ${x.ms} ms (${x.url}): ${x.error}`;
+    if(x.ok)$("aaourl").value=x.url}catch(e){r.textContent="Test failed: "+e.message}}
+function fill(s){document.querySelectorAll("[data-k]").forEach(i=>i.value=s.fields[i.dataset.k]);$("simbrief").value=s.simbrief;if(document.activeElement!==$("aaourl"))$("aaourl").value=s.aao_url||"";$("mode").value=s.mode;localTime()}
+function collect(){const o={simbrief:$("simbrief").value,aao_url:$("aaourl").value,mode:$("mode").value};document.querySelectorAll("[data-k]").forEach(i=>o[i.dataset.k]=i.value);return o}
 function save(){clearTimeout(timer);timer=setTimeout(async()=>{try{const s=await api("/api/fields",collect());lastRev=s.rev}catch(e){}},400)}
 function planHtml(p,open){if(!p||!(p.route||p.waypoints&&p.waypoints.length))return null;
   const box=document.createElement("div");box.className="plan";
@@ -182,6 +192,8 @@ def make_handler(st: State):
                     st.update(data)
                 elif self.path == "/api/load-plan":
                     st.load_plan(str(data.get("simbrief", "")))
+                elif self.path == "/api/aao-test":
+                    return self._json(st.test_aao(str(data.get("url", "")).strip() or None))
                 elif self.path == "/api/phase":
                     st.set_phase(data.get("phase", ""))
                 else:

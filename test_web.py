@@ -30,7 +30,8 @@ def test_api_flow():
         assert call(base, "/api/phase", {"phase": "flying"})["phase"] == "flying"
         # si ricordano solo ID, modalità e accelerazione
         saved = json.loads(cfg.read_text())
-        assert saved == {"accel_agl": "1000", "thr_red_agl": "800", "simbrief": "x", "mode": "training"}
+        assert saved == {"accel_agl": "1000", "thr_red_agl": "800", "simbrief": "x", "mode": "training",
+                     "aao_url": "http://127.0.0.1:43380/webapi"}
         assert State(cfg).fields["ta"] == "" and State(cfg).fields["accel_agl"] == "1000"
     finally:
         srv.shutdown()

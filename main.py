@@ -61,7 +61,9 @@ def main():
     def speak(text):
         say(text, on_start=st.add_log)  # nel log (e in grande nella pagina) solo quando inizia la lettura
 
-    aao, brain, src, clock = AAO(arg("--aao")), None, None, 0.0
+    if arg("--aao"):
+        st.update({"aao_url": arg("--aao")})
+    aao, brain, src, clock = AAO(st.aao_url), None, None, 0.0
     if not sim:
         print(f"AAO: {aao.base}", flush=True)
     try:
@@ -76,6 +78,9 @@ def main():
                 with st.lock:
                     text = readout(dict(st.fields), dict(st.plan), st.mode)
                 speak(text)
+            if aao.base != st.aao_url:  # indirizzo cambiato dalla pagina
+                aao = AAO(st.aao_url)
+                print(f"AAO: {aao.base}", flush=True)
             brain.b = st.briefing()  # modifiche dal tablet valide subito
             try:
                 s = next(src) if src else aao.read()

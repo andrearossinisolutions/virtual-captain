@@ -8,6 +8,7 @@ from collections import deque
 from datetime import datetime
 
 from brain import Briefing
+from aao import AAO, normalize_url
 from simbrief import fetch_latest, to_briefing
 
 CFG = pathlib.Path.home() / ".virtual-captain.json"
@@ -43,6 +44,7 @@ class State:
         self.fields = {k: (str(cfg.get(k, "")) if k in REMEMBERED else "") for k, _ in FIELDS}
         self.simbrief = str(cfg.get("simbrief", ""))
         self.mode = _mode(cfg.get("mode"))
+        self.aao_url = normalize_url(cfg.get("aao_url") or None)
         self.phase = "briefing"  # "briefing" | "flying"
         self.info = ""
         self.plan: dict = {}
@@ -60,7 +62,18 @@ class State:
                 self.simbrief = str(data["simbrief"]).strip()
             if data.get("mode") in MODES:
                 self.mode = data["mode"]
+            if data.get("aao_url") is not None:
+                self.aao_url = normalize_url(str(data["aao_url"]).strip() or None)
             self._save()
+
+    def test_aao(self, url: str | None = None) -> dict:
+        """Prova l'indirizzo indicato (o quello salvato); se risponde, lo adotta e lo salva."""
+        res = AAO(url or self.aao_url).test()
+        if res["ok"]:
+            with self.lock:
+                self.aao_url = res["url"]
+                self._save()
+        return res
 
     def set_phase(self, phase: str):
         if phase in ("briefing", "flying"):
@@ -90,7 +103,8 @@ class State:
         try:
             self.cfg_path.write_text(json.dumps({"accel_agl": self.fields["accel_agl"],
                                                  "thr_red_agl": self.fields["thr_red_agl"],
-                                                 "simbrief": self.simbrief, "mode": self.mode}))
+                                                 "simbrief": self.simbrief, "mode": self.mode,
+                                                 "aao_url": self.aao_url}))
         except OSError:
             pass
 
@@ -114,5 +128,5 @@ class State:
         with self.lock:
             return {"phase": self.phase, "fields": dict(self.fields), "simbrief": self.simbrief,
                     "mode": self.mode, "info": self.info, "plan": self.plan, "rev": self.rev,
-                    "aao_ok": self.aao_ok, "log": list(self.log),
+                    "aao_ok": self.aao_ok, "aao_url": self.aao_url, "log": list(self.log),
                     "labels": [[k, l] for k, l in FIELDS], "modes": list(MODES)}
