@@ -45,6 +45,7 @@ class State:
         self.mode = _mode(cfg.get("mode"))
         self.phase = "briefing"  # "briefing" | "flying"
         self.info = ""
+        self.plan: dict = {}
         self.rev = 0  # cambia quando il server modifica i campi (es. piano caricato)
         self.aao_ok: bool | None = None
         self.log: deque = deque(maxlen=30)
@@ -79,6 +80,7 @@ class State:
                 self.fields[k] = "" if v is None else str(v)
                 if v is None:
                     missing.append(dict(FIELDS)[k])
+            self.plan = data.get("plan") or {}
             self.info = (f"{data['origin']} → {data['destination']}  (generated: {_when(data['generated'])})"
                          + (f" — not in plan, enter manually: {', '.join(missing)}" if missing else ""))
             self.rev += 1
@@ -108,6 +110,6 @@ class State:
     def snapshot(self) -> dict:
         with self.lock:
             return {"phase": self.phase, "fields": dict(self.fields), "simbrief": self.simbrief,
-                    "mode": self.mode, "info": self.info, "rev": self.rev,
+                    "mode": self.mode, "info": self.info, "plan": self.plan, "rev": self.rev,
                     "aao_ok": self.aao_ok, "log": list(self.log),
                     "labels": [[k, l] for k, l in FIELDS], "modes": list(MODES)}

@@ -9,7 +9,7 @@ import time
 import firewall
 import web
 from aao import AAO
-from brain import Brain
+from brain import Brain, readout
 from speak import say, wait
 from state import State
 
@@ -71,7 +71,9 @@ def main():
             if brain is None:  # appena premuto "Briefing complete"
                 b = st.briefing()
                 brain, src, clock = Brain(b), (simulated() if sim else None), 0.0
-                speak(f"Briefing received. Transition altitude {b.ta} feet.")
+                with st.lock:
+                    text = readout(dict(st.fields), dict(st.plan), st.mode)
+                speak(text)
             brain.b = st.briefing()  # modifiche dal tablet valide subito
             try:
                 s = next(src) if src else aao.read()

@@ -25,7 +25,19 @@ def test_gear_repeat_and_rearm():
     assert b.update(s(vs=1500, agl=50), 120)
 
 
+def test_readout():
+    from brain import readout
+    f = dict(origin="LIMC", destination="EDDF", runway="35R", ta="6000", v1="140", vr="141", v2="145")
+    p = dict(sid="ROBE1A", star="TOP2B")
+    t = readout(f, p, "silent")
+    assert t == ("Briefing received. Departure LIMC runway 35R, SID ROBE1A. Transition altitude 6000 feet. "
+                 "V1 140, rotate 141, V2 145. Arrival EDDF, STAR TOP2B.")
+    assert readout(f, p, "training").endswith("Check the SID in the FMC before the clearance call.")
+    assert readout(dict(ta="5000"), {}, "training") == "Briefing received. Transition altitude 5000 feet."
+
+
 if __name__ == "__main__":
     test_climb_sequence()
     test_gear_repeat_and_rearm()
+    test_readout()
     print("ok")

@@ -53,8 +53,21 @@ def test_firewall_noop_off_windows():
     assert "100.64.0.0/10" in firewall.manual_command(8080)
 
 
+def test_plan_extraction():
+    from simbrief import to_briefing
+    ofp = {"general": {"icao_airline": "RXP", "flight_number": "101", "route": "ROBEL UN851 TOP", "sid_ident": "ROBE1A",
+                       "star_ident": "TOP2B", "initial_altitude": "36000", "air_distance": "450"},
+           "times": {"est_time_enroute": "5400"}, "alternate": {"icao_code": "EDDK"}, "aircraft": {"icaocode": "A320"},
+           "navlog": {"fix": [{"ident": "LIMC", "via_airway": "DCT", "altitude_feet": "0"}, {"ident": "ROBEL", "via_airway": "ROBE1A", "altitude_feet": "12000"}]}}
+    p = to_briefing(ofp)["plan"]
+    assert (p["flight"], p["sid"], p["star"], p["cruise_alt"], p["ete"], p["alternate"]) == ("RXP101", "ROBE1A", "TOP2B", 36000, "1h30", "EDDK")
+    assert p["waypoints"][1] == {"ident": "ROBEL", "via": "ROBE1A", "alt": 12000}
+    assert to_briefing({})["plan"]["route"] is None
+
+
 if __name__ == "__main__":
     test_api_flow()
     test_bad_values_use_defaults()
     test_firewall_noop_off_windows()
+    test_plan_extraction()
     print("ok")

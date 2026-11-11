@@ -50,3 +50,26 @@ class Brain:
             out += self._once("fl100", "Ten thousand, landing lights and seat belts off",
                               "Ten thousand feet: landing lights and seat belts off, we no longer need them from here.")
         return out
+
+
+def readout(fields: dict, plan: dict, mode: str) -> str:
+    """Frase di apertura: ciò che il capitano legge quando premi "Briefing complete" (solo ciò che c'è)."""
+    parts = ["Briefing received."]
+    dep = " ".join(x for x in (
+        f"Departure {fields['origin']}" if fields.get("origin") else "",
+        f"runway {fields['runway']}" if fields.get("runway") else "") if x)
+    sid = (plan or {}).get("sid")
+    if dep or sid:
+        parts.append((dep + (", " if dep and sid else "") + (f"SID {sid}" if sid else "")).strip(", ") + ".")
+    if fields.get("ta"):
+        parts.append(f"Transition altitude {fields['ta']} feet.")
+    speeds = [f"{lbl} {fields[k]}" for k, lbl in (("v1", "V1"), ("vr", "rotate"), ("v2", "V2")) if fields.get(k)]
+    if speeds:
+        parts.append(", ".join(speeds) + ".")
+    star = (plan or {}).get("star")
+    if fields.get("destination") or star:
+        arr = f"Arrival {fields['destination']}" if fields.get("destination") else ""
+        parts.append((arr + (", " if arr and star else "") + (f"STAR {star}" if star else "")) + ".")
+    if mode == "training" and sid:
+        parts.append("Check the SID in the FMC before the clearance call.")
+    return " ".join(parts)
