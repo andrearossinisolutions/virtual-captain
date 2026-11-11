@@ -21,6 +21,7 @@ def _when(ts):
         return str(ts)
 
 
+REMEMBERED = ["accel_agl"]  # unico campo dei dati di volo che si ricorda
 FROM_PLAN = ["origin", "destination", "runway", "ta", "v1", "vr", "v2", "flap"]  # accel_agl è solo manuale
 
 
@@ -33,7 +34,8 @@ def run() -> dict | None:
     cfg = json.loads(CFG.read_text()) if CFG.exists() else {}
     root = tk.Tk()
     root.title("Virtual Captain — Briefing")
-    vars_ = {k: tk.StringVar(value=str(cfg.get(k, ""))) for k, _ in FIELDS}
+    # All'apertura solo ID SimBrief, modalità e accelerazione: il resto viene dal piano o si inserisce.
+    vars_ = {k: tk.StringVar(value=str(cfg.get(k, "")) if k in REMEMBERED else "") for k, _ in FIELDS}
     sb = tk.StringVar(value=cfg.get("simbrief", ""))
     mode = tk.StringVar(value=_mode(cfg.get("mode")))
     info = tk.StringVar()
@@ -79,7 +81,7 @@ def run() -> dict | None:
                 return d
         result.update(ta=num("ta", 5000), accel_agl=num("accel_agl", 1500), mode=mode.get(),
                       v1=num("v1", None), vr=num("vr", None), v2=num("v2", None))
-        CFG.write_text(json.dumps({**{k: v.get() for k, v in vars_.items()},
+        CFG.write_text(json.dumps({"accel_agl": vars_["accel_agl"].get(),
                                    "simbrief": sb.get(), "mode": mode.get()}))
         root.destroy()
 
