@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 class Briefing:
     ta: int = 5000
     accel_agl: int = 1500
-    mode: str = "allenamento"  # oppure "silenziosa"
+    mode: str = "training"  # or "silent"
 
 
 @dataclass
@@ -21,7 +21,7 @@ class Brain:
         if key in self.done:
             return []
         self.done.add(key)
-        return [long_text if (long_text and self.b.mode == "allenamento") else text]
+        return [long_text if (long_text and self.b.mode == "training") else text]
 
     def update(self, s: dict, now: float) -> list[str]:
         out: list[str] = []

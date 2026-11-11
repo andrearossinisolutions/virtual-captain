@@ -35,7 +35,7 @@ def main():
         except StopIteration:
             break
         except Exception as e:  # noqa: BLE001
-            print("AAO non risponde:", e)
+            print("AAO not responding:", e)
             time.sleep(2)
             continue
         sim_t = sim_t + 1 if src else time.time()

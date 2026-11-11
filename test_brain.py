@@ -8,7 +8,7 @@ def s(**k):
 
 
 def test_climb_sequence():
-    b = Brain(Briefing(ta=5000, accel_agl=1500, mode="silenziosa"))
+    b = Brain(Briefing(ta=5000, accel_agl=1500, mode="silent"))
     assert b.update(s(on_ground=1), 0) == []
     assert b.update(s(vs=1500, agl=50, alt=50), 1) == ["Positive rate, gear up"]
     assert b.update(s(vs=1500, agl=60, alt=60), 2) == []  # una volta sola
