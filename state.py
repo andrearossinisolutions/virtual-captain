@@ -101,7 +101,8 @@ class State:
             except ValueError:
                 return d
         with self.lock:
-            return Briefing(ta=num("ta", 5000), accel_agl=num("accel_agl", 1500), mode=self.mode)
+            return Briefing(ta=num("ta", 5000), accel_agl=num("accel_agl", 1500), mode=self.mode,
+                            v1=num("v1", None), vr=num("vr", None))
 
     def add_log(self, text: str):
         with self.lock:

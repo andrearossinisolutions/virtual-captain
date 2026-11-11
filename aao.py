@@ -8,6 +8,7 @@ VARS = {
     "vs": "(A:VERTICAL SPEED, Feet per minute)",
     "agl": "(A:PLANE ALT ABOVE GROUND, Feet)",
     "alt": "(A:INDICATED ALTITUDE, Feet)",
+    "ias": "(A:AIRSPEED INDICATED, Knots)",
     "gear": "(A:GEAR HANDLE POSITION, Bool)",
     "landing": "(A:LIGHT LANDING, Bool)",
     "seatbelt": "(A:CABIN SEATBELTS ALERT SWITCH, Bool)",

@@ -15,12 +15,13 @@ from state import State
 
 
 def simulated():
-    """Decollo finto per provare voce e soglie senza simulatore."""
+    """Decollo finto (corsa a terra con velocità crescente, poi salita) per provare voce e soglie."""
     t = 0
     while True:
-        alt = max(0, (t - 5) * 150)
-        yield {"on_ground": 1.0 if t < 5 else 0.0, "vs": 2000 if t >= 5 else 0,
-               "agl": alt, "alt": alt, "gear": 1.0 if t < 40 else 0.0, "landing": 1, "seatbelt": 1}
+        roll = t < 9  # corsa: 0, 20, … 160 kt
+        alt = 0 if roll else (t - 9) * 150
+        yield {"on_ground": 1.0 if roll else 0.0, "vs": 0 if roll else 2000, "ias": t * 20 if roll else 160,
+               "agl": alt, "alt": alt, "gear": 1.0 if t < 45 else 0.0, "landing": 1, "seatbelt": 1}
         t += 1
         if alt > 11000:
             return
@@ -58,8 +59,7 @@ def main():
     show_qr(url)
 
     def speak(text):
-        say(text)
-        st.add_log(text)
+        say(text, on_start=st.add_log)  # nel log (e in grande nella pagina) solo quando inizia la lettura
 
     aao, brain, src, clock = AAO(), None, None, 0.0
     try:
