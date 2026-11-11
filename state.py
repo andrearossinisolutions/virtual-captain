@@ -4,9 +4,11 @@ from __future__ import annotations
 import json
 import pathlib
 import threading
+import time
 from collections import deque
 from datetime import datetime
 
+import checklist as cl
 import monitor as mon
 from brain import Briefing
 from aao import AAO, normalize_url
@@ -52,6 +54,13 @@ class State:
         self.rev = 0  # cambia quando il server modifica i campi (es. piano caricato)
         self.aao_ok: bool | None = None
         self.log: deque = deque(maxlen=30)
+        self.spoke_at: float | None = None  # istante dell'ultima frase
+        self.spoke_n = 0  # contatore frasi dette
+        self.cl = cl.load()
+        saved = cfg.get("checklist_phase")
+        self.cl_phase = saved if self.cl.has_phase(saved) else self.cl.ids[0]  # sconosciuta -> prima fase
+        self.cl_demo = False  # SOLO --sim: tratta i link come verificati per vedere verde/rosso/grigio (in volo reale restano verified:false)
+        self.labels: dict = {}  # {chiave: etichetta pulita|None} per la checklist (vuoto fuori dal volo)
         self.monitor: list = []  # gruppi gia' etichettati: [[gruppo, [[nome, etichetta, atteso, grezzo], ...]], ...]
 
     # -- modifiche dalla pagina --
@@ -83,11 +92,28 @@ class State:
                 self.phase = phase
                 if phase != "flying":
                     self.monitor = []
+                    self.labels = {}
 
     def set_monitor(self, raw: dict | None):
         """Riceve i grezzi {chiave: valore|None}, li etichetta e li tiene per la pagina (vuoto in briefing)."""
         with self.lock:
-            self.monitor = mon.build(raw) if raw is not None and self.phase == "flying" else []
+            live = raw is not None and self.phase == "flying"
+            self.monitor = mon.build(raw) if live else []
+            self.labels = mon.clean_labels(raw) if live else {}
+
+    def set_cl_phase(self, target) -> None:
+        """target: id di fase (str) oppure passo +1/-1 (int). Valore non valido => ValueError; ai limiti il passo non fa nulla."""
+        with self.lock:
+            if isinstance(target, str):
+                if not self.cl.has_phase(target):
+                    raise ValueError("unknown checklist phase")
+                self.cl_phase = target
+            elif isinstance(target, int) and not isinstance(target, bool) and target in (-1, 1):
+                i = self.cl.ids.index(self.cl_phase) + target
+                self.cl_phase = self.cl.ids[min(max(i, 0), len(self.cl.ids) - 1)]
+            else:
+                raise ValueError("step must be +1 or -1")
+            self._save()
 
     def load_plan(self, user: str | None = None):
         """Scarica l'ultimo piano: sovrascrive i campi del piano e svuota quelli che il piano non ha."""
@@ -113,7 +139,7 @@ class State:
             self.cfg_path.write_text(json.dumps({"accel_agl": self.fields["accel_agl"],
                                                  "thr_red_agl": self.fields["thr_red_agl"],
                                                  "simbrief": self.simbrief, "mode": self.mode,
-                                                 "aao_url": self.aao_url}))
+                                                 "aao_url": self.aao_url, "checklist_phase": self.cl_phase}))
         except OSError:
             pass
 
@@ -132,11 +158,18 @@ class State:
     def add_log(self, text: str):
         with self.lock:
             self.log.appendleft(f"{datetime.now().strftime('%H:%M:%S')}  {text}")
+            self.spoke_at = time.time()
+            self.spoke_n += 1
 
     def snapshot(self) -> dict:
         with self.lock:
             return {"phase": self.phase, "fields": dict(self.fields), "simbrief": self.simbrief,
                     "mode": self.mode, "info": self.info, "plan": self.plan, "rev": self.rev,
                     "aao_ok": self.aao_ok, "aao_url": self.aao_url, "log": list(self.log),
+                    "now": time.time(), "spoke_n": self.spoke_n,
+                    "spoke_ago": None if self.spoke_at is None else max(0.0, time.time() - self.spoke_at),
                     "labels": [[k, l] for k, l in FIELDS], "modes": list(MODES),
-                    "monitor": [[g, [list(r) for r in rows]] for g, rows in self.monitor]}
+                    "monitor": [[g, [list(r) for r in rows]] for g, rows in self.monitor],
+                    "cl_phases": [{"id": p["id"], "name": p["name"]} for p in self.cl.phases],
+                    "cl_phase": self.cl_phase,
+                    "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo)}

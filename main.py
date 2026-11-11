@@ -27,6 +27,14 @@ def simulated():
             return
 
 
+def sim_read(src, last, done):
+    """Un passo del volo simulato: (campione, frase da dire|None, done, finito). A volo finito resta l'ultimo campione, frase una sola volta."""
+    try:
+        return next(src), None, done, False
+    except StopIteration:
+        return last, (None if done else "Simulated flight finished."), True, True
+
+
 def sim_monitor(t, roll):
     """Valori finti plausibili del cockpit per la pagina in --sim (qualche voce assente di proposito)."""
     return {"apu_master": 0, "apu_bleed": 0, "pack1": 1 if t > 3 else 0, "pack2": 1 if t > 3 else 0,
@@ -61,6 +69,7 @@ def main():
     if "--no-firewall" not in sys.argv:
         firewall.ensure(port)
     st = State()
+    st.cl_demo = sim  # solo in --sim: link della checklist trattati come verificati (resa dimostrativa)
     srv = web.serve(st, host, port)
     url = f"http://{host}:{port}"
     print(f"\nVirtual Captain — apri dal tablet:  {url}\n", flush=True)
@@ -72,6 +81,7 @@ def main():
     if arg("--aao"):
         st.update({"aao_url": arg("--aao")})
     aao, brain, src, clock = AAO(st.aao_url), None, None, 0.0
+    last, sim_done = None, False
     if not sim:
         print(f"AAO: {aao.base}", flush=True)
     try:
@@ -83,6 +93,7 @@ def main():
             if brain is None:  # appena premuto "Briefing complete"
                 b = st.briefing()
                 brain, src, clock = Brain(b), (simulated() if sim else None), 0.0
+                last, sim_done = None, False
                 with st.lock:
                     text = readout(dict(st.fields), dict(st.plan), st.mode)
                 speak(text)
@@ -92,14 +103,19 @@ def main():
             brain.b = st.briefing()  # modifiche dal tablet valide subito
             try:
                 if src:
-                    s, mon = next(src)
+                    sample, phrase, sim_done, finished = sim_read(src, last, sim_done)
+                    if phrase:
+                        speak(phrase)
+                    if finished:  # volo simulato finito: resta in "flying" con l'ultimo campione fermo
+                        if sample:
+                            st.set_monitor(sample[1])
+                        time.sleep(0.4)
+                        continue
+                    last = sample
+                    s, mon = sample
                 else:
                     s, mon = aao.read_all()
                 st.aao_ok = True if not src else None
-            except StopIteration:
-                speak("Simulated flight finished.")
-                st.set_phase("briefing")
-                continue
             except Exception as e:  # noqa: BLE001
                 st.aao_ok = False
                 print("AAO not responding:", e)

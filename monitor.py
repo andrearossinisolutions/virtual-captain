@@ -105,6 +105,19 @@ def label(item: Item, raw) -> str:
     return f"{text} ({int(v)})" if item.kind in AMBIGUOUS else text
 
 
+def clean_label(item: Item, raw) -> str | None:
+    """Etichetta pulita (senza il grezzo) per il confronto della checklist, oppure None se assente o fuori mappa."""
+    v = to_number(raw)
+    if v is None or v != int(v):
+        return None
+    return MAPS[item.kind].get(int(v))
+
+
+def clean_labels(monitor: dict) -> dict:
+    """Dal dizionario {chiave: grezzo|None} a {chiave: etichetta pulita|None}."""
+    return {it.key: clean_label(it, monitor.get(it.key)) for it in ITEMS}
+
+
 def expected_text(item: Item) -> str:
     return " · ".join(f"{p}: {v}" for p, v in item.expected.items())
 

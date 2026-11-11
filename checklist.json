@@ -1,0 +1,2622 @@
+{
+ "version": 1,
+ "source": "Google Doc A320 Checklist & Comm",
+ "phases": [
+  {
+   "id": "sim-preparation",
+   "name": "SIM. PREPARATION",
+   "subphases": [
+    {
+     "id": "sim-preparation.main",
+     "name": "",
+     "items": [
+      {
+       "id": "sim-preparation.ipad",
+       "text": "iPad",
+       "response": "FILE F-PLN",
+       "type": "action"
+      },
+      {
+       "id": "sim-preparation.vpilot",
+       "text": "vPilot",
+       "response": "OPEN",
+       "type": "action"
+      },
+      {
+       "id": "sim-preparation.acars",
+       "text": "ACARS",
+       "response": "IF NEEDED",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "preliminary-cockpit-prep",
+   "name": "PRELIMINARY COCKPIT PREP.",
+   "subphases": [
+    {
+     "id": "preliminary-cockpit-prep.1-weather-radar-parking-brake-engine-landing-gear-wipers",
+     "name": "1 - WEATHER RADAR / PARKING BRAKE / ENGINE / LANDING GEAR / WIPERS",
+     "items": [
+      {
+       "id": "preliminary-cockpit-prep.wx-radar-sw",
+       "text": "WX Radar sw",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.windshear-pws-sw",
+       "text": "Windshear - PWS sw",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.gain-knob",
+       "text": "Gain Knob",
+       "response": "AUTO/CAL",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.wx-mode-selector",
+       "text": "WX Mode Selector",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.parking-brake",
+       "text": "Parking Brake",
+       "response": "SET",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.engine-master-sw",
+       "text": "Engine Master sw",
+       "response": "ALL OFF",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.engine-mode-selector",
+       "text": "Engine Mode Selector",
+       "response": "NORM",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.landing-gear-lever",
+       "text": "Landing Gear Lever",
+       "response": "CHECK DOWN",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.wipers",
+       "text": "Wipers",
+       "response": "OFF",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "preliminary-cockpit-prep.2-battery-external-power",
+     "name": "2 - BATTERY / EXTERNAL POWER",
+     "items": [
+      {
+       "id": "preliminary-cockpit-prep.battery-check",
+       "text": "Battery Check",
+       "response": "ABOVE 25.5V",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.battery-pb-1-2",
+       "text": "Battery Pb 1 & 2",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.external-power-pb",
+       "text": "External Power pb",
+       "response": "ON (if avail)",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "preliminary-cockpit-prep.3-crew-supply-apu-rmp",
+     "name": "3 - CREW SUPPLY / APU / RMP",
+     "items": [
+      {
+       "id": "preliminary-cockpit-prep.crew-supply-pb",
+       "text": "Crew Supply pb",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.apu-fire-test",
+       "text": "APU Fire Test",
+       "response": "PERFORM",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.master-pb",
+       "text": "Master pb",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.start-button",
+       "text": "Start button",
+       "response": "PRESS",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.bleed",
+       "text": "Bleed",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.power-sw",
+       "text": "Power sw",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.nav-light",
+       "text": "Nav Light",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.sel-light",
+       "text": "SEL Light",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.freq",
+       "text": "FREQ",
+       "response": "TUNE",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "preliminary-cockpit-prep.4-adirs-lights",
+     "name": "4 - ADIRS / LIGHTS",
+     "items": [
+      {
+       "id": "preliminary-cockpit-prep.all-ir-modes",
+       "text": "ALL IR Modes",
+       "response": "NAV",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.cockpit-lights",
+       "text": "Cockpit Lights",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.nav-logo-sw",
+       "text": "Nav & Logo sw",
+       "response": "1 / 2",
+       "type": "action"
+      },
+      {
+       "id": "preliminary-cockpit-prep.strobe-sw",
+       "text": "Strobe sw",
+       "response": "AUTO",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cockpit-preparation",
+   "name": "COCKPIT PREPARATION",
+   "subphases": [
+    {
+     "id": "cockpit-preparation.main",
+     "name": "",
+     "items": [
+      {
+       "id": "cockpit-preparation.start-fueling-catering",
+       "text": "Start Fueling & Catering",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      }
+     ]
+    },
+    {
+     "id": "cockpit-preparation.overhead-panel",
+     "name": "OVERHEAD PANEL",
+     "items": [
+      {
+       "id": "cockpit-preparation.seatbelt-signs-sw",
+       "text": "Seatbelt Signs sw",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "cockpit-preparation.no-smoking-elec-dev-signs-sw",
+       "text": "No Smoking/Elec.dev. Signs sw",
+       "response": "AUTO",
+       "type": "action"
+      },
+      {
+       "id": "cockpit-preparation.emergency-exit-lights-sw",
+       "text": "Emergency Exit Lights sw",
+       "response": "ARM",
+       "type": "action"
+      },
+      {
+       "id": "cockpit-preparation.landing-elevation-cab-press-page",
+       "text": "Landing Elevation (CAB PRESS PAGE)",
+       "response": "AUTO",
+       "type": "action"
+      },
+      {
+       "id": "cockpit-preparation.battery-1-2",
+       "text": "Battery 1 & 2",
+       "response": "OFF then ON",
+       "type": "action"
+      },
+      {
+       "id": "cockpit-preparation.fuel-mode-selector",
+       "text": "Fuel Mode Selector",
+       "response": "AUTO",
+       "type": "action"
+      },
+      {
+       "id": "cockpit-preparation.engine-1-2-fire-test",
+       "text": "Engine 1 & 2 Fire Test",
+       "response": "PERFORM",
+       "type": "action"
+      },
+      {
+       "id": "cockpit-preparation.fuel-pump-pb",
+       "text": "Fuel Pump pb",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "cockpit-preparation.start-boarding-passengers",
+       "text": "Start Boarding Passengers",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "fmgs-initialization-d-i-f-s-r-i-p",
+   "name": "FMGS INITIALIZATION - D.I.F.S.R.I.P.",
+   "subphases": [
+    {
+     "id": "fmgs-initialization-d-i-f-s-r-i-p.main",
+     "name": "",
+     "items": [
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.flt-init",
+       "text": "FLT INIT",
+       "response": "INIT DATA REQ",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "fmgs-initialization-d-i-f-s-r-i-p.data",
+     "name": "DATA",
+     "items": [
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.nav-database-date",
+       "text": "Nav Database Date",
+       "response": "CHECK",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "fmgs-initialization-d-i-f-s-r-i-p.init-a",
+     "name": "INIT A",
+     "items": [
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.init-a-page",
+       "text": "Init A page",
+       "response": "FILL",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "fmgs-initialization-d-i-f-s-r-i-p.f-pln",
+     "name": "F-PLN",
+     "items": [
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.flight-plan",
+       "text": "Flight plan",
+       "response": "FILL",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.distance",
+       "text": "Distance",
+       "response": "CROSS CHECK",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.sid-filed",
+       "text": "SID (FILED)",
+       "response": "CROSS CHECK",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.discontinuity",
+       "text": "Discontinuity",
+       "response": "CHECK",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "fmgs-initialization-d-i-f-s-r-i-p.secondary-f-pln",
+     "name": "SECONDARY F-PLN",
+     "items": [
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.sec-f-pln",
+       "text": "SEC F-PLN",
+       "response": "COPY ACTIVE",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "fmgs-initialization-d-i-f-s-r-i-p.rad-nav",
+     "name": "RAD NAV",
+     "items": [
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.radio-nav",
+       "text": "Radio Nav",
+       "response": "CHECK FREQUENCIES",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.check-departure-atis",
+       "text": "Check Departure ATIS",
+       "response": "ANNOTATE LETTER",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "fmgs-initialization-d-i-f-s-r-i-p.init-b",
+     "name": "INIT B",
+     "items": [
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.init-b-page",
+       "text": "Init B page",
+       "response": "FILL",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.fob",
+       "text": "FOB",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.estimated-tow-lw",
+       "text": "Estimated TOW / LW",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.extra-time-fuel-at-destination",
+       "text": "Extra Time / Fuel at Destination",
+       "response": "CHECK",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "fmgs-initialization-d-i-f-s-r-i-p.clearance",
+     "name": "CLEARANCE",
+     "items": [
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.expected-rwy",
+       "text": "Expected RWY",
+       "response": "NOTE",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.mcdu-departure-page",
+       "text": "MCDU DEPARTURE page",
+       "response": "OPEN (EXPECTED RWY)",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.available-sids",
+       "text": "Available SIDs",
+       "response": "CHECK (PREPARE TO SELECT)",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.obtain-departure-clearance",
+       "text": "Obtain Departure Clearance",
+       "response": "Eg. \"Malpensa Delivery, ASX415, Airbus a320, Stand 123, Information B, Request clearance to Venezia Tessera\"",
+       "type": "atc"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.check-cleared-sid",
+       "text": "Check cleared SID",
+       "response": "Found: read back clearance. Not found: \"Stand-By, ASX415\". If still not found: \"Unable <SID name>, not in database, request radar vectors / direct <FIX>, ASX415\"",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "fmgs-initialization-d-i-f-s-r-i-p.performance",
+     "name": "PERFORMANCE",
+     "items": [
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.t-o-rwy",
+       "text": "T/O RWY",
+       "response": "AS CLR",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.sid",
+       "text": "SID",
+       "response": "AS CLR",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.t-o-flaps-conf-ths",
+       "text": "T/O FLAPS CONF / THS",
+       "response": "INSERT",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.flex-toga",
+       "text": "Flex / Toga",
+       "response": "INSERT",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.v1-vr-v2",
+       "text": "V1, VR, V2",
+       "response": "INSERT",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.transition-altitude",
+       "text": "Transition Altitude",
+       "response": "AS CLR",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.thrust-reduction-acc-altitude",
+       "text": "Thrust Reduction / ACC Altitude",
+       "response": "CHECK / SET",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "fmgs-initialization-d-i-f-s-r-i-p.glareshield-pedestal",
+     "name": "GLARESHIELD / PEDESTAL",
+     "items": [
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.constraint-pb",
+       "text": "Constraint pb",
+       "response": "BOTH ON",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.barometric-reference",
+       "text": "Barometric Reference",
+       "response": "SET 3 TIMES",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.flight-director-pb",
+       "text": "Flight Director pb",
+       "response": "BOTH ON",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.squawk-code",
+       "text": "Squawk Code",
+       "response": "AS CLR",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.initial-climb",
+       "text": "Initial Climb",
+       "response": "AS CLR",
+       "type": "action"
+      },
+      {
+       "id": "fmgs-initialization-d-i-f-s-r-i-p.check-boarding-completed",
+       "text": "Check Boarding Completed",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "before-start",
+   "name": "BEFORE START",
+   "subphases": [
+    {
+     "id": "before-start.main",
+     "name": "",
+     "items": [
+      {
+       "id": "before-start.final-loadsheet",
+       "text": "Final Loadsheet",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "before-start.zfw-zfwcg",
+       "text": "ZFW / ZFWCG",
+       "response": "CHECK/REVISE",
+       "type": "action"
+      },
+      {
+       "id": "before-start.fob",
+       "text": "FOB",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "before-start.takeoff-data",
+       "text": "Takeoff Data",
+       "response": "CONFIRM/RECOMPUTE",
+       "type": "action"
+      },
+      {
+       "id": "before-start.seat-positions-seatbelts",
+       "text": "Seat positions, seatbelts",
+       "response": "ADJUST",
+       "type": "action"
+      },
+      {
+       "id": "before-start.mcdu",
+       "text": "MCDU",
+       "response": "PERF PAGE / F-PLN",
+       "type": "action"
+      },
+      {
+       "id": "before-start.ext-pwr-pb",
+       "text": "EXT PWR pb",
+       "response": "OFF & DISCONNECTED",
+       "type": "action"
+      },
+      {
+       "id": "before-start.obtain-push-start-clearance",
+       "text": "Obtain Push&Start Clearance",
+       "response": "Eg. \"Malpensa Ground, ASX415, Stand 123, Ready for push & start\"",
+       "type": "atc"
+      },
+      {
+       "id": "before-start.atc-transponder",
+       "text": "ATC Transponder",
+       "response": "AS CLR",
+       "type": "action"
+      },
+      {
+       "id": "before-start.windows-and-doors",
+       "text": "Windows and Doors",
+       "response": "CHECK CLOSED",
+       "type": "action"
+      },
+      {
+       "id": "before-start.slides",
+       "text": "Slides",
+       "response": "CHECK ARMED",
+       "type": "action"
+      },
+      {
+       "id": "before-start.beacon-light-sw",
+       "text": "Beacon Light sw",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "before-start.thrust-levers",
+       "text": "Thrust Levers",
+       "response": "IDLE",
+       "type": "action"
+      },
+      {
+       "id": "before-start.accu-pressure",
+       "text": "ACCU Pressure",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "before-start.nw-strg-disc-memo",
+       "text": "NW STRG DISC Memo",
+       "response": "CHECK DISPLAYED",
+       "type": "action"
+      },
+      {
+       "id": "before-start.parking-brake",
+       "text": "Parking Brake",
+       "response": "OFF (wait for ground)",
+       "type": "action"
+      },
+      {
+       "id": "before-start.off-blocks-time",
+       "text": "OFF Blocks Time",
+       "response": "NOTE",
+       "type": "action"
+      },
+      {
+       "id": "before-start.packs-pb",
+       "text": "Packs pb",
+       "response": "BOTH OFF",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "engine-startup",
+   "name": "ENGINE STARTUP",
+   "subphases": [
+    {
+     "id": "engine-startup.main",
+     "name": "",
+     "items": [
+      {
+       "id": "engine-startup.chrono",
+       "text": "Chrono",
+       "response": "START",
+       "type": "action"
+      },
+      {
+       "id": "engine-startup.engine-mode-selector",
+       "text": "Engine Mode Selector",
+       "response": "IGN/START",
+       "type": "action"
+      },
+      {
+       "id": "engine-startup.starting-engine-2",
+       "text": "\"Starting Engine 2\"",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      },
+      {
+       "id": "engine-startup.engine-master-sw-2",
+       "text": "Engine Master sw 2",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "engine-startup.engine-idle-parameters",
+       "text": "Engine Idle Parameters",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "engine-startup.starting-engine-1",
+       "text": "\"Starting Engine 1\"",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      },
+      {
+       "id": "engine-startup.engine-master-sw-1",
+       "text": "Engine Master sw 1",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "engine-startup.engine-idle-parameters_2",
+       "text": "Engine Idle Parameters",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "engine-startup.chrono_2",
+       "text": "Chrono",
+       "response": "STOP",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "after-engine-startup",
+   "name": "AFTER ENGINE STARTUP",
+   "subphases": [
+    {
+     "id": "after-engine-startup.main",
+     "name": "",
+     "items": [
+      {
+       "id": "after-engine-startup.packs-pb",
+       "text": "Packs pb",
+       "response": "BOTH ON",
+       "type": "action"
+      },
+      {
+       "id": "after-engine-startup.engine-mode-selector",
+       "text": "Engine Mode Selector",
+       "response": "NORM",
+       "type": "action"
+      },
+      {
+       "id": "after-engine-startup.apu-bleed-pb",
+       "text": "APU Bleed pb",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "after-engine-startup.engine-and-wing-anti-ice-pb",
+       "text": "Engine and Wing Anti-Ice pb",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "after-engine-startup.apu-master-pb",
+       "text": "APU Master pb",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "after-engine-startup.ground-spoilers",
+       "text": "Ground Spoilers",
+       "response": "ARM",
+       "type": "action"
+      },
+      {
+       "id": "after-engine-startup.rudder-trim",
+       "text": "Rudder Trim",
+       "response": "CHECK ZERO",
+       "type": "action"
+      },
+      {
+       "id": "after-engine-startup.flap-levers",
+       "text": "Flap Levers",
+       "response": "SET FOR TAKEOFF",
+       "type": "action"
+      },
+      {
+       "id": "after-engine-startup.pitch-trim",
+       "text": "Pitch Trim",
+       "response": "SET",
+       "type": "action"
+      },
+      {
+       "id": "after-engine-startup.ecam-status-page",
+       "text": "ECAM Status Page",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "after-engine-startup.n-w-steer-disc-memo",
+       "text": "N/W STEER DISC Memo",
+       "response": "CHECK NOT DISPLAYED",
+       "type": "action"
+      },
+      {
+       "id": "after-engine-startup.clear-to-disconnect",
+       "text": "\"Clear to Disconnect\"",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      },
+      {
+       "id": "after-engine-startup.hand-signal",
+       "text": "\"Hand Signal\"",
+       "response": "PERFORM",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "taxi-checklist",
+   "name": "TAXI CHECKLIST",
+   "subphases": [
+    {
+     "id": "taxi-checklist.main",
+     "name": "",
+     "items": [
+      {
+       "id": "taxi-checklist.obtain-taxi-clearance",
+       "text": "Obtain Taxi Clearance",
+       "response": "Eg. \"Malpensa Ground, ASX415, Stand 123, Ready for taxi\"",
+       "type": "atc"
+      },
+      {
+       "id": "taxi-checklist.nose-light-sw",
+       "text": "Nose Light sw",
+       "response": "TAXI",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.area-clearance",
+       "text": "Area Clearance",
+       "response": "\"CLEAR L/R SIDE\"",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.parking-brake",
+       "text": "Parking Brake",
+       "response": "OFF (Brake pressure 0)",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.chrono",
+       "text": "Chrono",
+       "response": "START",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.brakes",
+       "text": "Brakes",
+       "response": "PRESS \"Brakes Check\"",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.flight-controls",
+       "text": "Flight Controls",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.departure-briefing",
+       "text": "Departure Briefing",
+       "response": "PERFORM",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.f-pln-sid-and-transition",
+       "text": "F-PLN SID and Transition",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.initial-clb-spd-spd-limit",
+       "text": "Initial CLB SPD & SPD Limit",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.cleared-altitude-on-fcu",
+       "text": "Cleared Altitude on FCU",
+       "response": "SET",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.t-o-data-runway",
+       "text": "T/O Data: Runway",
+       "response": "REVISE",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.t-o-data-flaps-lever",
+       "text": "T/O Data: Flaps Lever",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.t-o-data-v1-vr-v2",
+       "text": "T/O Data: V1, Vr, V2",
+       "response": "REINSERT",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.t-o-data-flx-to-temperature",
+       "text": "T/O Data: FLX to Temperature",
+       "response": "REINSERT",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.heading-on-fcu",
+       "text": "Heading on FCU",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.flight-director",
+       "text": "Flight Director",
+       "response": "CHECK BOTH ON",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.pfd-nd",
+       "text": "PFD/ND",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.takeoff-briefing",
+       "text": "Takeoff Briefing",
+       "response": "CONFIRM",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.radar",
+       "text": "Radar",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.predictive-windshear-system",
+       "text": "Predictive Windshear System",
+       "response": "AUTO",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.terr-on-nd-pb",
+       "text": "TERR ON ND pb",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.autobrake-pb",
+       "text": "Autobrake pb",
+       "response": "MAX",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.takeoff-config-pb",
+       "text": "Takeoff Config pb",
+       "response": "PRESS / \"Takeoff Normal\"",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.ecam-takeoff-memo",
+       "text": "ECAM Takeoff MEMO",
+       "response": "CHECK NO BLUE",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.cabin-report",
+       "text": "Cabin Report",
+       "response": "RECEIVE",
+       "type": "action"
+      },
+      {
+       "id": "taxi-checklist.chrono_2",
+       "text": "Chrono",
+       "response": "STOP",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "before-takeoff",
+   "name": "BEFORE TAKEOFF",
+   "subphases": [
+    {
+     "id": "before-takeoff.main",
+     "name": "",
+     "items": [
+      {
+       "id": "before-takeoff.brake-temperature",
+       "text": "Brake Temperature",
+       "response": "CHECK \"Below 150°C\"",
+       "type": "action"
+      },
+      {
+       "id": "before-takeoff.obtain-takeoff-or-line-up-clearance",
+       "text": "Obtain Takeoff or Line Up Clearance",
+       "response": "Eg. \"Malpensa Ground, ASX415, Holding point B, Runway 35L, Ready for departure\"",
+       "type": "atc"
+      },
+      {
+       "id": "before-takeoff.runway-turn-off-lights-sw",
+       "text": "Runway Turn Off Lights sw",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "before-takeoff.nose-light-sw",
+       "text": "Nose Light sw",
+       "response": "TAKE OFF",
+       "type": "action"
+      },
+      {
+       "id": "before-takeoff.strobe-light-sw",
+       "text": "Strobe Light sw",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "before-takeoff.landing-lights-sw",
+       "text": "Landing Lights sw",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "before-takeoff.tcas-mode-selector",
+       "text": "TCAS Mode Selector",
+       "response": "TA or TA/RA",
+       "type": "action"
+      },
+      {
+       "id": "before-takeoff.approach-path-clear-of-traffic",
+       "text": "Approach Path Clear of Traffic",
+       "response": "CLEARED OF TRAFFIC",
+       "type": "action"
+      },
+      {
+       "id": "before-takeoff.cabin-crew",
+       "text": "Cabin crew",
+       "response": "ADVISE",
+       "type": "action"
+      },
+      {
+       "id": "before-takeoff.engine-mode-selector",
+       "text": "Engine Mode Selector",
+       "response": "IGN/START or NORM",
+       "type": "action"
+      },
+      {
+       "id": "before-takeoff.sliding-table",
+       "text": "Sliding Table",
+       "response": "STOWED",
+       "type": "action"
+      },
+      {
+       "id": "before-takeoff.takeoff-runway",
+       "text": "Takeoff Runway",
+       "response": "CONFIRM",
+       "type": "action"
+      },
+      {
+       "id": "before-takeoff.packs-pb",
+       "text": "Packs pb",
+       "response": "BOTH OFF",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "takeoff",
+   "name": "TAKEOFF",
+   "subphases": [
+    {
+     "id": "takeoff.main",
+     "name": "",
+     "items": [
+      {
+       "id": "takeoff.obtain-takeoff",
+       "text": "Obtain Takeoff",
+       "response": "Eg. RB: \"Runway 35L, Cleared for takeoff, ASX415\"",
+       "type": "atc"
+      },
+      {
+       "id": "takeoff.thrust-levers",
+       "text": "Thrust Levers",
+       "response": "50% N1",
+       "type": "action"
+      },
+      {
+       "id": "takeoff.note",
+       "text": "If the crosswind is at or below 20 kt and there is no tailwind: half forward sidestick until 80kt, release gradually to neutral at 100 kt. In case of tailwind, or crosswind greater than 20 kt: full forward sidestick until 80kt, release gradually to neutral at 100 kt.",
+       "response": "",
+       "type": "note"
+      },
+      {
+       "id": "takeoff.brakes",
+       "text": "Brakes",
+       "response": "RELEASE",
+       "type": "action"
+      },
+      {
+       "id": "takeoff.thrust-levers_2",
+       "text": "Thrust Levers",
+       "response": "FLX or TOGA",
+       "type": "action"
+      },
+      {
+       "id": "takeoff.thrust-set",
+       "text": "\"Thrust set\"",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      },
+      {
+       "id": "takeoff.chrono",
+       "text": "Chrono",
+       "response": "START",
+       "type": "action"
+      },
+      {
+       "id": "takeoff.pfd-nd",
+       "text": "PFD/ND",
+       "response": "MONITOR - MAN FLX / TOGA - SRS - RWY - A/THR (BLUE)",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "takeoff.below-80-kts",
+     "name": "BELOW 80 KTS",
+     "items": [
+      {
+       "id": "takeoff.takeoff-n1",
+       "text": "Takeoff N1",
+       "response": "CHECK",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "takeoff.reaching-100-kts",
+     "name": "REACHING 100 KTS",
+     "items": [
+      {
+       "id": "takeoff.one-hundred-knots",
+       "text": "\"ONE HUNDRED KNOTS\"",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      }
+     ]
+    },
+    {
+     "id": "takeoff.at-v1",
+     "name": "AT V1",
+     "items": [
+      {
+       "id": "takeoff.v1",
+       "text": "\"V1\"",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      }
+     ]
+    },
+    {
+     "id": "takeoff.at-vr",
+     "name": "AT VR",
+     "items": [
+      {
+       "id": "takeoff.rotation-rate-3-s-pitch-15",
+       "text": "Rotation (Rate 3°/s - Pitch 15°)",
+       "response": "ORDER / PERFORM",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "takeoff.after-lift-off",
+     "name": "AFTER LIFT-OFF",
+     "items": [
+      {
+       "id": "takeoff.srs-pitch-command-bar",
+       "text": "SRS Pitch Command Bar",
+       "response": "FOLLOW",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "takeoff.when-positive-climb",
+     "name": "WHEN POSITIVE CLIMB",
+     "items": [
+      {
+       "id": "takeoff.positive-climb",
+       "text": "\"Positive CLIMB\"",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      },
+      {
+       "id": "takeoff.landing-gear",
+       "text": "Landing Gear",
+       "response": "ORDER / UP",
+       "type": "action"
+      },
+      {
+       "id": "takeoff.autopilot",
+       "text": "Autopilot",
+       "response": "AS REQUIRED",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "takeoff.at-thrust-reduction-altitude",
+     "name": "AT THRUST REDUCTION ALTITUDE",
+     "items": [
+      {
+       "id": "takeoff.thrust-levers_3",
+       "text": "Thrust Levers",
+       "response": "CLIMB",
+       "type": "action"
+      },
+      {
+       "id": "takeoff.thrust-climb",
+       "text": "\"Thrust CLIMB\"",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      },
+      {
+       "id": "takeoff.packs-pb",
+       "text": "Packs pb",
+       "response": "BOTH ON (10s delay)",
+       "type": "action"
+      },
+      {
+       "id": "takeoff.at-f-speed-flaps-1",
+       "text": "At F Speed: Flaps 1",
+       "response": "SELECT",
+       "type": "action"
+      },
+      {
+       "id": "takeoff.at-s-speed-flaps-0",
+       "text": "At S Speed: Flaps 0",
+       "response": "SELECT",
+       "type": "action"
+      },
+      {
+       "id": "takeoff.ground-spoilers",
+       "text": "Ground Spoilers",
+       "response": "DISARM",
+       "type": "action"
+      },
+      {
+       "id": "takeoff.nose-light-sw",
+       "text": "Nose Light sw",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "takeoff.runway-turn-off-lights-sw",
+       "text": "Runway Turn Off Lights sw",
+       "response": "OFF",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "after-takeoff",
+   "name": "AFTER TAKEOFF",
+   "subphases": [
+    {
+     "id": "after-takeoff.main",
+     "name": "",
+     "items": [
+      {
+       "id": "after-takeoff.apu-bleed-pb",
+       "text": "APU Bleed pb",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "after-takeoff.apu-master-switch",
+       "text": "APU Master Switch",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "after-takeoff.engine-mode-selector",
+       "text": "Engine Mode Selector",
+       "response": "NORM",
+       "type": "action"
+      },
+      {
+       "id": "after-takeoff.tcas-mode-selector",
+       "text": "TCAS Mode Selector",
+       "response": "TA/RA",
+       "type": "action"
+      },
+      {
+       "id": "after-takeoff.anti-ice-protection",
+       "text": "Anti-Ice Protection",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "after-takeoff.report-departure-when-asked-to",
+       "text": "Report Departure (when asked to)",
+       "response": "Eg. RB: \"Contact Delivery 123.800, ASX415, Bye\" / Eg. \"Malpensa Delivery, ASX415, Passing 2000 ft, Climbing 5000\"",
+       "type": "atc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "climb",
+   "name": "CLIMB",
+   "subphases": [
+    {
+     "id": "climb.main",
+     "name": "",
+     "items": [
+      {
+       "id": "climb.pilot-monitoring-s-mcdu-page",
+       "text": "Pilot Monitoring's MCDU Page",
+       "response": "F-PLN",
+       "type": "action"
+      },
+      {
+       "id": "climb.pilot-flying-s-mcdu-page",
+       "text": "Pilot Flying's MCDU Page",
+       "response": "PERF CLB",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "climb.at-transition-altitude",
+     "name": "AT TRANSITION ALTITUDE",
+     "items": [
+      {
+       "id": "climb.barometric-reference",
+       "text": "Barometric Reference",
+       "response": "STD",
+       "type": "action"
+      },
+      {
+       "id": "climb.engine-anti-ice",
+       "text": "Engine Anti-Ice",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "climb.crz-fl",
+       "text": "CRZ FL",
+       "response": "AS REQUIRED",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "climb.at-10000-ft",
+     "name": "AT 10000 FT",
+     "items": [
+      {
+       "id": "climb.landing-lights",
+       "text": "Landing Lights",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "climb.seatbelt-signs",
+       "text": "Seatbelt Signs",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "climb.efis-options",
+       "text": "EFIS Options",
+       "response": "CSTR/ARPT",
+       "type": "action"
+      },
+      {
+       "id": "climb.ecam-memo",
+       "text": "ECAM MEMO",
+       "response": "REVIEW",
+       "type": "action"
+      },
+      {
+       "id": "climb.rad-nav-page",
+       "text": "RAD NAV Page",
+       "response": "CLEAR",
+       "type": "action"
+      },
+      {
+       "id": "climb.sec-f-pln",
+       "text": "SEC F-PLN",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "climb.optimal-maximum-altitude",
+       "text": "Optimal / Maximum Altitude",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "climb.report-controls-when-asked-to",
+       "text": "Report Controls (when asked to)",
+       "response": "Eg. \"Milano Control, ASX415, FL100, Climbing FL180\"",
+       "type": "atc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "cruise",
+   "name": "CRUISE",
+   "subphases": [
+    {
+     "id": "cruise.main",
+     "name": "",
+     "items": [
+      {
+       "id": "cruise.ecam-memo",
+       "text": "ECAM Memo",
+       "response": "REVIEW",
+       "type": "action"
+      },
+      {
+       "id": "cruise.ecam-system-pages",
+       "text": "ECAM SYSTEM PAGES",
+       "response": "REVIEW",
+       "type": "action"
+      },
+      {
+       "id": "cruise.note",
+       "text": "Periodically review system display pages: ENG oil pressure and temperature; BLEED parameters; ELEC parameters, GEN loads; HYD slight decrease in quantity is normal; FUEL distribution; COND duct temperature vs zone temperature; FLT CTL any unusual control surface position; DOOR oxygen pressure.",
+       "response": "",
+       "type": "note"
+      },
+      {
+       "id": "cruise.flight-progress",
+       "text": "Flight Progress",
+       "response": "CHECK",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "cruise.when-overflying-a-waypoint",
+     "name": "WHEN OVERFLYING A WAYPOINT",
+     "items": [
+      {
+       "id": "cruise.check-track-and-distance-to-the-next-waypoint",
+       "text": "Check track and distance to the next waypoint",
+       "response": "CHECK",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "cruise.when-overflying-the-waypoint-or-at-least-every-30-min",
+     "name": "WHEN OVERFLYING THE WAYPOINT, OR AT LEAST EVERY 30 MIN",
+     "items": [
+      {
+       "id": "cruise.fuel",
+       "text": "Fuel",
+       "response": "COMPARE: Dest EFOB, Min dest FOB",
+       "type": "action"
+      },
+      {
+       "id": "cruise.step-flight-level",
+       "text": "Step Flight Level",
+       "response": "AS APPROPRIATE",
+       "type": "action"
+      },
+      {
+       "id": "cruise.navigation-accuracy",
+       "text": "Navigation Accuracy",
+       "response": "CHECK GPS PRIMARY",
+       "type": "action"
+      },
+      {
+       "id": "cruise.report-controls-when-asked-to",
+       "text": "Report Controls (when asked to)",
+       "response": "Eg. \"Milano Control, ASX415, FL380\"",
+       "type": "atc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "descent-preparation",
+   "name": "DESCENT PREPARATION",
+   "subphases": [
+    {
+     "id": "descent-preparation.main",
+     "name": "",
+     "items": [
+      {
+       "id": "descent-preparation.check-arrival-atis",
+       "text": "Check Arrival ATIS",
+       "response": "ANNOTATE INFOS & LETTER",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.weather-landing-information",
+       "text": "Weather & Landing Information",
+       "response": "OBTAIN",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.nav-charts",
+       "text": "NAV Charts",
+       "response": "PREPARE",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.ldg-performance",
+       "text": "LDG Performance",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.fmgs-arrival-page",
+       "text": "FMGS: Arrival Page",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.fmgs-f-pln-a-page",
+       "text": "FMGS: F-PLN A Page",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.fmgs-perf-appr-page",
+       "text": "FMGS: PERF APPR Page",
+       "response": "COMPLETE / CHECK",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.fmgs-rad-nav-page",
+       "text": "FMGS: RAD NAV Page",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.fmgs-sec-f-pln-page",
+       "text": "FMGS: SEC F-PLN Page",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.gpws-landing-flap-3",
+       "text": "GPWS Landing Flap 3",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.ldg-elevation",
+       "text": "LDG Elevation",
+       "response": "AUTO",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.auto-brake",
+       "text": "AUTO Brake",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.approach-briefing",
+       "text": "Approach briefing",
+       "response": "PERFORM",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.terr-on-nd",
+       "text": "TERR ON ND",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.engine-anti-ice",
+       "text": "Engine Anti-Ice",
+       "response": "IF BELOW SAT -40°C",
+       "type": "action"
+      },
+      {
+       "id": "descent-preparation.expect-obtain-descent-clearance",
+       "text": "Expect/Obtain Descent Clearance",
+       "response": "Eg. \"Milano Control, ASX415, FL300, Request descent\" / Eg. RB: \"Descend FL100, ASX415\"",
+       "type": "atc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "descent-checklist",
+   "name": "DESCENT CHECKLIST",
+   "subphases": [
+    {
+     "id": "descent-checklist.main",
+     "name": "",
+     "items": [
+      {
+       "id": "descent-checklist.descent-clearance",
+       "text": "Descent Clearance",
+       "response": "Obtained",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.descent",
+       "text": "Descent",
+       "response": "START",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.pilot-flying-s-mcdu-page",
+       "text": "Pilot Flying's MCDU Page",
+       "response": "PROG/PERF DES",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.pilot-monitoring-s-mcdu-page",
+       "text": "Pilot Monitoring's MCDU Page",
+       "response": "F-PLN",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.descent_2",
+       "text": "Descent",
+       "response": "MONITOR",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.speed-brakes",
+       "text": "Speed Brakes",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.ecam-status",
+       "text": "ECAM Status",
+       "response": "CHECK",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "descent-checklist.at-10000-ft",
+     "name": "AT 10000 FT",
+     "items": [
+      {
+       "id": "descent-checklist.landing-lights",
+       "text": "Landing Lights",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.seatbelt-signs",
+       "text": "Seatbelt Signs",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.efis-option",
+       "text": "EFIS Option",
+       "response": "BOTH CSTR",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.ls-button",
+       "text": "LS Button",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.rad-navaids",
+       "text": "RAD NAVAIDS",
+       "response": "SELECTED/IDENTIFIED",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.nav-accuracy",
+       "text": "NAV Accuracy",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "descent-checklist.eng-mode-selector",
+       "text": "ENG MODE Selector",
+       "response": "AS REQUIRED",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "descent-checklist.at-approach-margin-when-asked-to",
+     "name": "AT APPROACH MARGIN / WHEN ASKED TO",
+     "items": [
+      {
+       "id": "descent-checklist.contact-approach",
+       "text": "Contact Approach",
+       "response": "Eg. \"Malpensa Approach, ASX415, FL100, Information Charlie\" / Eg. RB: \"Expect ILS Z 35L, Descend 6000 ft, QNH 1016, ASX415\"",
+       "type": "atc"
+      }
+     ]
+    },
+    {
+     "id": "descent-checklist.at-transition-level",
+     "name": "AT TRANSITION LEVEL",
+     "items": [
+      {
+       "id": "descent-checklist.barometric-reference",
+       "text": "Barometric Reference",
+       "response": "SET (at transition level)",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "ils-approach",
+   "name": "ILS APPROACH",
+   "subphases": [
+    {
+     "id": "ils-approach.main",
+     "name": "",
+     "items": [
+      {
+       "id": "ils-approach.expect-ils-clearance",
+       "text": "Expect ILS Clearance",
+       "response": "Eg. RB: \"Left heading 330, descend 3000 ft, cleared ILS Z 35L, ASX415\"",
+       "type": "atc"
+      }
+     ]
+    },
+    {
+     "id": "ils-approach.initial-approach",
+     "name": "INITIAL APPROACH",
+     "items": [
+      {
+       "id": "ils-approach.seatbelt-signs",
+       "text": "Seatbelt Signs",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.approach-phase",
+       "text": "Approach Phase",
+       "response": "CHECK/ACTIVATE",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.positioning",
+       "text": "Positioning",
+       "response": "MONITOR",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.managed-speed",
+       "text": "Managed Speed",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.ground-spoilers",
+       "text": "Ground Spoilers",
+       "response": "ARMED",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.navigation-accuracy",
+       "text": "Navigation Accuracy",
+       "response": "MONITOR (HIGH)",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.approach-checklist",
+       "text": "Approach Checklist",
+       "response": "Completed",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "ils-approach.final-approach",
+     "name": "FINAL APPROACH",
+     "items": [
+      {
+       "id": "ils-approach.appr-button-on-fcu",
+       "text": "APPR button on FCU",
+       "response": "PRESS",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.autopilot-1-2",
+       "text": "Autopilot 1+2",
+       "response": "ENGAGE",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.flaps-1-at-green-dot-speed",
+       "text": "Flaps 1 (AT GREEN DOT SPEED)",
+       "response": "SELECT",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.tcas",
+       "text": "TCAS",
+       "response": "TA OR TA/RA",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.flight-mode-annunciator",
+       "text": "Flight Mode Annunciator",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.localizer-capture",
+       "text": "Localizer Capture",
+       "response": "MONITOR",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.glideslope-capture",
+       "text": "Glideslope Capture",
+       "response": "MONITOR",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.v-s-mode-if-above-glideslope",
+       "text": "V/S Mode (IF ABOVE GLIDESLOPE)",
+       "response": "SELECT",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.fcu-altitude-if-above-glideslope",
+       "text": "FCU Altitude (IF ABOVE GLIDESLOPE)",
+       "response": "ABOVE A/C ALT",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.go-around-altitude",
+       "text": "Go-Around Altitude",
+       "response": "SET",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "ils-approach.before-passing-2000-ft-agl",
+     "name": "BEFORE PASSING 2000 FT AGL",
+     "items": [
+      {
+       "id": "ils-approach.flaps-2",
+       "text": "Flaps 2",
+       "response": "SELECT",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.landing-gear",
+       "text": "Landing Gear",
+       "response": "DOWN",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.autobrakes",
+       "text": "Autobrakes",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.flaps-3",
+       "text": "Flaps 3",
+       "response": "SELECT",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.ecam-wheel-page",
+       "text": "ECAM WHEEL Page",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.flaps-full",
+       "text": "Flaps FULL",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.autothrottle",
+       "text": "Autothrottle",
+       "response": "SPEED MODE/OFF",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.wing-anti-ice",
+       "text": "Wing Anti-Ice",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.exterior-lights",
+       "text": "Exterior Lights",
+       "response": "SET",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.sliding-table-inop",
+       "text": "Sliding Table (INOP)",
+       "response": "STOWED",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.cabin-crew",
+       "text": "Cabin Crew",
+       "response": "ADVISED",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.ecam-memo-landing",
+       "text": "ECAM MEMO LANDING",
+       "response": "NO BLUE",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.landing-checklist",
+       "text": "Landing Checklist",
+       "response": "Completed",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.obtain-landing-clearance",
+       "text": "Obtain Landing Clearance",
+       "response": "Eg. \"Malpensa Tower, ASX415, Established ILS Z 35L\" / Eg. RB: \"Cleared to land, Runway 35L, ASX415\"",
+       "type": "atc"
+      },
+      {
+       "id": "ils-approach.flight-parameters",
+       "text": "Flight Parameters",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "ils-approach.check-go-around-checklist",
+       "text": "Check go-around checklist",
+       "response": "CHECK",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "non-precision-approach",
+   "name": "NON-PRECISION APPROACH",
+   "subphases": [
+    {
+     "id": "non-precision-approach.initial-approach",
+     "name": "INITIAL APPROACH",
+     "items": [
+      {
+       "id": "non-precision-approach.engine-mode-selector",
+       "text": "Engine Mode Selector",
+       "response": "IGN/START OR NORM",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.seatbelt-signs",
+       "text": "Seatbelt Signs",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.approach-phase",
+       "text": "Approach Phase",
+       "response": "CHECK/ACTIVATE",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.positioning",
+       "text": "Positioning",
+       "response": "MONITOR",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.managed-speed",
+       "text": "Managed Speed",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.ground-spoilers",
+       "text": "Ground Spoilers",
+       "response": "ARMED",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.navigation-accuracy",
+       "text": "Navigation Accuracy",
+       "response": "MONITOR (HIGH)",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.weather-radar-tilt-inop",
+       "text": "Weather Radar Tilt (INOP)",
+       "response": "ADJUST",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.approach-checklist",
+       "text": "Approach Checklist",
+       "response": "Completed",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "non-precision-approach.final-approach",
+     "name": "FINAL APPROACH",
+     "items": [
+      {
+       "id": "non-precision-approach.rnav-app-gps1-2-on-monitor-page",
+       "text": "RNAV APP: GPS1+2 on Monitor Page",
+       "response": "BOTH NAV",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.rnav-app-gps-primary-on-prog-page",
+       "text": "RNAV APP: GPS Primary on PROG Page",
+       "response": "AVAILABLE",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.rnp-for-approach-only-if-no-gps-primary",
+       "text": "RNP for Approach (ONLY IF NO GPS PRIMARY)",
+       "response": "ENTER",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.high-accuracy-only-if-no-gps-primary",
+       "text": "High Accuracy (ONLY IF NO GPS PRIMARY)",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.manage-vert-guidance-appr-appr-button",
+       "text": "MANAGE VERT GUIDANCE APPR: APPR BUTTON",
+       "response": "PRESS",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.flaps-1-at-green-dot-speed",
+       "text": "Flaps 1 (AT GREEN DOT SPEED)",
+       "response": "SELECT",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.tcas",
+       "text": "TCAS",
+       "response": "TA OR TA/RA",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.nd-display",
+       "text": "ND Display",
+       "response": "ADJUST RANGE/MODE",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.flaps-2-at-s-speed",
+       "text": "Flaps 2 (AT S SPEED)",
+       "response": "SELECT",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.landing-gear",
+       "text": "Landing Gear",
+       "response": "DOWN",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.autobrakes",
+       "text": "Autobrakes",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.flaps-3",
+       "text": "Flaps 3",
+       "response": "SELECT",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.ecam-wheel-page",
+       "text": "ECAM WHEEL Page",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.flaps-full",
+       "text": "Flaps FULL",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.autothrottle",
+       "text": "Autothrottle",
+       "response": "SPEED MODE/OFF",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.wing-anti-ice",
+       "text": "Wing Anti-Ice",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.exterior-lights",
+       "text": "Exterior Lights",
+       "response": "SET",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.sliding-table-inop",
+       "text": "Sliding Table (INOP)",
+       "response": "STOWED",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.cabin-report",
+       "text": "Cabin Report",
+       "response": "OBTAIN",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.ecam-memo-landing",
+       "text": "ECAM MEMO LANDING",
+       "response": "NO BLUE",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.landing-checklist",
+       "text": "Landing Checklist",
+       "response": "Completed",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.obtain-landing-clearance",
+       "text": "Obtain Landing Clearance",
+       "response": "Eg. \"Malpensa Tower, ASX415, Established on RNAV Z, Runway 35L\" / Eg. RB: \"Cleared to land, Runway 35L, ASX415\"",
+       "type": "atc"
+      },
+      {
+       "id": "non-precision-approach.flight-parameters",
+       "text": "Flight Parameters",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.autopilot",
+       "text": "Autopilot",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "non-precision-approach.check-go-around-checklist",
+       "text": "Check go-around checklist",
+       "response": "CHECK",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "go-around",
+   "name": "GO-AROUND",
+   "subphases": [
+    {
+     "id": "go-around.main",
+     "name": "",
+     "items": [
+      {
+       "id": "go-around.thrust-levers",
+       "text": "Thrust Levers",
+       "response": "TOGA",
+       "type": "action"
+      },
+      {
+       "id": "go-around.rotation",
+       "text": "Rotation",
+       "response": "PERFORM",
+       "type": "action"
+      },
+      {
+       "id": "go-around.flaps",
+       "text": "Flaps",
+       "response": "RETRACT ONE STEP",
+       "type": "action"
+      },
+      {
+       "id": "go-around.landing-gear",
+       "text": "Landing Gear",
+       "response": "UP",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "go-around.at-go-around-thrust-reduction-alt",
+     "name": "AT GO-AROUND THRUST REDUCTION ALT",
+     "items": [
+      {
+       "id": "go-around.thrust-levers_2",
+       "text": "Thrust Levers",
+       "response": "CL",
+       "type": "action"
+      },
+      {
+       "id": "go-around.fcu-alt-if-target-speed-does-not-increase",
+       "text": "FCU ALT (IF TARGET SPEED DOES NOT INCREASE)",
+       "response": "PULL AND CHECK",
+       "type": "action"
+      },
+      {
+       "id": "go-around.flaps_2",
+       "text": "Flaps",
+       "response": "RETRACT ON SCHEDULE",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "landing",
+   "name": "LANDING",
+   "subphases": [
+    {
+     "id": "landing.at-about-20-ft",
+     "name": "AT ABOUT 20 FT",
+     "items": [
+      {
+       "id": "landing.flare",
+       "text": "Flare",
+       "response": "PERFORM",
+       "type": "action"
+      },
+      {
+       "id": "landing.thrust-levers",
+       "text": "Thrust Levers",
+       "response": "IDLE",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "landing.at-touchdown",
+     "name": "AT TOUCHDOWN",
+     "items": [
+      {
+       "id": "landing.engine-reversers",
+       "text": "Engine Reversers",
+       "response": "MAX",
+       "type": "action"
+      },
+      {
+       "id": "landing.ground-spoilers",
+       "text": "Ground Spoilers",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "landing.directional-control",
+       "text": "Directional Control",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "landing.brakes",
+       "text": "Brakes",
+       "response": "AS REQUIRED",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "landing.at-about-70-kts",
+     "name": "AT ABOUT 70 KTS",
+     "items": [
+      {
+       "id": "landing.thrust-levers_2",
+       "text": "Thrust Levers",
+       "response": "REVERSE IDLE",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "landing.at-25-kts",
+     "name": "AT 25 KTS",
+     "items": [
+      {
+       "id": "landing.thrust-levers_3",
+       "text": "Thrust Levers",
+       "response": "IDLE",
+       "type": "action"
+      }
+     ]
+    },
+    {
+     "id": "landing.below-20-kts",
+     "name": "BELOW 20 KTS",
+     "items": [
+      {
+       "id": "landing.autobrakes",
+       "text": "Autobrakes",
+       "response": "DISENGAGE",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "after-landing",
+   "name": "AFTER LANDING",
+   "subphases": [
+    {
+     "id": "after-landing.main",
+     "name": "",
+     "items": [
+      {
+       "id": "after-landing.rwy",
+       "text": "RWY",
+       "response": "VACATED (annotate taxiway)",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.landing-lights",
+       "text": "Landing Lights",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.ground-spoilers",
+       "text": "Ground Spoilers",
+       "response": "DISARM",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.flaps",
+       "text": "Flaps",
+       "response": "RETRACTED",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.engine-mode-selector",
+       "text": "Engine Mode Selector",
+       "response": "NORM",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.atc",
+       "text": "ATC",
+       "response": "STBY/OFF",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.tcas-mode-selector",
+       "text": "TCAS Mode Selector",
+       "response": "STBY",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.apu-master-switch",
+       "text": "APU Master Switch",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.apu-starter",
+       "text": "APU Starter",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.weather-radar",
+       "text": "Weather Radar",
+       "response": "OFF/STBY",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.predictive-windshear-system",
+       "text": "Predictive Windshear System",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.brake-temperature",
+       "text": "Brake Temperature",
+       "response": "CHECK/FAN",
+       "type": "action"
+      },
+      {
+       "id": "after-landing.obtain-taxi-instructions",
+       "text": "Obtain Taxi Instructions",
+       "response": "Eg. \"Malpensa Tower, ASX415, Runway 35 vacated via A\" / Eg. RB: \"Contact Ground 121.700, ASX415\" / Eg. \"Malpensa Ground, ASX415, Runway 35 vacated via A, Request taxi to stand\" / Eg. RB: \"Taxi stand 123 via Echo, Alpha, ASX415\"",
+       "type": "atc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "parking",
+   "name": "PARKING",
+   "subphases": [
+    {
+     "id": "parking.main",
+     "name": "",
+     "items": [
+      {
+       "id": "parking.parking-brake-accu-press",
+       "text": "Parking Brake ACCU Press",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "parking.parking-brake",
+       "text": "Parking Brake",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "parking.anti-ice",
+       "text": "Anti-Ice",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "parking.apu-bleed",
+       "text": "APU Bleed",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "parking.engine-1-2-master-switch",
+       "text": "Engine 1+2 Master Switch",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "parking.report-ground",
+       "text": "Report Ground",
+       "response": "Eg. \"Malpensa Ground, ASX415, Stand 123\"",
+       "type": "atc"
+      },
+      {
+       "id": "parking.slides-disarmed",
+       "text": "Slides Disarmed",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "parking.exterior-lights",
+       "text": "Exterior Lights",
+       "response": "OFF but Nav & Logo",
+       "type": "action"
+      },
+      {
+       "id": "parking.seatbelt-signs",
+       "text": "Seatbelt Signs",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "parking.elapsed-time",
+       "text": "Elapsed Time",
+       "response": "STOP",
+       "type": "action"
+      },
+      {
+       "id": "parking.fuel-pumps",
+       "text": "Fuel Pumps",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "parking.irs-performance-fuel-quantity",
+       "text": "IRS Performance & Fuel Quantity",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "parking.ecam-status",
+       "text": "ECAM Status",
+       "response": "CHECK",
+       "type": "action"
+      },
+      {
+       "id": "parking.brake-fan",
+       "text": "Brake Fan",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "parking.parking-brake_2",
+       "text": "Parking Brake",
+       "response": "AS REQUIRED",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "securing-the-aircraft",
+   "name": "SECURING THE AIRCRAFT",
+   "subphases": [
+    {
+     "id": "securing-the-aircraft.main",
+     "name": "",
+     "items": [
+      {
+       "id": "securing-the-aircraft.parking-brake",
+       "text": "Parking Brake",
+       "response": "ON",
+       "type": "action"
+      },
+      {
+       "id": "securing-the-aircraft.oxygen-crew-supply",
+       "text": "Oxygen Crew Supply",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "securing-the-aircraft.adirs-1-2-3",
+       "text": "ADIRS 1+2+3",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "securing-the-aircraft.exterior-lights",
+       "text": "Exterior Lights",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "securing-the-aircraft.apu-bleed",
+       "text": "APU Bleed",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "securing-the-aircraft.apu-master-switch",
+       "text": "APU Master Switch",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "securing-the-aircraft.emergency-exit-lights",
+       "text": "Emergency Exit Lights",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "securing-the-aircraft.no-smoking",
+       "text": "No Smoking",
+       "response": "OFF",
+       "type": "action"
+      },
+      {
+       "id": "securing-the-aircraft.external-power",
+       "text": "External Power",
+       "response": "AS REQUIRED",
+       "type": "action"
+      },
+      {
+       "id": "securing-the-aircraft.battery-1-2",
+       "text": "Battery 1&2",
+       "response": "OFF",
+       "type": "action"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

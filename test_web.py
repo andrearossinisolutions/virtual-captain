@@ -1,6 +1,7 @@
 import json
 import pathlib
 import tempfile
+import urllib.error
 import urllib.request
 
 import web
@@ -37,8 +38,36 @@ def test_api_flow():
         # si ricordano solo ID, modalità e accelerazione
         saved = json.loads(cfg.read_text())
         assert saved == {"accel_agl": "1000", "thr_red_agl": "800", "simbrief": "x", "mode": "training",
-                     "aao_url": "http://127.0.0.1:43380/webapi"}
+                     "aao_url": "http://127.0.0.1:43380/webapi", "checklist_phase": "sim-preparation"}
         assert State(cfg).fields["ta"] == "" and State(cfg).fields["accel_agl"] == "1000"
+    finally:
+        srv.shutdown()
+
+
+def test_checklist_phase_endpoint():
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    srv = web.serve(st, "127.0.0.1", 0)
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def post(body):
+        try:
+            return 200, call(base, "/api/checklist-phase", body)
+        except urllib.error.HTTPError as e:
+            return e.code, None
+    try:
+        code, s = post({"phase": "climb"})
+        assert code == 200 and s["cl_phase"] == "climb" and s["checklist"]["phase"]["id"] == "climb" and s["phase"] == "briefing"
+        assert post({"step": 1})[1]["cl_phase"] == "cruise" and post({"step": -1})[1]["cl_phase"] == "climb"
+        for bad in ({"phase": "nope"}, {"phase": 3}, {"step": 2}, {"step": "x"}, {}, [1]):
+            assert post(bad) == (400, None), bad
+        assert st.cl_phase == "climb"
+        html = call(base, "/")
+        assert "Next phase" in html and "clnextbtn" in html and "/api/checklist-phase" in html
+        try:
+            call(base, "/api/checklist-phase")  # GET non scrive
+            assert False
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
     finally:
         srv.shutdown()
 
@@ -167,9 +196,50 @@ def test_old_mode_values_migrate():
     assert state._mode("allenamento") == "training" and state._mode(None) == "normal"
 
 
+def test_layout_markers():
+    p = web.PAGE
+    for m in ("--sp-h", "env(safe-area-inset-bottom)", "viewport-fit=cover", "min-width:900px", "ResizeObserver",
+              'id="speech"', 'id="more"', 'id="clbody"', 'id="edit"', 'id="end"', "columns:420px 2"):
+        assert m in p, m
+    assert 'id="nowtxt"' not in p
+
+
+def test_spoke_counters():
+    with tempfile.TemporaryDirectory() as d:
+        st = State(pathlib.Path(d) / "c.json")
+        s = st.snapshot()
+        assert s["spoke_n"] == 0 and s["spoke_ago"] is None and "now" in s
+        st.add_log("one")
+        st.add_log("two")
+        s = st.snapshot()
+        assert s["spoke_n"] == 2 and 0 <= s["spoke_ago"] < 5 and s["now"] >= st.spoke_at
+
+
+def test_sim_finish_keeps_flying():
+    import main
+    src = iter([({"a": 1}, {"m": 1}), ({"a": 2}, {"m": 2})])
+    last, done, said = None, False, []
+    for _ in range(6):
+        sample, phrase, done, finished = main.sim_read(src, last, done)
+        if phrase:
+            said.append(phrase)
+        if not finished:
+            last = sample
+    assert said == ["Simulated flight finished."] and done and last == ({"a": 2}, {"m": 2}) and sample == last
+    with tempfile.TemporaryDirectory() as d:
+        st = State(pathlib.Path(d) / "c.json")
+        st.set_phase("flying")
+        st.set_monitor(None)
+        assert st.phase == "flying"
+
+
 if __name__ == "__main__":
+    test_layout_markers()
+    test_spoke_counters()
+    test_sim_finish_keeps_flying()
     test_api_flow()
     test_bad_values_use_defaults()
+    test_checklist_phase_endpoint()
     test_monitor_cleared_outside_flight()
     test_aao_parse_missing_variable()
     test_aao_read_falls_back_to_core()

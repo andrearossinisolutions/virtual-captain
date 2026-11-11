@@ -1,0 +1,565 @@
+{
+ "preliminary-cockpit-prep.parking-brake": {
+  "check": {
+   "key": "parking",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.engine-master-sw": {
+  "check": {
+   "all": [
+    {
+     "key": "eng1",
+     "eq": "OFF"
+    },
+    {
+     "key": "eng2",
+     "eq": "OFF"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.engine-mode-selector": {
+  "check": {
+   "key": "engmode",
+   "eq": "NORM"
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.landing-gear-lever": {
+  "check": {
+   "key": "gear",
+   "eq": "DOWN"
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.master-pb": {
+  "check": {
+   "key": "apu_master",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.bleed": {
+  "check": {
+   "key": "apu_bleed",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.nav-logo-sw": {
+  "check": {
+   "key": "navlogo",
+   "eq": [
+    "NAV",
+    "LOGO"
+   ]
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.strobe-sw": {
+  "check": {
+   "key": "strobe",
+   "eq": "AUTO"
+  },
+  "verified": false
+ },
+ "cockpit-preparation.seatbelt-signs-sw": {
+  "check": {
+   "key": "seatbelt",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "before-start.beacon-light-sw": {
+  "check": {
+   "key": "beacon",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "before-start.parking-brake": {
+  "check": {
+   "key": "parking",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "before-start.packs-pb": {
+  "check": {
+   "all": [
+    {
+     "key": "pack1",
+     "eq": "OFF"
+    },
+    {
+     "key": "pack2",
+     "eq": "OFF"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "engine-startup.engine-mode-selector": {
+  "check": {
+   "key": "engmode",
+   "eq": "START"
+  },
+  "verified": false
+ },
+ "engine-startup.engine-master-sw-2": {
+  "check": {
+   "key": "eng2",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "engine-startup.engine-master-sw-1": {
+  "check": {
+   "key": "eng1",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "after-engine-startup.packs-pb": {
+  "check": {
+   "all": [
+    {
+     "key": "pack1",
+     "eq": "ON"
+    },
+    {
+     "key": "pack2",
+     "eq": "ON"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "after-engine-startup.engine-mode-selector": {
+  "check": {
+   "key": "engmode",
+   "eq": "NORM"
+  },
+  "verified": false
+ },
+ "after-engine-startup.apu-bleed-pb": {
+  "check": {
+   "key": "apu_bleed",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "after-engine-startup.apu-master-pb": {
+  "check": {
+   "key": "apu_master",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "after-engine-startup.ground-spoilers": {
+  "check": {
+   "key": "spoilers",
+   "eq": "ARM"
+  },
+  "verified": false
+ },
+ "taxi-checklist.nose-light-sw": {
+  "check": {
+   "key": "nose",
+   "eq": "TAXI"
+  },
+  "verified": false
+ },
+ "taxi-checklist.parking-brake": {
+  "check": {
+   "key": "parking",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "before-takeoff.runway-turn-off-lights-sw": {
+  "check": {
+   "key": "rwy_turnoff",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "before-takeoff.nose-light-sw": {
+  "check": {
+   "key": "nose",
+   "eq": "T/O"
+  },
+  "verified": false
+ },
+ "before-takeoff.strobe-light-sw": {
+  "check": {
+   "key": "strobe",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "before-takeoff.landing-lights-sw": {
+  "check": {
+   "all": [
+    {
+     "key": "landing_l",
+     "eq": "ON"
+    },
+    {
+     "key": "landing_r",
+     "eq": "ON"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "before-takeoff.engine-mode-selector": {
+  "check": {
+   "key": "engmode",
+   "eq": [
+    "NORM",
+    "START"
+   ]
+  },
+  "verified": false
+ },
+ "before-takeoff.packs-pb": {
+  "check": {
+   "all": [
+    {
+     "key": "pack1",
+     "eq": "OFF"
+    },
+    {
+     "key": "pack2",
+     "eq": "OFF"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "takeoff.landing-gear": {
+  "check": {
+   "key": "gear",
+   "eq": "UP"
+  },
+  "verified": false
+ },
+ "takeoff.packs-pb": {
+  "check": {
+   "all": [
+    {
+     "key": "pack1",
+     "eq": "ON"
+    },
+    {
+     "key": "pack2",
+     "eq": "ON"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "takeoff.at-f-speed-flaps-1": {
+  "check": {
+   "key": "flap",
+   "eq": "1"
+  },
+  "verified": false
+ },
+ "takeoff.at-s-speed-flaps-0": {
+  "check": {
+   "key": "flap",
+   "eq": "UP"
+  },
+  "verified": false
+ },
+ "takeoff.ground-spoilers": {
+  "check": {
+   "key": "spoilers",
+   "eq": "RETRACT"
+  },
+  "verified": false
+ },
+ "takeoff.nose-light-sw": {
+  "check": {
+   "key": "nose",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "takeoff.runway-turn-off-lights-sw": {
+  "check": {
+   "key": "rwy_turnoff",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "after-takeoff.apu-bleed-pb": {
+  "check": {
+   "key": "apu_bleed",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "after-takeoff.apu-master-switch": {
+  "check": {
+   "key": "apu_master",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "after-takeoff.engine-mode-selector": {
+  "check": {
+   "key": "engmode",
+   "eq": "NORM"
+  },
+  "verified": false
+ },
+ "climb.landing-lights": {
+  "check": {
+   "all": [
+    {
+     "key": "landing_l",
+     "eq": [
+      "OFF",
+      "RETRACT"
+     ]
+    },
+    {
+     "key": "landing_r",
+     "eq": [
+      "OFF",
+      "RETRACT"
+     ]
+    }
+   ]
+  },
+  "verified": false
+ },
+ "descent-checklist.landing-lights": {
+  "check": {
+   "all": [
+    {
+     "key": "landing_l",
+     "eq": "ON"
+    },
+    {
+     "key": "landing_r",
+     "eq": "ON"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "ils-approach.seatbelt-signs": {
+  "check": {
+   "key": "seatbelt",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "ils-approach.ground-spoilers": {
+  "check": {
+   "key": "spoilers",
+   "eq": "ARM"
+  },
+  "verified": false
+ },
+ "ils-approach.flaps-1-at-green-dot-speed": {
+  "check": {
+   "key": "flap",
+   "eq": "1"
+  },
+  "verified": false
+ },
+ "ils-approach.flaps-2": {
+  "check": {
+   "key": "flap",
+   "eq": "2"
+  },
+  "verified": false
+ },
+ "ils-approach.landing-gear": {
+  "check": {
+   "key": "gear",
+   "eq": "DOWN"
+  },
+  "verified": false
+ },
+ "ils-approach.flaps-3": {
+  "check": {
+   "key": "flap",
+   "eq": "3"
+  },
+  "verified": false
+ },
+ "non-precision-approach.engine-mode-selector": {
+  "check": {
+   "key": "engmode",
+   "eq": [
+    "NORM",
+    "START"
+   ]
+  },
+  "verified": false
+ },
+ "non-precision-approach.seatbelt-signs": {
+  "check": {
+   "key": "seatbelt",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "non-precision-approach.ground-spoilers": {
+  "check": {
+   "key": "spoilers",
+   "eq": "ARM"
+  },
+  "verified": false
+ },
+ "non-precision-approach.flaps-1-at-green-dot-speed": {
+  "check": {
+   "key": "flap",
+   "eq": "1"
+  },
+  "verified": false
+ },
+ "non-precision-approach.flaps-2-at-s-speed": {
+  "check": {
+   "key": "flap",
+   "eq": "2"
+  },
+  "verified": false
+ },
+ "non-precision-approach.landing-gear": {
+  "check": {
+   "key": "gear",
+   "eq": "DOWN"
+  },
+  "verified": false
+ },
+ "non-precision-approach.flaps-3": {
+  "check": {
+   "key": "flap",
+   "eq": "3"
+  },
+  "verified": false
+ },
+ "go-around.landing-gear": {
+  "check": {
+   "key": "gear",
+   "eq": "UP"
+  },
+  "verified": false
+ },
+ "after-landing.landing-lights": {
+  "check": {
+   "all": [
+    {
+     "key": "landing_l",
+     "eq": [
+      "OFF",
+      "RETRACT"
+     ]
+    },
+    {
+     "key": "landing_r",
+     "eq": [
+      "OFF",
+      "RETRACT"
+     ]
+    }
+   ]
+  },
+  "verified": false
+ },
+ "after-landing.ground-spoilers": {
+  "check": {
+   "key": "spoilers",
+   "eq": "RETRACT"
+  },
+  "verified": false
+ },
+ "after-landing.flaps": {
+  "check": {
+   "key": "flap",
+   "eq": "UP"
+  },
+  "verified": false
+ },
+ "after-landing.engine-mode-selector": {
+  "check": {
+   "key": "engmode",
+   "eq": "NORM"
+  },
+  "verified": false
+ },
+ "after-landing.apu-master-switch": {
+  "check": {
+   "key": "apu_master",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "parking.parking-brake": {
+  "check": {
+   "key": "parking",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "parking.apu-bleed": {
+  "check": {
+   "key": "apu_bleed",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "parking.engine-1-2-master-switch": {
+  "check": {
+   "all": [
+    {
+     "key": "eng1",
+     "eq": "OFF"
+    },
+    {
+     "key": "eng2",
+     "eq": "OFF"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "parking.seatbelt-signs": {
+  "check": {
+   "key": "seatbelt",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "securing-the-aircraft.parking-brake": {
+  "check": {
+   "key": "parking",
+   "eq": "ON"
+  },
+  "verified": false
+ },
+ "securing-the-aircraft.apu-bleed": {
+  "check": {
+   "key": "apu_bleed",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "securing-the-aircraft.apu-master-switch": {
+  "check": {
+   "key": "apu_master",
+   "eq": "OFF"
+  },
+  "verified": false
+ }
+}
