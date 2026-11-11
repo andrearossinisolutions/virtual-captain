@@ -7,6 +7,7 @@ import threading
 from collections import deque
 from datetime import datetime
 
+import monitor as mon
 from brain import Briefing
 from aao import AAO, normalize_url
 from simbrief import fetch_latest, to_briefing
@@ -51,6 +52,7 @@ class State:
         self.rev = 0  # cambia quando il server modifica i campi (es. piano caricato)
         self.aao_ok: bool | None = None
         self.log: deque = deque(maxlen=30)
+        self.monitor: list = []  # gruppi gia' etichettati: [[gruppo, [[nome, etichetta, atteso, grezzo], ...]], ...]
 
     # -- modifiche dalla pagina --
     def update(self, data: dict):
@@ -79,6 +81,13 @@ class State:
         if phase in ("briefing", "flying"):
             with self.lock:
                 self.phase = phase
+                if phase != "flying":
+                    self.monitor = []
+
+    def set_monitor(self, raw: dict | None):
+        """Riceve i grezzi {chiave: valore|None}, li etichetta e li tiene per la pagina (vuoto in briefing)."""
+        with self.lock:
+            self.monitor = mon.build(raw) if raw is not None and self.phase == "flying" else []
 
     def load_plan(self, user: str | None = None):
         """Scarica l'ultimo piano: sovrascrive i campi del piano e svuota quelli che il piano non ha."""
@@ -129,4 +138,5 @@ class State:
             return {"phase": self.phase, "fields": dict(self.fields), "simbrief": self.simbrief,
                     "mode": self.mode, "info": self.info, "plan": self.plan, "rev": self.rev,
                     "aao_ok": self.aao_ok, "aao_url": self.aao_url, "log": list(self.log),
-                    "labels": [[k, l] for k, l in FIELDS], "modes": list(MODES)}
+                    "labels": [[k, l] for k, l in FIELDS], "modes": list(MODES),
+                    "monitor": [[g, [list(r) for r in rows]] for g, rows in self.monitor]}

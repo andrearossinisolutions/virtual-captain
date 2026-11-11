@@ -41,6 +41,11 @@ button:disabled{opacity:.5}#info{color:var(--mut);font-size:15px;margin:10px 0 0
 .plan{background:#0c131b;border:1px solid var(--bd);border-radius:12px;padding:12px;margin-top:12px;font-size:16px}
 .plan .route{font:15px/1.5 ui-monospace,monospace;word-break:break-word;margin:6px 0}.plan .meta{color:var(--mut);font-size:14px}
 .plan details{margin-top:8px;color:var(--mut)}.plan summary{cursor:pointer}.wp{display:grid;grid-template-columns:5.5em 5.5em 1fr;gap:4px;font:14px ui-monospace,monospace;padding:2px 0}
+.cs summary{cursor:pointer;color:var(--mut)}.cs h3{font-size:13px;color:var(--mut);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.06em}
+.cg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.ci{background:#0c131b;border:1px solid var(--bd);border-radius:10px;padding:8px 10px}
+.ci .n{color:var(--mut);font-size:13px}.ci .v{font-size:19px;font-weight:600}.ci .v.na{color:#5d6d7d;font-weight:400}
+.ci .x{color:#6b7c8d;font-size:12px}.ci .r{color:#6b7c8d;font:11px ui-monospace,monospace}
 ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{padding:6px 0;border-bottom:1px solid var(--bd);color:var(--mut)}
 </style></head><body><main>
 <h1>Virtual Captain</h1>
@@ -69,6 +74,7 @@ ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{pa
 
 <section id="flt" hidden>
   <div class="chips" id="chips"></div>
+  <details class="card cs" id="cs"><summary>Cockpit state</summary><div id="csbody"></div></details>
   <div id="planflt"></div>
   <div class="card" id="now"><div id="nowtxt" class="idle">Listening…</div><div id="nowtime"></div></div>
   <button class="ghost" id="edit" style="width:100%">Edit briefing</button>
@@ -112,12 +118,21 @@ function plans(s){for(const [id,open] of [["plancfg",false],["planflt",false]]){
 function chips(s){const f=s.fields,c=$("chips");c.innerHTML="";
   const add=(k,v)=>{if(v){const d=document.createElement("span");d.className="chip";d.innerHTML=`<b>${k}</b>`;d.append(v);c.appendChild(d)}};
   add("RWY",[f.origin,f.runway].filter(Boolean).join(" "));add("TA",f.ta&&f.ta+" ft");add("V1",f.v1);add("VR",f.vr);add("V2",f.v2);add("FLAP",f.flap);add("MODE",s.mode[0].toUpperCase()+s.mode.slice(1))}
+function cockpit(s){const b=$("csbody");b.textContent="";const m=s.monitor||[];
+  if(!m.length){const p=document.createElement("div");p.className="meta";p.textContent="No data yet";b.appendChild(p);return}
+  const mk=(c,t)=>{const e=document.createElement("div");e.className=c;e.textContent=t;return e};
+  for(const [g,rows] of m){const h=document.createElement("h3");h.textContent=g;b.appendChild(h);
+    const grid=document.createElement("div");grid.className="cg";
+    for(const [n,v,x,r] of rows){const c=document.createElement("div");c.className="ci";
+      c.appendChild(mk("n",n));c.appendChild(mk("v"+(v.startsWith("n/d")?" na":""),v));
+      if(x)c.appendChild(mk("x",x));if(r!=="")c.appendChild(mk("r","raw "+r));grid.appendChild(c)}
+    b.appendChild(grid)}}
 function render(){const s=last;if(!s)return;const fly=s.phase==="flying";
   $("cfg").hidden=view!=="config";$("flt").hidden=view!=="flight";
   $("phase").textContent=fly?"✈ Flying — reading the simulator":"📝 Briefing";
   const a=$("aao");a.textContent=s.aao_ok===null?"AAO: waiting":s.aao_ok?"AAO: connected":"AAO: not responding";a.className="pill "+(s.aao_ok===null?"":s.aao_ok?"ok":"bad");
   $("go").textContent=fly?"Back to flight":"Briefing complete";$("go").className="big "+(fly?"fly":"");$("end").hidden=!fly;
-  $("info").textContent=s.info;chips(s);plans(s);
+  $("info").textContent=s.info;chips(s);cockpit(s);plans(s);
   const l=s.log;if(l.length){const [t,...rest]=l[0].split("  ");$("nowtxt").textContent=rest.join("  ");$("nowtxt").className="";$("nowtime").textContent=t}
   else{$("nowtxt").textContent="Listening…";$("nowtxt").className="idle";$("nowtime").textContent=""}
   $("log").innerHTML="";for(const t of l.slice(1)){const li=document.createElement("li");li.textContent=t;$("log").appendChild(li)}}

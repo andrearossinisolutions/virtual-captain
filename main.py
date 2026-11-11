@@ -21,10 +21,18 @@ def simulated():
         roll = t < 9  # corsa: 0, 20, … 160 kt
         alt = 0 if roll else (t - 9) * 150
         yield {"on_ground": 1.0 if roll else 0.0, "vs": 0 if roll else 2000, "ias": t * 20 if roll else 160,
-               "agl": alt, "alt": alt, "gear": 1.0 if t < 45 else 0.0, "landing": 1, "seatbelt": 1}
+               "agl": alt, "alt": alt, "gear": 1.0 if t < 45 else 0.0, "landing": 1, "seatbelt": 1}, sim_monitor(t, roll)
         t += 1
         if alt > 11000:
             return
+
+
+def sim_monitor(t, roll):
+    """Valori finti plausibili del cockpit per la pagina in --sim (qualche voce assente di proposito)."""
+    return {"apu_master": 0, "apu_bleed": 0, "pack1": 1 if t > 3 else 0, "pack2": 1 if t > 3 else 0,
+            "landing_l": 2, "landing_r": 2, "nose": 2 if roll else 0, "strobe": 2, "beacon": 1, "navlogo": 1,
+            "rwy_turnoff": 1 if roll else 0, "seatbelt": 1, "flap": 1, "spoilers": 0, "gear": 1.0 if t < 45 else 0.0,
+            "engmode": 1, "eng1": 1, "eng2": 1, "parking": None}
 
 
 def show_qr(url):
@@ -83,7 +91,10 @@ def main():
                 print(f"AAO: {aao.base}", flush=True)
             brain.b = st.briefing()  # modifiche dal tablet valide subito
             try:
-                s = next(src) if src else aao.read()
+                if src:
+                    s, mon = next(src)
+                else:
+                    s, mon = aao.read_all()
                 st.aao_ok = True if not src else None
             except StopIteration:
                 speak("Simulated flight finished.")
@@ -94,6 +105,7 @@ def main():
                 print("AAO not responding:", e)
                 time.sleep(2)
                 continue
+            st.set_monitor(mon)
             clock = clock + 1 if src else time.time()
             for phrase in brain.update(s, clock):
                 speak(phrase)

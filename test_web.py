@@ -27,7 +27,13 @@ def test_api_flow():
         assert s["fields"]["ta"] == "6000" and s["mode"] == "training"
         b = st.briefing()
         assert (b.ta, b.thr_red_agl, b.accel_agl, b.mode) == (6000, 800, 1000, "training")
+        assert s["monitor"] == []  # vuoto in briefing
         assert call(base, "/api/phase", {"phase": "flying"})["phase"] == "flying"
+        st.set_monitor({"apu_master": 1, "landing_l": 2, "pack1": None})
+        mon = dict(call(base, "/api/state")["monitor"])
+        assert mon["APU / Air"][0] == ["APU master", "ON", "Prep: ON · After start: OFF", "1"]
+        assert [r for r in mon["APU / Air"] if r[0] == "Pack 1"][0][1] == "n/d"
+        assert "Cockpit state" in call(base, "/") and "textContent" in call(base, "/")
         # si ricordano solo ID, modalità e accelerazione
         saved = json.loads(cfg.read_text())
         assert saved == {"accel_agl": "1000", "thr_red_agl": "800", "simbrief": "x", "mode": "training",
@@ -35,6 +41,95 @@ def test_api_flow():
         assert State(cfg).fields["ta"] == "" and State(cfg).fields["accel_agl"] == "1000"
     finally:
         srv.shutdown()
+
+
+def test_monitor_cleared_outside_flight():
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    st.set_monitor({"apu_master": 1})
+    assert st.snapshot()["monitor"] == []
+    st.set_phase("flying")
+    st.set_monitor({"apu_master": 1})
+    assert st.snapshot()["monitor"]
+    st.set_phase("briefing")
+    assert st.snapshot()["monitor"] == []
+
+
+def test_aao_parse_missing_variable():
+    from aao import AAO, VARS, MONITOR
+    ll = MONITOR["landing_l"]["lvar"]
+    data = {"getvars": [{"var": VARS["ias"], "value": 120}, {"var": ll, "value": 2},
+                        {"var": MONITOR["nose"]["lvar"], "value": "abc"},
+                        {"var": MONITOR["apu_master"]["std"], "value": 1}]}
+    values, monitor = AAO._parse(data)
+    assert values["ias"] == 120.0 and values["vs"] == 0.0 and set(values) == set(VARS)
+    assert monitor["landing_l"] == 2.0
+    assert monitor["landing_r"] is None and monitor["nose"] is None and monitor["pack1"] is None
+    assert monitor["apu_master"] == 1.0  # L-var assente, ripiega sulla standard
+    assert monitor["apu_bleed"] is None and monitor["eng1"] is None
+    assert monitor["gear"] is None
+    v2, m2 = AAO._parse({"getvars": [{"var": VARS["gear"], "value": 1}]})
+    assert v2["gear"] == 1.0 and m2["gear"] == 1.0 and all(v is None for k, v in m2.items() if k != "gear")
+    assert set(m2) == set(MONITOR)
+
+
+def test_aao_read_falls_back_to_core():
+    import aao as A
+    a = A.AAO()
+    calls = []
+
+    def fake(names, timeout):
+        calls.append(len(names))
+        if len(names) > len(A.VARS):
+            raise ValueError("lvar")
+        return {"getvars": [{"var": v, "value": 1} for v in names]}
+    a._get = fake
+    values, monitor = a.read_all()
+    assert calls == [calls[0], len(A.VARS)] and calls[0] > len(A.VARS)
+    assert values["ias"] == 1.0 and all(v is None for v in monitor.values())
+    a.read_all()  # entro 30 s: solo core, niente richiesta piena
+    assert calls[2:] == [len(A.VARS)]
+    a._core_only_until = 0.0  # scaduto: riprova la piena
+    a.read_all()
+    assert calls[3] > len(A.VARS)
+    assert a.read() == values
+
+
+def test_aao_unreachable_not_doubled():
+    import aao as A
+    a = A.AAO()
+    n = []
+
+    def fake(names, timeout):
+        n.append(1)
+        raise OSError("down")
+    a._get = fake
+    try:
+        a.read_all()
+        assert False
+    except OSError:
+        pass
+    assert len(n) == 1
+
+
+def test_aao_requests_only_used_vars():
+    import aao as A
+    from monitor import ITEMS
+    for it in ITEMS:
+        m = A.MONITOR[it.key]
+        assert (m["std"] is not None) == bool(it.std and (it.std_fallback or not it.lvar)), it.key
+    assert A.MONITOR["landing_l"]["std"] is None and A.MONITOR["flap"]["std"] is None
+    assert A.MONITOR["gear"]["std"] and A.MONITOR["seatbelt"]["std"]
+
+
+def test_aao_parse_dict_format_and_values_unchanged():
+    import aao as A
+    d = {A.VARS["ias"]: 150, A.VARS["on_ground"]: 1, A.VARS["gear"]: None}
+    values, monitor = A.AAO._parse(d)
+    assert values == {"on_ground": 1.0, "vs": 0.0, "agl": 0.0, "alt": 0.0, "ias": 150.0, "gear": 0.0,
+                      "landing": 0.0, "seatbelt": 0.0}
+    assert monitor["gear"] is None and monitor["apu_master"] is None
+    v2, _ = A.AAO._parse({"getvars": [{"var": A.VARS["vs"], "value": "2000"}]})
+    assert v2["vs"] == 2000.0 and v2["ias"] == 0.0
 
 
 def test_bad_values_use_defaults():
@@ -75,6 +170,12 @@ def test_old_mode_values_migrate():
 if __name__ == "__main__":
     test_api_flow()
     test_bad_values_use_defaults()
+    test_monitor_cleared_outside_flight()
+    test_aao_parse_missing_variable()
+    test_aao_read_falls_back_to_core()
+    test_aao_unreachable_not_doubled()
+    test_aao_requests_only_used_vars()
+    test_aao_parse_dict_format_and_values_unchanged()
     test_firewall_noop_off_windows()
     test_plan_extraction()
     test_old_mode_values_migrate()
