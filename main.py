@@ -5,7 +5,7 @@ import time
 import briefing_ui
 from aao import AAO
 from brain import Brain, Briefing
-from speak import say
+from speak import say, wait
 
 
 def simulated():
@@ -41,8 +41,9 @@ def main():
         sim_t = sim_t + 1 if src else time.time()
         for phrase in brain.update(s, sim_t):
             say(phrase)
-        time.sleep(0.05 if src else 0.5)
+        time.sleep(0.4 if src else 0.5)
 
 
 if __name__ == "__main__":
     main()
+    wait()
