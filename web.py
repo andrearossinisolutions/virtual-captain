@@ -39,6 +39,7 @@ button:disabled{opacity:.5}#info{color:var(--mut);font-size:15px;margin:10px 0 0
 #topbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}#topbar .chips{margin:0;flex:1 1 auto}
 #more{flex:0 0 auto;margin-left:auto}#more>summary{cursor:pointer;color:var(--mut);font-size:16px;padding:6px 12px;border:1px solid var(--bd);border-radius:10px}
 #more[open]{flex:1 0 100%}#more[open]>summary{display:inline-block;margin-bottom:10px}
+.livesw{display:block;margin:8px 0;color:var(--fg)}.livesw input{width:auto;margin-right:8px}.lv{font-size:14px;color:var(--acc)}
 #more h2{margin-top:12px}#more .morebtns{display:flex;gap:8px;margin:12px 0}#more .morebtns button{flex:1}
 #speech{position:fixed;bottom:0;left:0;right:0;z-index:10;background:#0b1118;border-top:1px solid var(--bd);padding:8px 16px calc(8px + env(safe-area-inset-bottom));cursor:pointer}
 #speech.big{min-height:96px;display:flex;flex-direction:column;justify-content:center;text-align:center}
@@ -106,6 +107,7 @@ ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{pa
 <section id="flt" hidden>
   <div id="topbar"><div class="chips" id="chips"></div>
   <details id="more"><summary>More</summary>
+    <label class="livesw"><input type="checkbox" id="livesw"> Show real values on checklist</label>
     <details class="card cs" id="cs"><summary>Cockpit state</summary><div id="csbody"></div></details>
     <div id="planflt"></div>
     <div class="morebtns"><button class="ghost" id="edit">Edit briefing</button><button class="ghost" id="end2" hidden>End flight (stop reading)</button></div>
@@ -166,7 +168,8 @@ function cockpit(s){const k=JSON.stringify(s.monitor);if(k===csKey)return;csKey=
       c.appendChild(mk("n",n));c.appendChild(mk("v"+(v.startsWith("n/d")?" na":""),v));
       if(x)c.appendChild(mk("x",x));if(r!=="")c.appendChild(mk("r","raw "+r));grid.appendChild(c)}
     b.appendChild(grid)}}
-let clKey="";
+let clKey="",showLive=localStorage.getItem("showLive")==="1";
+$("livesw").checked=showLive;$("livesw").onchange=()=>{showLive=$("livesw").checked;localStorage.setItem("showLive",showLive?"1":"0");if(last)checklist(last)};
 function clGo(body){api("/api/checklist-phase",body).then(apply).catch(()=>{})}
 function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!c)return;
   const idx=ph.findIndex(p=>p.id===cur),strip=$("clstrip"),key=ph.length+"|"+cur;
@@ -176,7 +179,7 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
   $("clprev").onclick=()=>clGo({step:-1});$("clnext").onclick=()=>clGo({step:1});
   $("clprev").disabled=idx<=0;$("clnext").disabled=idx>=ph.length-1;
   $("clname").textContent=c.phase.name;const sm=$("clsum");sm.textContent=c.bad+" out of spec";sm.className="clsum"+(c.bad?" bad":"");
-  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type])])]);
+  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live])]),showLive]);
   if(bk!==clBodyKey){clBodyKey=bk;const y=window.scrollY,x=window.scrollX;body.textContent="";
   const mk=(t,cls,txt)=>{const e=document.createElement(t);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e};
   for(const sp of c.subphases){if(sp.name)body.appendChild(mk("h3","",sp.name));
@@ -186,6 +189,7 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(it.type==="atc")e.appendChild(mk("span","badge","ATC"));if(it.type==="announce")e.appendChild(mk("span","badge","ANNOUNCE"));
       e.append(it.text);tx.appendChild(e);
       if(it.response&&it.type!=="announce")tx.appendChild(mk("div","a",it.response));
+      if(showLive&&it.live&&it.live.length)tx.appendChild(mk("div","lv","Actual: "+it.live.map(l=>(it.live.length>1?l[0]+" ":"")+l[1]).join(" \u00b7 ")));
       if(it.kind==="mismatch")tx.appendChild(mk("div","d",it.detail.replace(/, actual/g," \u00b7 actual")));
       r.appendChild(tx);body.appendChild(r)}}
   window.scrollTo(x,y)}

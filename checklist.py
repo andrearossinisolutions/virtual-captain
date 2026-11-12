@@ -33,6 +33,17 @@ def _check_keys(check: dict, where: str) -> None:
             raise ValueError(f"{where}: etichetta {e!r} non valida per {key}")
 
 
+def check_keys(check: dict) -> list:
+    """Chiavi del monitor usate da un check (singolo o composto), in ordine e senza doppioni."""
+    subs = check.get("all") or [check]
+    return list(dict.fromkeys(c["key"] for c in subs if c.get("key")))
+
+
+def live_values(check: dict | None, labels: dict) -> list:
+    """Valori reali letti per un check: [[nome, etichetta|"n/d"], ...] (sola lettura, vuoto se la voce non ha variabile)."""
+    return [[BY_KEY[k].name, labels.get(k) or mon.NA] for k in check_keys(check or {})]
+
+
 class Checklist:
     def __init__(self, data: dict, links: dict):
         self.data, self.links = data, links
@@ -75,7 +86,7 @@ class Checklist:
                 res = evaluate(link["check"], labels, demo or link["verified"]) if link else evaluate(None, labels)
                 bad += res["status"] == "bad"
                 row = {"id": it["id"], "text": it["text"], "response": it["response"], "type": it["type"],
-                       "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
+                       "live": live_values(link["check"], labels) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
                 if it.get("note"):
                     row["note"] = it["note"]
                 rows.append(row)

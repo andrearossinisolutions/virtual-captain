@@ -67,7 +67,7 @@ ITEMS: list[Item] = [
     Item("spoilers", "Flight controls", "Ground spoilers", "speedbrake", {"After start": "ARM", "Climb": "RETRACT"},
          "(A:SPOILERS ARMED, Bool)", "A_FC_SPEEDBRAKE", uncertain=True),
     Item("gear", "Flight controls", "Gear", "gear", {"Takeoff": "DOWN", "Positive climb": "UP"},
-         "(A:GEAR HANDLE POSITION, Bool)", None, True),
+         "(A:GEAR HANDLE POSITION, Bool)", "S_MIP_GEAR", True),  # mappa 0/1 da verificare dal vivo
     Item("engmode", "Engines", "Engine mode", "engmode", {"Start": "START", "After start": "NORM"},
          None, "S_ENG_MODE"),
     Item("eng1", "Engines", "Engine master 1", "onoff", {"Start": "ON"}, None, "S_ENG_MASTER_1"),

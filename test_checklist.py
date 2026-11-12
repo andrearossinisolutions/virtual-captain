@@ -143,6 +143,22 @@ def test_snapshot_uses_live_labels_and_demo():
     assert st.labels == {}
 
 
+def test_live_values():
+    cl = C.load()
+    labels = {"parking": "ON", "eng1": "OFF", "eng2": None}
+    assert C.check_keys({"all": [{"key": "eng1", "eq": "OFF"}, {"key": "eng2", "eq": "OFF"}]}) == ["eng1", "eng2"]
+    assert C.live_values({"key": "parking", "eq": "ON"}, labels) == [["Parking brake", "ON"]]
+    assert C.live_values({"all": [{"key": "eng1", "eq": "OFF"}, {"key": "eng2", "eq": "OFF"}]}, labels) == \
+        [["Engine master 1", "OFF"], ["Engine master 2", "n/d"]]
+    assert C.live_values(None, labels) == []
+    rows = {r["id"]: r for sp in cl.evaluate_phase("preliminary-cockpit-prep", labels)["subphases"] for r in sp["items"]}
+    assert rows["preliminary-cockpit-prep.parking-brake"]["live"] == [["Parking brake", "ON"]]
+    assert all(r["live"] == [] for r in rows.values() if r["type"] != "action")
+    assert 'id="livesw"' in __import__("web").PAGE and 'localStorage.getItem("showLive")==="1"' in __import__("web").PAGE
+    gear = {i.key: i for i in mon.ITEMS}["gear"]
+    assert gear.lvar == "S_MIP_GEAR" and gear.std_fallback and gear.std
+
+
 if __name__ == "__main__":
     test_files_valid()
     test_links_reference_real_things()
@@ -151,4 +167,5 @@ if __name__ == "__main__":
     test_evaluate_phase()
     test_cl_phase_state()
     test_snapshot_uses_live_labels_and_demo()
+    test_live_values()
     print("ok")
