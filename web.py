@@ -87,10 +87,9 @@ main.fv{max-width:none;padding:12px 16px}
 .craft label{display:block;font-size:11px;color:var(--mut);line-height:1.2}
 .craft input,.craft textarea{width:100%;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--fg);scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}
 .craft textarea{font:16px/1.3 ui-monospace,monospace;text-transform:uppercase;min-height:3.6em;resize:vertical}
-.inp{display:inline-flex;flex-wrap:wrap;gap:4px 6px;align-items:center;margin-left:8px;vertical-align:middle}
-.inp .chip.fld{cursor:pointer;padding:2px 10px;font-size:15px;white-space:nowrap}.inp .chip.fld b{font-size:12px}.inp .chip.fld.nv{color:var(--mut)}
-.inp .chip input{width:5.5em;font-size:15px;padding:2px 6px;scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}.inp .chip.fld.w input{width:7.5em}
-.inp button{padding:2px 10px;font-size:12px}
+.a.inpr .fld{cursor:pointer;border-bottom:1px dotted var(--mut);white-space:nowrap}.a.inpr .fld.set{color:var(--fg);font-weight:600}.a.inpr .sep{color:var(--mut)}
+.a.inpr input{width:4.5em;font-size:15px;padding:1px 6px;border-radius:6px;border:1px solid var(--bd);background:var(--card);color:var(--fg);scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}.a.inpr .fld.w input{width:6em}
+.a.inpr .rs{background:none;border:0;color:var(--mut);padding:0 4px;font-size:16px;font-weight:400;cursor:pointer}
 .craft .cb{margin-top:6px}.craft .cb button{padding:4px 10px;font-size:13px}
 #clnextbtn{margin-top:14px}
 #thrtab{border-collapse:collapse;font:13px ui-monospace,monospace;width:100%}#thrtab th,#thrtab td{border-bottom:1px solid var(--bd);padding:3px 6px;text-align:right;white-space:nowrap}#thrtab th:first-child,#thrtab td:first-child{text-align:left}#thrtab .lv{font-weight:700}#thrtab .gd td:first-child{color:var(--fg)}
@@ -251,18 +250,22 @@ function syncCraft(c,force){if(c&&!sqkEdit){sqkVal=c.t||"";sqkShow()}if(!craftEl
 let inpDirty={},inpTimer=null;
 function inpSend(){clearTimeout(inpTimer);inpTimer=null;const o=inpDirty;inpDirty={};if(last)Object.assign(last.fields,o);if(Object.keys(o).length)api("/api/fields",o).then(s=>{lastRev=s.rev}).catch(()=>{})}
 function fval(k){return k in inpDirty?inpDirty[k]:((last&&last.fields[k])||"")}
-function fShow(el){if(el.querySelector("input"))return;const v=fval(el.dataset.f);el.textContent="";el.className="chip fld"+(v?"":" nv")+(el.dataset.w?" w":"");const b=document.createElement("b");b.textContent=el.dataset.l;el.append(b,v||"---")}
+function fShow(el){if(el.querySelector("input"))return;const v=fval(el.dataset.f);el.textContent="";el.className="fld"+(v?" set":" nv")+(el.dataset.w?" w":"");
+  el.textContent=v||(el.dataset.r&&!el.dataset.pre?el.dataset.r:(el.dataset.pre?el.dataset.pre+" ":"")+"---")}
 function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f,i=document.createElement("input");i.value=fval(k);i.dataset.f=k;
   const txt=k==="runway"||k==="flap";i.inputMode=txt?"text":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
   let done=false;const end=()=>{if(done)return;done=true;inpSend();i.remove();fShow(el)};
   i.oninput=()=>{if(k==="runway")i.value=i.value.toUpperCase();inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400)};
   i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();end()}};i.onblur=end;
-  el.textContent="";const b=document.createElement("b");b.textContent=el.dataset.l;el.append(b,i);i.focus({preventScroll:true});
+  el.textContent="";i.placeholder=el.dataset.l;el.append(i);i.focus({preventScroll:true});
   if(sel){try{i.setSelectionRange(sel[0],sel[1])}catch(e){}}else i.select()}
-function inputsNode(it){const el=document.createElement("span");el.className="inp";
-  for(const f of it.inputs){const c=document.createElement("span");c.dataset.f=f.k;c.dataset.l=f.label;if(f.k==="runway"||f.k==="flap")c.dataset.w="1";c.onclick=()=>fStart(c);fShow(c);el.appendChild(c)}
+function inputsNode(it){const el=document.createElement("div");el.className="a inpr";const one=it.inputs.length===1;
+  it.inputs.forEach((f,n)=>{if(n){const sp=document.createElement("span");sp.className="sep";sp.textContent=" / ";el.appendChild(sp)}
+    const c=document.createElement("span");c.dataset.f=f.k;c.dataset.l=f.label;c.title=f.label;if(f.k==="runway"||f.k==="flap")c.dataset.w="1";
+    if(one)c.dataset.r=it.response||"";else if(!f.plan)c.dataset.pre=f.label.split(" (")[0].toLowerCase();
+    c.onclick=()=>fStart(c);fShow(c);el.appendChild(c)});
   const ks=it.inputs.filter(f=>f.plan).map(f=>f.k);
-  if(ks.length){const b=document.createElement("button");b.className="ghost";b.textContent="Reset to plan";
+  if(ks.length){const b=document.createElement("button");b.className="rs";b.textContent="\u21ba";b.title="Reset to plan";b.setAttribute("aria-label","Reset to plan");
     b.onclick=async ev=>{ev.stopPropagation();clearTimeout(inpTimer);inpTimer=null;ks.forEach(k=>delete inpDirty[k]);try{const s=await api("/api/fields",{reset:ks});lastRev=s.rev;last=s;syncInputs(s)}catch(e){}};el.appendChild(b)}
   return el}
 function syncInputs(s){document.querySelectorAll("#clbody .fld").forEach(fShow)}
@@ -286,8 +289,8 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(ic.length>2)r.classList.add("wl");
       r.appendChild(mk("div","ic"+(ic.length>2?" w":""),ic));const tx=mk("div","tx");const e=mk("div","e");
       if(it.type==="atc")e.appendChild(mk("span","badge","ATC"));if(it.type==="announce")e.appendChild(mk("span","badge","ANNOUNCE"));
-      e.append(it.text);if(it.inputs)e.appendChild(inputsNode(it));tx.appendChild(e);
-      const av=(it.expected||it.response);if(av&&it.type!=="announce")tx.appendChild(mk("div","a"+(it.expected?" set":""),av));
+      e.append(it.text);tx.appendChild(e);
+      const av=(it.expected||it.response);if(it.inputs)tx.appendChild(inputsNode(it));else if(av&&it.type!=="announce")tx.appendChild(mk("div","a"+(it.expected?" set":""),av));
       if(showLive&&it.live&&it.live.length)tx.appendChild(mk("div","lv","Actual: "+it.live.map(l=>(it.live.length>1?l[0]+" ":"")+l[1]).join(" \u00b7 ")));
       if(s.test_links&&it.raw&&it.raw.length)tx.appendChild(mk("div","rw",it.raw.map(l=>l[0]+"="+l[1]).join(" \u00b7 ")));
       if(it.show&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","NOW: "+it.live.map(l=>l[1]).join(", ")));

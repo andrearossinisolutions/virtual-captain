@@ -279,11 +279,12 @@ def test_to_briefing_dep_runway():
 
 def test_inputs_markup():
     p = web.PAGE
-    for m in ("function inputsNode", "function syncInputs", "function inpSend", "function fStart", "function fShow", "dataset.f", "/api/fields", "Reset to plan", "reset:ks",
-              "setTimeout(inpSend,400)", ".inp{display:inline-flex", ".chip.fld", "v||\"---\"", "i.onblur=end", 'e.key==="Enter"',
-              'placeholder="LIMC/17R"'):
+    for m in ("function inputsNode", "function syncInputs", "function inpSend", "function fStart", "function fShow", "dataset.f", "/api/fields", "reset:ks",
+              "setTimeout(inpSend,400)", ".a.inpr .fld", "i.onblur=end", 'e.key==="Enter"', "i.remove();fShow(el)", 'b.title="Reset to plan"',
+              'placeholder="LIMC/17R"', "el.dataset.r", '"---"'):
         assert m in p, m
-    assert "e.appendChild(inputsNode(it))" in p and "tx.appendChild(inputsNode" not in p  # sulla stessa riga della voce
+    # il campo e' il valore atteso a destra (nessun chip a sinistra, nessun duplicato)
+    assert "tx.appendChild(inputsNode(it))" in p and "e.appendChild(inputsNode" not in p and ".chip.fld" not in p
     assert 'querySelector(\'.fld[data-f="\'+keepF[0]' in p  # il campo in modifica sopravvive alla ricostruzione
     key = p[p.index("bk=JSON.stringify"):p.index("showLive,s.test_links")]
     assert "i.inputs" in key and "fields" not in key  # i valori scritti non fanno ricostruire la lista
