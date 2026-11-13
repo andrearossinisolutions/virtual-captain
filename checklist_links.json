@@ -47,7 +47,7 @@
    "key": "apu_bleed",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.nav-logo-sw": {
   "check": {
@@ -150,7 +150,7 @@
    "key": "apu_bleed",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "after-engine-startup.apu-master-pb": {
   "check": {
@@ -164,7 +164,7 @@
    "key": "spoilers",
    "eq": "ARM"
   },
-  "verified": false
+  "verified": true
  },
  "taxi-checklist.nose-light-sw": {
   "check": {
@@ -282,7 +282,7 @@
    "key": "spoilers",
    "eq": "RETRACT"
   },
-  "verified": false
+  "verified": true
  },
  "takeoff.nose-light-sw": {
   "check": {
@@ -303,7 +303,7 @@
    "key": "apu_bleed",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "after-takeoff.apu-master-switch": {
   "check": {
@@ -367,7 +367,7 @@
    "key": "spoilers",
    "eq": "ARM"
   },
-  "verified": false
+  "verified": true
  },
  "ils-approach.flaps-1-at-green-dot-speed": {
   "check": {
@@ -419,7 +419,7 @@
    "key": "spoilers",
    "eq": "ARM"
   },
-  "verified": false
+  "verified": true
  },
  "non-precision-approach.flaps-1-at-green-dot-speed": {
   "check": {
@@ -482,7 +482,7 @@
    "key": "spoilers",
    "eq": "RETRACT"
   },
-  "verified": false
+  "verified": true
  },
  "after-landing.flaps": {
   "check": {
@@ -517,7 +517,7 @@
    "key": "apu_bleed",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "parking.engine-1-2-master-switch": {
   "check": {
@@ -553,7 +553,7 @@
    "key": "apu_bleed",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "securing-the-aircraft.apu-master-switch": {
   "check": {

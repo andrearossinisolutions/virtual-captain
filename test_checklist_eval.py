@@ -14,8 +14,8 @@ def test_na_cases():
     assert evaluate(c, {"apu_master": None})["status"] == "na"
     assert evaluate(c, {})["status"] == "na"
     assert evaluate(c, {"apu_master": "n/d (7)"})["status"] == "na"  # fuori mappa
-    assert evaluate({"key": "spoilers", "eq": "ARM"}, {"spoilers": "ARM"})["status"] == "na"  # uncertain
-    assert evaluate({"key": "apu_bleed", "eq": "ON"}, {"apu_bleed": "ON"})["detail"] == "unverified"
+    assert evaluate({"key": "spoilers", "eq": "ARM"}, {"spoilers": "ARM"})["status"] == "ok"  # verificato dal vivo 13/11
+    assert evaluate({"key": "apu_bleed", "eq": "ON"}, {"apu_bleed": "ON"})["status"] == "ok"
     assert evaluate(c, {})["kind"] == "unreadable" and evaluate(c, {"apu_master": "ON"}, verified=False)["kind"] == "unverified"
     r = evaluate(c, {"apu_master": "ON"}, verified=False)
     assert r["status"] == "na" and r["detail"] == "unverified"

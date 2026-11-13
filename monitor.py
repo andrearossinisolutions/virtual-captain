@@ -17,7 +17,7 @@ MAPS = {
     "strobe": {0: "OFF", 1: "AUTO", 2: "ON"},
     "navlogo": {0: "OFF", 1: "NAV", 2: "LOGO"},
     "flap": {0: "UP", 1: "1", 2: "2", 3: "3", 4: "FULL"},
-    "speedbrake": {0: "ARM", 1: "RETRACT", 2: "DETENT"},
+    "speedbrake": {0: "ARM", 1: "RETRACT", 2: "HALF", 3: "FULL"},
     "engmode": {0: "CRANK", 1: "NORM", 2: "START"},
     "gear": {0: "UP", 1: "DOWN"},
 }
@@ -41,7 +41,7 @@ ITEMS: list[Item] = [
     Item("apu_master", "APU / Air", "APU master", "onoff", {"Prep": "ON", "After start": "OFF"},
          "(A:APU SWITCH, Bool)", "S_OH_ELEC_APU_MASTER", True),
     Item("apu_bleed", "APU / Air", "APU bleed", "onoff", {"Prep": "ON", "After start": "OFF"},
-         "(A:BLEED AIR APU, Bool)", "S_OH_PNEUMATIC_APU_BLEED", False, True),
+         "(A:BLEED AIR APU, Bool)", "S_OH_PNEUMATIC_APU_BLEED", False),
     Item("pack1", "APU / Air", "Pack 1", "onoff", {"Before start": "OFF", "After start": "ON", "Before T/O": "OFF", "Climb": "ON"},
          None, "S_OH_PNEUMATIC_PACK_1"),
     Item("pack2", "APU / Air", "Pack 2", "onoff", {"Before start": "OFF", "After start": "ON", "Before T/O": "OFF", "Climb": "ON"},
@@ -65,7 +65,7 @@ ITEMS: list[Item] = [
     Item("flap", "Flight controls", "Flaps", "flap", {"After start": "set for T/O"},
          "(A:FLAPS HANDLE INDEX, Number)", "S_FC_FLAPS"),
     Item("spoilers", "Flight controls", "Ground spoilers", "speedbrake", {"After start": "ARM", "Climb": "RETRACT"},
-         "(A:SPOILERS ARMED, Bool)", "A_FC_SPEEDBRAKE", uncertain=True),
+         "(A:SPOILERS ARMED, Bool)", "A_FC_SPEEDBRAKE"),
     Item("gear", "Flight controls", "Gear", "gear", {"Takeoff": "DOWN", "Positive climb": "UP"},
          "(A:GEAR HANDLE POSITION, Bool)", "S_MIP_GEAR", True),  # mappa 0/1 da verificare dal vivo
     Item("engmode", "Engines", "Engine mode", "engmode", {"Start": "START", "After start": "NORM"},

@@ -11,7 +11,7 @@ def test_maps_per_kind():
     assert [label(BY["strobe"], v) for v in (0, 1, 2)] == ["OFF", "AUTO", "ON"]
     assert [label(BY["navlogo"], v) for v in (0, 1, 2)] == ["OFF", "NAV", "LOGO"]
     assert [label(BY["flap"], v) for v in range(5)] == ["UP (0)", "1 (1)", "2 (2)", "3 (3)", "FULL (4)"]
-    assert [label(BY["spoilers"], v) for v in (0, 1, 2)] == ["ARM (0)", "RETRACT (1)", "DETENT (2)"]
+    assert [label(BY["spoilers"], v) for v in (0, 1, 2, 3)] == ["ARM (0)", "RETRACT (1)", "HALF (2)", "FULL (3)"]
     assert [label(BY["engmode"], v) for v in (0, 1, 2)] == ["CRANK (0)", "NORM (1)", "START (2)"]
     assert label(BY["gear"], 1.0) == "DOWN" and label(BY["gear"], 0.0) == "UP"
     assert label(BY["parking"], 1.0) == "ON"
