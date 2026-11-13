@@ -61,6 +61,7 @@ class State:
         self.cl = cl.load()
         saved = cfg.get("checklist_phase")
         self.cl_phase = saved if self.cl.has_phase(saved) else self.cl.ids[0]  # sconosciuta -> prima fase
+        self._fix_cl_phase()
         self.cl_demo = False  # SOLO --sim: tratta i link come verificati per vedere verde/rosso/grigio (in volo reale restano verified:false)
         self.labels: dict = {}  # {chiave: etichetta pulita|None} per la checklist (vuoto fuori dal volo)
         self.monitor: list = []  # gruppi gia' etichettati: [[gruppo, [[nome, etichetta, atteso, grezzo], ...]], ...]
@@ -78,6 +79,7 @@ class State:
             if "checklist_mode" in data:
                 m = data["checklist_mode"]
                 self.checklist_mode = m if m in CL_MODES else "complete"
+                self._fix_cl_phase()
             if data.get("aao_url") is not None:
                 self.aao_url = normalize_url(str(data["aao_url"]).strip() or None)
             self._save()
@@ -106,16 +108,26 @@ class State:
             self.monitor = mon.build(raw) if live else []
             self.labels = mon.clean_labels(raw) if live else {}
 
+    def cl_visible(self) -> list[str]:
+        return self.cl.visible_ids(self.checklist_mode == "simplified")
+
+    def _fix_cl_phase(self) -> None:
+        """Se la fase attuale e' nascosta (simplified), passa alla prima visibile."""
+        vis = self.cl_visible()
+        if self.cl_phase not in vis:
+            self.cl_phase = vis[0]
+
     def set_cl_phase(self, target) -> None:
         """target: id di fase (str) oppure passo +1/-1 (int). Valore non valido => ValueError; ai limiti il passo non fa nulla."""
         with self.lock:
             if isinstance(target, str):
-                if not self.cl.has_phase(target):
+                if target not in self.cl_visible():
                     raise ValueError("unknown checklist phase")
                 self.cl_phase = target
             elif isinstance(target, int) and not isinstance(target, bool) and target in (-1, 1):
-                i = self.cl.ids.index(self.cl_phase) + target
-                self.cl_phase = self.cl.ids[min(max(i, 0), len(self.cl.ids) - 1)]
+                vis = self.cl_visible()
+                i = vis.index(self.cl_phase) + target
+                self.cl_phase = vis[min(max(i, 0), len(vis) - 1)]
             else:
                 raise ValueError("step must be +1 or -1")
             self._save()
@@ -176,7 +188,8 @@ class State:
                     "spoke_ago": None if self.spoke_at is None else max(0.0, time.time() - self.spoke_at),
                     "labels": [[k, l] for k, l in FIELDS], "modes": list(MODES),
                     "monitor": [[g, [list(r) for r in rows]] for g, rows in self.monitor],
-                    "cl_phases": [{"id": p["id"], "name": p["name"]} for p in self.cl.phases],
+                    "cl_phases": [{"id": p["id"], "name": p["name"]} for p in self.cl.phases
+                                  if p["id"] in self.cl_visible()],
                     "cl_phase": self.cl_phase,
                     "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo,
                                                        self.checklist_mode == "simplified")}

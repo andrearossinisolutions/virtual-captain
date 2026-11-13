@@ -48,6 +48,7 @@ def test_api_flow():
 def test_checklist_mode_endpoint():
     cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
     st = State(cfg)
+    st.set_cl_phase("takeoff")  # fase visibile in entrambe le modalita'
     srv = web.serve(st, "127.0.0.1", 0)
     base = f"http://127.0.0.1:{srv.server_address[1]}"
     try:
@@ -92,6 +93,26 @@ def test_checklist_phase_endpoint():
             assert False
         except urllib.error.HTTPError as e:
             assert e.code == 404
+    finally:
+        srv.shutdown()
+
+
+def test_phase_bar_hides_empty_phase_endpoint():
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    srv = web.serve(st, "127.0.0.1", 0)
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        ids = lambda s: [p["id"] for p in s["cl_phases"]]
+        assert "sim-preparation" in ids(call(base, "/api/state"))
+        s = call(base, "/api/fields", {"checklist_mode": "simplified"})
+        assert "sim-preparation" not in ids(s) and s["cl_phase"] == ids(s)[0]
+        assert call(base, "/api/checklist-phase", {"step": -1})["cl_phase"] == ids(s)[0]
+        assert call(base, "/api/checklist-phase", {"step": 1})["cl_phase"] == ids(s)[1]
+        try:
+            call(base, "/api/checklist-phase", {"phase": "sim-preparation"})
+            assert False
+        except urllib.error.HTTPError as e:
+            assert e.code == 400
     finally:
         srv.shutdown()
 
@@ -223,7 +244,7 @@ def test_old_mode_values_migrate():
 def test_layout_markers():
     p = web.PAGE
     for m in ("--sp-h", "env(safe-area-inset-bottom)", "viewport-fit=cover", "min-width:900px", "ResizeObserver",
-              'id="speech"', 'id="more"', 'id="clbody"', 'id="edit"', 'id="end"', "columns:420px 2"):
+              'id="speech"', 'id="more"', 'id="hdr"', 'id="clbody"', 'id="edit"', 'id="end"', "columns:420px 2"):
         assert m in p, m
     assert 'id="nowtxt"' not in p
 
@@ -265,6 +286,7 @@ if __name__ == "__main__":
     test_bad_values_use_defaults()
     test_checklist_mode_endpoint()
     test_checklist_phase_endpoint()
+    test_phase_bar_hides_empty_phase_endpoint()
     test_monitor_cleared_outside_flight()
     test_aao_parse_missing_variable()
     test_aao_read_falls_back_to_core()

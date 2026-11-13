@@ -21,7 +21,7 @@ PAGE = r"""<!doctype html>
 :root{--bg:#0f1720;--card:#18232f;--fg:#e8eef4;--mut:#8da1b5;--acc:#3aa0ff;--ok:#38c172;--bad:#e3564a;--bd:#2b3a49;--warn:#d9a441}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:18px/1.4 system-ui,sans-serif}
 main{max-width:720px;margin:0 auto;padding:16px}[hidden]{display:none!important}
-h1{font-size:22px;margin:4px 0 12px}h2{font-size:16px;color:var(--mut);margin:20px 0 8px;text-transform:uppercase;letter-spacing:.06em}
+h1{font-size:20px;margin:0;white-space:nowrap}h2{font-size:16px;color:var(--mut);margin:20px 0 8px;text-transform:uppercase;letter-spacing:.06em}
 .pill{display:inline-block;padding:4px 12px;border-radius:99px;background:var(--card);border:1px solid var(--bd);font-size:15px;margin-right:6px}
 .ok{color:var(--ok)}.bad{color:var(--bad)}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
@@ -36,7 +36,7 @@ button:disabled{opacity:.5}#info{color:var(--mut);font-size:15px;margin:10px 0 0
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.chip{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:6px 12px;font-size:17px}
 .chip b{color:var(--mut);font-weight:500;font-size:13px;margin-right:6px}
 #flt{padding-bottom:calc(var(--sp-h,120px) + env(safe-area-inset-bottom) + 12px)}
-#topbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0}#topbar .chips{margin:0;flex:1 1 auto}
+#hdr{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 8px}#hdr .pill{margin:0}#hdr .chips{margin:0}
 #more{flex:0 0 auto;margin-left:auto}#more>summary{cursor:pointer;color:var(--mut);font-size:16px;padding:6px 12px;border:1px solid var(--bd);border-radius:10px}
 #more[open]{flex:1 0 100%}#more[open]>summary{display:inline-block;margin-bottom:10px}
 .livesw{display:block;margin:8px 0;color:var(--fg)}.livesw input{width:auto;margin-right:8px}.lv{font-size:14px;color:var(--acc)}
@@ -80,8 +80,16 @@ main.fv{max-width:none;padding:12px 16px}
 #clnextbtn{margin-top:14px}
 ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{padding:6px 0;border-bottom:1px solid var(--bd);color:var(--mut)}
 </style></head><body><main id="main">
-<h1>Virtual Captain</h1>
-<div><span class="pill" id="phase"></span><span class="pill" id="aao"></span></div>
+<header id="hdr"><h1>Virtual Captain</h1><span class="pill" id="phase"></span><span class="pill" id="aao"></span>
+  <div class="chips" id="chips" hidden></div>
+  <details id="more" hidden><summary>More</summary>
+    <label class="livesw"><input type="checkbox" id="livesw"> Show real values on checklist</label>
+    <details class="card cs" id="cs"><summary>Cockpit state</summary><div id="csbody"></div></details>
+    <div id="planflt"></div>
+    <div class="morebtns"><button class="ghost" id="edit">Edit briefing</button><button class="ghost" id="end2" hidden>End flight (stop reading)</button></div>
+    <h2>Earlier</h2><div class="card"><ul id="log"></ul></div>
+  </details>
+</header>
 
 <section id="cfg">
   <h2>Briefing</h2>
@@ -106,14 +114,6 @@ ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{pa
 </section>
 
 <section id="flt" hidden>
-  <div id="topbar"><div class="chips" id="chips"></div>
-  <details id="more"><summary>More</summary>
-    <label class="livesw"><input type="checkbox" id="livesw"> Show real values on checklist</label>
-    <details class="card cs" id="cs"><summary>Cockpit state</summary><div id="csbody"></div></details>
-    <div id="planflt"></div>
-    <div class="morebtns"><button class="ghost" id="edit">Edit briefing</button><button class="ghost" id="end2" hidden>End flight (stop reading)</button></div>
-    <h2>Earlier</h2><div class="card"><ul id="log"></ul></div>
-  </details></div>
   <div class="card clcard cl" id="clcard">
     <div class="clbar"><button class="clnav" id="clprev" aria-label="Previous phase">&lsaquo;</button><div class="clstrip" id="clstrip"></div><button class="clnav" id="clnext" aria-label="Next phase">&rsaquo;</button></div>
     <div class="clname" id="clname"></div><div class="clsum" id="clsum"></div>
@@ -202,7 +202,7 @@ function speech(s){const sp=$("speech"),tx=$("sptxt"),l=s.log,ago=s.spoke_ago==n
   if(l.length){const [t,...rest]=l[0].split("  ");tx.textContent=big?rest.join("  "):t+"  "+rest.join("  ");tx.className="";$("sptime").textContent=t}
   else{tx.textContent="Listening…";tx.className="idle";$("sptime").textContent=""}}
 function render(){const s=last;if(!s)return;const fly=s.phase==="flying";
-  $("main").classList.toggle("fv",view==="flight");$("cfg").hidden=view!=="config";$("flt").hidden=view!=="flight";
+  $("main").classList.toggle("fv",view==="flight");$("cfg").hidden=view!=="config";$("flt").hidden=view!=="flight";$("chips").hidden=$("more").hidden=view!=="flight";
   $("phase").textContent=fly?"✈ Flying — reading the simulator":"📝 Briefing";
   const a=$("aao");a.textContent=s.aao_ok===null?"AAO: waiting":s.aao_ok?"AAO: connected":"AAO: not responding";a.className="pill "+(s.aao_ok===null?"":s.aao_ok?"ok":"bad");
   $("go").textContent=fly?"Back to flight":"Briefing complete";$("go").className="big "+(fly?"fly":"");$("end").hidden=!fly;$("end2").hidden=!fly;

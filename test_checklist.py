@@ -158,6 +158,45 @@ def test_cl_phase_state():
     assert all(i["id"].startswith(PHASES[-1] + ".") for s in snap["checklist"]["subphases"] for i in s["items"])
 
 
+def test_simplified_hides_empty_phases():
+    cl = C.load()
+    hidden = [p for p in cl.ids if p not in cl.visible_ids(True)]
+    assert hidden == ["sim-preparation"] and cl.visible_ids(False) == cl.ids == PHASES
+    cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
+    st = State(cfg)
+    assert "sim-preparation" in [p["id"] for p in st.snapshot()["cl_phases"]]  # complete: tutte
+    st.update({"checklist_mode": "simplified"})
+    snap = st.snapshot()
+    assert "sim-preparation" not in [p["id"] for p in snap["cl_phases"]] and len(snap["cl_phases"]) == len(PHASES) - 1
+    assert st.cl_phase == snap["cl_phases"][0]["id"] != "sim-preparation"  # fase corrente nascosta -> prima visibile
+    assert json.loads(cfg.read_text())["checklist_phase"] == st.cl_phase  # persistenza
+    first = st.cl_phase
+    st.set_cl_phase(-1)
+    assert st.cl_phase == first
+    try:
+        st.set_cl_phase("sim-preparation")
+        assert False
+    except ValueError:
+        pass
+    st.update({"checklist_mode": "complete"})
+    st.set_cl_phase("sim-preparation")
+    st.set_cl_phase(1)
+    assert st.cl_phase == first  # in complete la fase c'e'
+    # salto in avanti/indietro: simulo una fase nascosta in mezzo
+    st.cl.excluded = frozenset(i["id"] for sp in st.cl.phase("climb")["subphases"] for i in sp["items"])
+    st.update({"checklist_mode": "simplified"})
+    st.set_cl_phase("after-takeoff")
+    st.set_cl_phase(1)
+    assert st.cl_phase == "cruise"
+    st.set_cl_phase(-1)
+    assert st.cl_phase == "after-takeoff"
+    # fase ricordata nel JSON ma nascosta -> prima visibile
+    cfg.write_text(json.dumps({"checklist_mode": "simplified", "checklist_phase": "sim-preparation"}))
+    assert State(cfg).cl_phase == first
+    cfg.write_text(json.dumps({"checklist_mode": "complete", "checklist_phase": "sim-preparation"}))
+    assert State(cfg).cl_phase == "sim-preparation"
+
+
 def test_snapshot_uses_live_labels_and_demo():
     st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
     st.set_cl_phase("before-start")
@@ -196,6 +235,7 @@ if __name__ == "__main__":
     test_evaluate_phase()
     test_simplified()
     test_cl_phase_state()
+    test_simplified_hides_empty_phases()
     test_snapshot_uses_live_labels_and_demo()
     test_live_values()
     print("ok")

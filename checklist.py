@@ -82,6 +82,13 @@ class Checklist:
     def has_phase(self, phase_id) -> bool:
         return isinstance(phase_id, str) and phase_id in self.ids
 
+    def visible_ids(self, simplified: bool = False) -> list[str]:
+        """Id delle fasi con almeno una voce visibile (in complete: tutte)."""
+        if not simplified:
+            return list(self.ids)
+        return [p["id"] for p in self.phases
+                if any(it["id"] not in self.excluded for sp in p["subphases"] for it in sp["items"])]
+
     def phase(self, phase_id: str) -> dict:
         return self.phases[self.ids.index(phase_id)]
 
