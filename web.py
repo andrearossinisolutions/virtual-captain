@@ -255,8 +255,11 @@ function fShow(el){if(el.querySelector("input"))return;const v=fval(el.dataset.f
 function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f,i=document.createElement("input");i.value=fval(k);i.dataset.f=k;
   const txt=k==="runway"||k==="flap";i.inputMode=txt?"text":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
   let done=false;const end=()=>{if(done)return;done=true;inpSend();i.remove();fShow(el)};
-  i.oninput=()=>{if(k==="runway")i.value=i.value.toUpperCase();inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400)};
-  i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();end()}};i.onblur=end;
+  const nextF=()=>{let n=el.nextElementSibling;while(n&&!n.dataset.f)n=n.nextElementSibling;return n};
+  const adv=()=>{const n=nextF();end();if(n)fStart(n)};
+  i.oninput=()=>{if(k==="runway")i.value=i.value.toUpperCase();inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400);
+    if((k==="v1"||k==="vr"||k==="v2")&&/^\d{3}$/.test(i.value)&&nextF())adv()};  // 3 cifre: il focus passa al campo successivo
+  i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();adv()}};i.onblur=end;
   el.textContent="";i.placeholder=el.dataset.l;el.append(i);i.focus({preventScroll:true});
   if(sel){try{i.setSelectionRange(sel[0],sel[1])}catch(e){}}else i.select()}
 function inputsNode(it){const el=document.createElement("div");el.className="a inpr";const one=it.inputs.length===1;

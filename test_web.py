@@ -278,6 +278,7 @@ def test_to_briefing_dep_runway():
 
 
 def test_inputs_markup():
+    assert "adv()" in __import__("web").PAGE and r"/^\d{3}$/.test(i.value)" in __import__("web").PAGE  # 3 cifre su v1/vr/v2: focus al campo successivo
     p = web.PAGE
     for m in ("function inputsNode", "function syncInputs", "function inpSend", "function fStart", "function fShow", "dataset.f", "/api/fields", "reset:ks",
               "setTimeout(inpSend,400)", ".a.inpr .fld", "i.onblur=end", 'e.key==="Enter"', "i.remove();fShow(el)", 'b.title="Reset to plan"',
