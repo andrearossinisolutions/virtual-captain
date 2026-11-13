@@ -1,6 +1,6 @@
 """Confronto puro tra uno stato atteso della checklist e le etichette lette dal cockpit (sola lettura, nessun I/O).
 
-check: {"key": k, "eq": "ON" | ["ON", "OFF"]}, {"all": [check, ...]} oppure {"show": [chiavi]} (solo mostrare: nessun esito).
+check: {"key": k, "eq": "ON" | ["ON", "OFF"]}, {"all": [check, ...]}, {"detent": "IDLE" | ["FLX", "TOGA"]} (entrambe le leve nel detent, valori virtuali thr_det_l/thr_det_r; senza calibrazione "none") oppure {"show": [chiavi]} (solo mostrare: nessun esito).
 Valore atteso da un riferimento chiuso (REFS): {"key": k, "eq_ref": "clr.t"} (kind con mappa di etichette ammessi solo se l'atteso normalizzato e' un'etichetta valida, altrimenti "none"; ammesso dentro "all", dove i riferimenti con atteso vuoto sono saltati)
 e {"show_ref": "clr.a"} (solo atteso, nessun esito). expected: {riferimento: testo}; atteso vuoto => "none" (si mostra solo NOW).
 optional (campo del link): se la voce non e' conforme l'esito e' "opt" (neutro, non conta come bad) invece di "bad".
@@ -120,6 +120,11 @@ def _qnh_single(ref: str, labels: dict, expected) -> dict:
     return _res("bad", f"expected {want:g}, actual {act:.0f}", "mismatch")
 
 
+def detent_all(check: dict) -> dict:
+    """{"detent": d} -> {"all": [thr_det_l eq d, thr_det_r eq d]}."""
+    return {"all": [{"key": "thr_det_l", "eq": check["detent"]}, {"key": "thr_det_r", "eq": check["detent"]}]}
+
+
 def _refs(check: dict) -> list:
     """Riferimenti eq_ref di un check (singolo o composto); {"qnh": ref} -> [ref]."""
     if "qnh" in check:
@@ -160,7 +165,10 @@ def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: 
     {"show": [...]} => sempre "none" (si mostra solo il valore). optional=True: il "bad" diventa "opt"."""
     if not check or "show" in check or "show_ref" in check:
         return _res("none")
-    if "qnh" in check:
+    if "detent" in check:
+        if not _want(expected, "cal.thrust"):
+            return _res("none")  # non calibrato: si mostra solo NOW
+    elif "qnh" in check:
         if not _want(expected, check["qnh"]):
             return _res("none")
     elif _refs(check) and not any(_active(c, expected) for c in (check.get("all") or [check]) if "eq_ref" in c):
@@ -174,6 +182,8 @@ def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: 
 def _evaluate(check: dict, labels: dict, verified: bool, expected: dict | None = None) -> dict:
     if not verified:
         return _res("na", UNVERIFIED, "unverified")
+    if "detent" in check:
+        check = detent_all(check)
     if "qnh" in check:
         return _qnh_single(check["qnh"], labels, expected)
     if "all" not in check:

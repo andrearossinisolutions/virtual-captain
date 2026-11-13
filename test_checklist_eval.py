@@ -167,7 +167,26 @@ def test_qnh():
     assert ev(base, ver=False)["kind"] == "unverified"
 
 
+def test_detent():
+    one, two = {"detent": "IDLE"}, {"detent": ["FLX", "TOGA"]}
+    cal, none = {"cal.thrust": "1"}, {"cal.thrust": ""}
+    both = lambda l, r: {"thr_det_l": l, "thr_det_r": r}
+    assert evaluate(one, both("IDLE", "IDLE"), expected=none)["status"] == "none"  # non calibrato: solo NOW
+    assert evaluate(one, both("IDLE", "IDLE"), expected=None)["status"] == "none"
+    assert evaluate(one, both("IDLE", "IDLE"), expected=cal) == {"status": "ok", "kind": "ok", "detail": ""}
+    r = evaluate(one, both("IDLE", "CLIMB"), expected=cal)
+    assert r["status"] == "bad" and r["detail"] == "Thrust lever R detent: expected IDLE, actual CLIMB"
+    assert evaluate(one, both("BETWEEN", "IDLE"), expected=cal)["status"] == "bad"
+    assert evaluate(two, both("FLX", "TOGA"), expected=cal)["status"] == "ok"
+    assert evaluate(two, both("FLX", "CLIMB"), expected=cal)["status"] == "bad"
+    assert evaluate(one, both("IDLE", None), expected=cal)["kind"] == "unreadable"
+    assert evaluate(one, {}, expected=cal)["status"] == "na"
+    assert evaluate(one, both("IDLE", "IDLE"), verified=False, expected=cal)["kind"] == "unverified"
+    assert evaluate(one, both("CLIMB", "CLIMB"), verified=False, expected=cal)["status"] == "na"
+
+
 if __name__ == "__main__":
+    test_detent()
     test_expected_refs()
     test_fcu_alt()
     test_flap_eq_ref()

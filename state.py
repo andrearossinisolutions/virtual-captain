@@ -11,6 +11,7 @@ from datetime import datetime
 import checklist as cl
 import checklist_eval as ceval
 import monitor as mon
+import thrust
 from brain import Briefing
 from aao import AAO, normalize_url
 from simbrief import fetch_latest, to_briefing
@@ -26,6 +27,8 @@ MODES = ("normal", "training")
 CL_MODES = ("complete", "simplified")
 CLR_KEYS = ("c", "r", "a", "f", "t")  # CRAFT: cleared to, route, altitude, frequency, transponder (solo memoria, mai salvato)
 CLR_MAX = {"c": 40, "r": 400, "a": 20, "f": 20, "t": 4}
+CALIB_STALE = 3.0  # secondi: oltre, le letture non valgono per registrare un passo
+CALIB_ACTIONS = ("start", "next", "back", "skip", "cancel", "clear")
 
 
 def _empty_clearance() -> dict:
@@ -75,6 +78,10 @@ class State:
         self.log: deque = deque(maxlen=30)
         self.spoke_at: float | None = None  # istante dell'ultima frase
         self.spoke_n = 0  # contatore frasi dette
+        self.thrust_cal = cfg.get("thrust_cal") if thrust.valid_cal(cfg.get("thrust_cal")) else None
+        self.calib = {"active": False, "step": 0, "snaps": {}, "error": "", "done": False}  # wizard di calibrazione (solo memoria)
+        self.calib_raw: deque = deque(maxlen=3)  # ultime letture delle variabili thrust: (istante, {chiave: grezzo})
+        self.clock = time.time
         self.cl = cl.load()
         saved = cfg.get("checklist_phase")
         self.cl_phase = saved if self.cl.has_phase(saved) else self.cl.ids[0]  # sconosciuta -> prima fase
@@ -150,9 +157,129 @@ class State:
         """Riceve i grezzi {chiave: valore|None}, li etichetta e li tiene per la pagina (vuoto in briefing)."""
         with self.lock:
             live = raw is not None and self.phase == "flying"
+            if live:
+                raw = {**raw, **thrust.annotate(raw, self.thrust_cal)}
+                self.set_calib_raw(raw)
             self.monitor = mon.build(raw) if live else []
             self.labels = mon.clean_labels(raw) if live else {}
             self.raw = dict(raw) if live and raw else {}
+
+    # -- calibrazione thrust --
+    def set_calib_raw(self, raw: dict | None, now: float | None = None) -> None:
+        """Tiene le ultime 3 letture delle variabili thrust (solo se c'e' almeno un valore numerico)."""
+        if not raw:
+            return
+        vals = {k: raw.get(k) for k in thrust.RECORDED}
+        if all(thrust._num(v) is None for v in vals.values()):
+            return
+        with self.lock:
+            self.calib_raw.append((self.clock() if now is None else now, vals))
+
+    def calib_active(self) -> bool:
+        with self.lock:
+            return bool(self.calib["active"])
+
+    def calib_action(self, action) -> None:
+        """Azione del wizard o clear. Non valida o non ammessa => ValueError, nulla cambia."""
+        if action not in CALIB_ACTIONS:
+            raise ValueError("unknown action")
+        with self.lock:
+            getattr(self, "calib_" + action)()
+
+    def calib_start(self) -> None:
+        self.calib = {"active": True, "step": 0, "snaps": {}, "error": "", "done": False}
+
+    def calib_cancel(self) -> None:
+        self.calib = {"active": False, "step": 0, "snaps": {}, "error": "", "done": False}
+
+    def calib_clear(self) -> None:
+        self.thrust_cal = None
+        self._save()
+
+    def calib_back(self) -> None:
+        c = self.calib
+        if not c["active"] or c["done"]:
+            raise ValueError("calibration not in progress")
+        if c["step"] > 0:
+            c["step"] -= 1
+            c["snaps"].pop(thrust.DETENTS[c["step"]], None)
+        c["error"] = ""
+
+    def calib_skip(self) -> None:
+        if not self.calib["active"] or self.calib["done"]:
+            raise ValueError("calibration not in progress")
+        if self.thrust_cal is None:
+            raise ValueError("nothing to keep: not calibrated yet")
+        self._calib_advance(None)
+
+    def calib_next(self) -> None:
+        c = self.calib
+        if not c["active"] or c["done"]:
+            raise ValueError("calibration not in progress")
+        now = self.clock()
+        fresh = [v for t, v in self.calib_raw if now - t <= CALIB_STALE]
+        snap = {}
+        for k in thrust.RECORDED:
+            xs = [thrust._num(v.get(k)) for v in fresh]
+            xs = [x for x in xs if x is not None]
+            if xs:
+                snap[k] = thrust.median(xs)
+        cands = [k for ks in thrust.CANDIDATES.values() for k in ks]
+        if not any(k in snap for k in cands):
+            raise ValueError("no live data from AAO")
+        prev = c["snaps"].get(thrust.DETENTS[c["step"] - 1]) if c["step"] > 0 else None
+        if prev is not None:
+            both = [k for k in cands if k in snap and k in prev]
+            if both and all(abs(snap[k] - prev[k]) < 1e-9 for k in both):
+                raise ValueError("lever not moved")
+        self._calib_advance(snap)
+
+    def _calib_advance(self, snap) -> None:
+        """Registra il passo (snap=None: salta e tiene il vecchio valore) e, all'ultimo, costruisce e salva la calibrazione."""
+        c = self.calib
+        c["error"] = ""
+        c["snaps"][thrust.DETENTS[c["step"]]] = snap
+        if c["step"] < len(thrust.DETENTS) - 1:
+            c["step"] += 1
+            return
+        old = (self.thrust_cal or {}).get("raw", {})
+        raw = {d: (c["snaps"][d] if c["snaps"][d] is not None else old.get(d, {})) for d in thrust.DETENTS}
+        cal, err = thrust.build_cal(raw, self.clock())
+        if cal is None:
+            c["snaps"].pop(thrust.DETENTS[c["step"]], None)  # resta sull'ultimo passo, nulla scritto
+            c["error"] = err
+            raise ValueError(err)
+        self.thrust_cal = cal
+        c["step"], c["done"] = len(thrust.DETENTS), True
+        self._save()
+
+    def _thr_cal_view(self):
+        cal = self.thrust_cal
+        if not cal:
+            return None
+        names = {i.key: i.name for i in mon.ITEMS}
+        return {"at": cal["at"], "when": _when(cal["at"]), "guides": {s: names[cal["levers"][s]["var"]] for s in ("l", "r")}}
+
+    def _calib_view(self):
+        c = self.calib
+        if not c["active"]:
+            return None
+        now, last = self.clock(), None
+        if self.calib_raw and now - self.calib_raw[-1][0] <= CALIB_STALE:
+            last = self.calib_raw[-1][1]
+        done = [d for d in thrust.DETENTS if d in c["snaps"]]
+        names = {i.key: i.name for i in mon.ITEMS}
+        rows = []
+        for k in thrust.RECORDED:
+            vals = [("kept" if c["snaps"][d] is None else (mon.raw_text(c["snaps"][d].get(k)) or "-")) for d in done]
+            rows.append({"name": names[k], "live": mon.raw_text(last.get(k)) if last else "", "vals": vals,
+                         "guide": k in [x for ks in thrust.CANDIDATES.values() for x in ks]})
+        step = c["step"]
+        return {"active": True, "done": c["done"], "step": step, "total": len(thrust.DETENTS), "error": c["error"],
+                "name": thrust.STEP_NAMES[step] if step < len(thrust.DETENTS) else "",
+                "text": thrust.STEPS[step]["text"] if step < len(thrust.DETENTS) else "",
+                "heads": thrust.STEP_SHORT[:len(done)], "rows": rows, "can_skip": self.thrust_cal is not None,
+                "has_live": last is not None}
 
     def cl_visible(self) -> list[str]:
         return self.cl.visible_ids(self.checklist_mode == "simplified")
@@ -206,7 +333,8 @@ class State:
                                                  "thr_red_agl": self.fields["thr_red_agl"],
                                                  "simbrief": self.simbrief, "mode": self.mode,
                                                  "aao_url": self.aao_url, "checklist_phase": self.cl_phase,
-                                                 "checklist_mode": self.checklist_mode}))
+                                                 "checklist_mode": self.checklist_mode,
+                                                 **({"thrust_cal": self.thrust_cal} if self.thrust_cal else {})}))
         except OSError:
             pass
 
@@ -221,6 +349,7 @@ class State:
         for ref, k in (("wx.qnh_dep", "origin"), ("wx.qnh_dest", "destination")):
             q = self.weather.get(self.fields.get(k, ""))
             e[ref] = f"{q:.0f} hPa" if q is not None else ""
+        e["cal.thrust"] = "1" if self.thrust_cal else ""  # vuoto: i link {"detent"} mostrano solo NOW
         e["plan.sid"] = str((self.plan or {}).get("sid") or "")
         return e
 
@@ -257,4 +386,5 @@ class State:
                     "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo or self.cl_trust_links,
                                                        self.checklist_mode == "simplified",
                                                        self.raw if self.cl_trust_links else None, self._expected()),
-                    "test_links": self.cl_trust_links, "clearance": dict(self.clearance)}
+                    "test_links": self.cl_trust_links, "clearance": dict(self.clearance),
+                    "thr_cal": self._thr_cal_view(), "calib": self._calib_view()}

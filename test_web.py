@@ -353,7 +353,164 @@ def test_sim_finish_keeps_flying():
         assert st.phase == "flying"
 
 
+def _cal_state(cfg):
+    """State con orologio finto: clock[0] e' l'istante corrente."""
+    st = State(cfg)
+    clock = [1000.0]
+    st.clock = lambda: clock[0]
+    return st, clock
+
+
+def _feed(st, clock, l, r, pos3=7, pos4=8):
+    clock[0] += 1
+    st.set_calib_raw({"thr_in_l": l, "thr_in_r": r, "thr_pos_1": l, "thr_pos_2": r, "thr_pos_3": pos3, "thr_pos_4": pos4,
+                      "thr_gate_l": l / 100, "thr_gate_r": r / 100}, clock[0])
+
+
+def test_thrust_cal_flow():
+    cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
+    st, clock = _cal_state(cfg)
+    srv = web.serve(st, "127.0.0.1", 0)
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def post(action):
+        return call(base, "/api/thrust-cal", {"action": action})
+
+    def err(body):
+        try:
+            call(base, "/api/thrust-cal", body)
+        except urllib.error.HTTPError as e:
+            assert e.code == 400
+            return e.read().decode()
+        raise AssertionError(body)
+    try:
+        s = call(base, "/api/state")
+        assert s["thr_cal"] is None and s["calib"] is None
+        assert "Not calibrated" in call(base, "/") or "thrcal" in call(base, "/")
+        # errori
+        assert err({"action": "boh"}) == "unknown action" and err({"action": "next"}) == "calibration not in progress"
+        assert err({}) == "unknown action" and err([1]) == "body must be an object"
+        assert err({"action": "skip"}) == "calibration not in progress"
+        # start: nessun dato
+        s = post("start")
+        c = s["calib"]
+        assert c["active"] and c["step"] == 0 and c["total"] == 6 and c["name"] == "FULL REVERSE" and not c["can_skip"]
+        assert c["text"] == "Move both thrust levers to FULL REVERSE, then press Next" and not c["has_live"]
+        assert err({"action": "next"}) == "no live data from AAO"
+        assert err({"action": "skip"}) == "nothing to keep: not calibrated yet"
+        # dati vecchi (oltre 3 s) rifiutati
+        _feed(st, clock, -20, 15)
+        clock[0] += 10
+        assert err({"action": "next"}) == "no live data from AAO"
+        # sei passi; le due leve sono opposte (L crescente, R decrescente)
+        L = [-20, -5, 0, 25, 50, 100]
+        R = [30, 25, 10, 0, -10, -30]
+        for i in range(6):
+            if i:  # leve ancora al passo precedente: rifiutato
+                for _ in range(3):
+                    _feed(st, clock, L[i - 1], R[i - 1])
+                assert err({"action": "next"}) == "lever not moved"
+                assert err({"action": "skip"}) == "nothing to keep: not calibrated yet"
+            for _ in range(3):
+                _feed(st, clock, L[i], R[i])
+            c = call(base, "/api/state")["calib"]
+            assert c["step"] == i and c["has_live"] and c["rows"][0]["live"] == str(L[i])
+            s = post("next")
+        c = s["calib"]
+        assert c["done"] and c["step"] == 6 and c["heads"] == ["REV", "R.IDLE", "IDLE", "CLB", "FLX", "TOGA"]
+        assert c["rows"][0]["vals"] == [str(x) for x in L] and c["rows"][4]["name"].endswith("pos 3 (raw)") and c["rows"][4]["vals"] == ["7"] * 6
+        t = s["thr_cal"]
+        assert t["guides"] == {"l": "Throttle input L (raw)", "r": "Throttle input R (raw)"} and t["when"]
+        saved = json.loads(cfg.read_text())
+        assert saved["thrust_cal"]["levers"]["l"]["var"] == "thr_in_l" and saved["thrust_cal"]["levers"]["r"]["v"]["TOGA"] == -30
+        assert saved["thrust_cal"]["raw"]["TOGA"]["thr_pos_3"] == 7 and saved["thrust_cal"]["raw"]["TOGA"]["thr_pos_4"] == 8
+        assert s["checklist"] is not None
+        # persistenza e caricamento
+        st2 = State(cfg)
+        assert st2.thrust_cal == st.thrust_cal and st2._expected()["cal.thrust"] == "1"
+        # _save non perde thrust_cal
+        call(base, "/api/fields", {"ta": "5000"})
+        st.set_cl_phase("takeoff")
+        assert json.loads(cfg.read_text())["thrust_cal"] == saved["thrust_cal"]
+        # chiusura del riepilogo (cancel dopo la fine non tocca la calibrazione)
+        s = post("cancel")
+        assert s["calib"] is None and s["thr_cal"] is not None
+        # in volo i detent si leggono e finiscono nel monitor
+        call(base, "/api/phase", {"phase": "flying"})
+        st.set_monitor({"thr_in_l": 25, "thr_in_r": 0})
+        mon = dict(call(base, "/api/state")["monitor"])
+        rows = {r[0]: r for r in mon["Thrust"]}
+        assert rows["Thrust lever L detent"][1] == "CLIMB" and rows["Thrust lever R detent"][1] == "CLIMB"
+        assert st.labels["thr_det_l"] == "CLIMB" and st.raw["thr_det_r"] == 3
+        st.set_monitor({"thr_in_l": 12, "thr_in_r": None})
+        assert st.labels["thr_det_l"] == "BETWEEN" and st.labels["thr_det_r"] is None
+        call(base, "/api/phase", {"phase": "briefing"})
+        # modifica: skip tiene il vecchio valore; back; cancel non tocca la vecchia
+        s = post("start")
+        assert s["calib"]["can_skip"]
+        _feed(st, clock, -20, 30)
+        s = post("next")
+        assert s["calib"]["step"] == 1
+        s = post("back")
+        assert s["calib"]["step"] == 0 and s["calib"]["heads"] == []
+        assert post("back")["calib"]["step"] == 0
+        for _ in range(6):
+            s = post("skip")
+        assert s["calib"]["done"] and s["thr_cal"]["guides"]["l"] == "Throttle input L (raw)"
+        assert st.thrust_cal["levers"]["l"]["v"]["IDLE"] == 0.0 and s["calib"]["rows"][0]["vals"] == ["kept"] * 6
+        post("cancel")
+        old = json.loads(json.dumps(st.thrust_cal))
+        post("start")
+        _feed(st, clock, 1, 1)
+        post("next")
+        s = post("cancel")
+        assert s["calib"] is None and st.thrust_cal == old
+        # clear
+        s = post("clear")
+        assert s["thr_cal"] is None and "thrust_cal" not in json.loads(cfg.read_text()) and st._expected()["cal.thrust"] == ""
+        st.set_monitor({"thr_in_l": 25})  # briefing: ignorato
+    finally:
+        srv.shutdown()
+
+
+def test_thrust_cal_failure_and_invalid_file():
+    cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
+    st, clock = _cal_state(cfg)
+    st.calib_start()
+    vals = [(-20, 5), (-5, 5), (0, 5), (25, 5), (50, 5), (100, 5)]  # R non cambia mai (ma resta "mossa" perche' cambia L)
+    for i, (l, r) in enumerate(vals):
+        _feed(st, clock, l, r)
+        if i < 5:
+            st.calib_next()
+        else:
+            try:
+                st.calib_next()
+                assert False
+            except ValueError as e:
+                assert "lever R" in str(e) and "thr_in_r=5,5,5,5,5,5" in str(e)
+    assert st.calib["step"] == 5 and not st.calib["done"] and st.thrust_cal is None and st.calib["error"]
+    assert not cfg.exists() or "thrust_cal" not in json.loads(cfg.read_text())
+    assert "Calibration failed" in st.snapshot()["calib"]["error"]
+    # file di configurazione con calibrazione non valida: ignorata
+    cfg.write_text(json.dumps({"thrust_cal": {"at": 1, "levers": {}, "raw": {}}}))
+    assert State(cfg).thrust_cal is None
+    cfg.write_text(json.dumps({"thrust_cal": "x"}))
+    assert State(cfg).thrust_cal is None
+
+
+def test_thrust_cal_markup_and_main():
+    page = web.PAGE
+    assert page.index('id="thrcal"') < page.index('id="aaourl"') and "/api/thrust-cal" in page and "Clear calibration" in page
+    assert page.count("function calib(") == 1 and "Hold the levers still" in page
+    import main
+    import inspect
+    assert "calib_active" in inspect.getsource(main.main) and "set_calib_raw" in inspect.getsource(main.main)
+
+
 if __name__ == "__main__":
+    test_thrust_cal_flow()
+    test_thrust_cal_failure_and_invalid_file()
+    test_thrust_cal_markup_and_main()
     test_clearance_endpoint()
     test_craft_markup()
     test_squawk_pill_markup()

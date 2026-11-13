@@ -36,7 +36,7 @@ def test_items_are_valid():
     assert len(keys) == len(set(keys))
     for it in ITEMS:
         assert it.group and it.name and it.kind in MAPS, it.key
-        assert it.std or it.lvar, it.key
+        assert it.std or it.lvar or it.kind == "detent", it.key
         assert it.std_fallback is False or (it.std and it.lvar) or it.key == "gear"
         for v in it.expected.values():
             assert v
@@ -61,7 +61,23 @@ def test_build_groups():
     assert pk[1] == "n/d" and pk[3] == ""
 
 
+def test_detent_labels():
+    d = BY["thr_det_l"]
+    assert d.kind == "detent" and d.std is None and d.lvar is None and BY["thr_det_r"].group == "Thrust"
+    names = ["REVERSE", "REVERSE IDLE", "IDLE", "CLIMB", "FLX", "TOGA"]
+    assert [label(d, v) for v in range(6)] == names
+    assert [monitor.clean_label(d, v) for v in range(6)] == names
+    assert label(d, -1) == "BETWEEN" and monitor.clean_label(d, -1) == "BETWEEN"
+    assert label(d, None) == "n/d" and monitor.clean_label(d, None) is None and label(d, 9) == "n/d (9)"
+    assert monitor.lvar_request(d) is None and monitor.std_request(d) is None
+    import aao
+    assert aao.MONITOR["thr_det_l"] == {"std": None, "lvar": None}
+    assert aao.AAO._parse({"getvars": []})[1]["thr_det_r"] is None
+    assert BY["thr_pos_3"].lvar.endswith("POS_3") and BY["thr_pos_4"].lvar.endswith("POS_4")
+
+
 if __name__ == "__main__":
+    test_detent_labels()
     test_maps_per_kind()
     test_missing_is_nd()
     test_items_are_valid()

@@ -5,6 +5,7 @@ import json
 import pathlib
 
 import monitor as mon
+import thrust
 from checklist_eval import BY_KEY, REFS, _refs, evaluate, qnh_actual
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -21,6 +22,12 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
         keys = check["show"]
         if set(check) != {"show"} or not isinstance(keys, list) or not keys or any(k not in BY_KEY for k in keys):
             raise ValueError(f"{where}: 'show' non valido")
+        return
+    if "detent" in check:
+        d = check["detent"]
+        names = [d] if isinstance(d, str) else d
+        if inner or set(check) != {"detent"} or not isinstance(names, list) or not names or any(n not in thrust.DETENTS for n in names):
+            raise ValueError(f"{where}: 'detent' non valido")
         return
     if "qnh" in check:
         if inner or set(check) != {"qnh"} or check["qnh"] not in ("wx.qnh_dep", "wx.qnh_dest"):
@@ -70,6 +77,8 @@ def check_keys(check: dict) -> list:
     """Chiavi del monitor usate da un check (singolo o composto), in ordine e senza doppioni."""
     if "show" in check:
         return list(dict.fromkeys(check["show"]))
+    if "detent" in check:
+        return ["thr_det_l", "thr_det_r"]
     if "qnh" in check:
         return ["baro_std", "baro_hpa", "baro_inch"]
     subs = check.get("all") or [check]
@@ -79,7 +88,10 @@ def check_keys(check: dict) -> list:
 def raw_values(check: dict | None, raw: dict) -> list:
     """Valori grezzi letti per un check (solo --test-links): [[variabile, valore|"n/d"], ...]."""
     out = []
-    for k in check_keys(check or {}):
+    keys = check_keys(check or {})
+    if "detent" in (check or {}):
+        keys += ["thr_gate_l", "thr_gate_r", "thr_pos_1", "thr_pos_2"]
+    for k in keys:
         it = BY_KEY[k]
         out.append([it.lvar or it.std or it.name, mon.raw_text(raw.get(k))])
     return out
@@ -90,6 +102,10 @@ def live_values(check: dict | None, labels: dict) -> list:
     if "qnh" in (check or {}):
         a = qnh_actual(labels)
         return [["Baro", "STD" if a == "STD" else (f"{a:.0f}" if a is not None else mon.NA)]]
+    if "detent" in (check or {}):
+        if any(labels.get(k) for k in ("thr_det_l", "thr_det_r")):
+            return [[BY_KEY[k].name, labels.get(k) or mon.NA] for k in check_keys(check)]
+        return [[BY_KEY[k].name, labels.get(k) or mon.NA] for k in ("thr_gate_l", "thr_gate_r", "thr_pos_1", "thr_pos_2")]
     return [[BY_KEY[k].name, labels.get(k) or mon.NA] for k in check_keys(check or {})]
 
 
@@ -162,7 +178,7 @@ class Checklist:
                 bad += res["status"] == "bad"
                 row = {"id": it["id"], "text": it["text"], "response": it["response"], "type": it["type"],
                        "live": live_values(link["check"], labels) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
-                if link and ("show" in link["check"] or (_refs(link["check"]) and res["status"] == "none")):
+                if link and ("show" in link["check"] or ("detent" in link["check"] and res["status"] == "none") or (_refs(link["check"]) and res["status"] == "none")):
                     row["show"] = True  # solo da mostrare: la pagina scrive sempre "NOW: <valore>"
                 refs = ([link["check"]["show_ref"]] if "show_ref" in link["check"] else _refs(link["check"])) if link else []
                 if refs:

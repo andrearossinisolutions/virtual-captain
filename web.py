@@ -89,6 +89,7 @@ main.fv{max-width:none;padding:12px 16px}
 .craft textarea{font:16px/1.3 ui-monospace,monospace;text-transform:uppercase;min-height:3.6em;resize:vertical}
 .craft .cb{margin-top:6px}.craft .cb button{padding:4px 10px;font-size:13px}
 #clnextbtn{margin-top:14px}
+#thrtab{border-collapse:collapse;font:13px ui-monospace,monospace;width:100%}#thrtab th,#thrtab td{border-bottom:1px solid var(--bd);padding:3px 6px;text-align:right;white-space:nowrap}#thrtab th:first-child,#thrtab td:first-child{text-align:left}#thrtab .lv{font-weight:700}#thrtab .gd td:first-child{color:var(--fg)}
 ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{padding:6px 0;border-bottom:1px solid var(--bd);color:var(--mut)}
 </style></head><body><main id="main">
 <header id="hdr"><h1>Virtual Captain</h1><span class="pill" id="phase"></span><span class="pill" id="aao"></span>
@@ -115,6 +116,21 @@ ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{pa
     <div class="grid" id="grid"></div>
   </div>
   <details class="card" id="tech"><summary>Technical settings</summary>
+    <div id="thrcal">
+      <label>Thrust levers calibration</label>
+      <p id="thrst" class="meta" style="margin:0 0 8px"></p>
+      <div class="row"><button class="ghost" id="thrstart">Calibrate</button><button class="ghost" id="thrclear" hidden>Clear calibration</button></div>
+      <div class="card" id="thrcard" hidden>
+        <div class="clname" id="thrtitle" style="font-size:22px;margin-top:0"></div>
+        <p id="thrtext" style="margin:6px 0"></p>
+        <p class="meta" id="thrwarn" style="margin:0 0 8px">Hold the levers still for a moment before pressing Next.</p>
+        <div style="overflow-x:auto"><table id="thrtab"></table></div>
+        <p id="threrr" class="bad" style="margin:8px 0 0"></p>
+        <div class="row" style="margin-top:10px" id="thrbtns"><button class="ghost" id="thrback">Back</button><button id="thrnext">Next</button><button class="ghost" id="thrskip">Skip</button><button class="ghost" id="thrcancel">Cancel</button></div>
+        <div id="thrsum" hidden><p id="thrsumtxt"></p><button id="thrclose" style="width:100%">Close</button></div>
+      </div>
+      <p id="thrmsg" class="bad" style="margin:8px 0"></p>
+    </div>
     <label for="aaourl">AAO address</label>
     <input id="aaourl" autocapitalize="off" autocorrect="off" placeholder="127.0.0.1:43380">
     <p style="margin:12px 0 0"><button class="ghost" id="aaotest" style="width:100%">Test connection</button></p>
@@ -143,7 +159,24 @@ function build(s){const g=$("grid");g.innerHTML="";$("apt").innerHTML="";for(con
   if(k==="dep_time"){const e=document.createElement("div");e.innerHTML='<label>Local time</label><input id="deploc" disabled>';$("apt").appendChild(e)}}
   $("mode").innerHTML=s.modes.map(m=>`<option value="${m}">${m[0].toUpperCase()+m.slice(1)}</option>`).join("");
   $("clmode").innerHTML=s.cl_modes.map(m=>`<option value="${m}">${m[0].toUpperCase()+m.slice(1)}</option>`).join("");
-  document.querySelectorAll("[data-k]").forEach(i=>i.oninput=()=>{save();localTime()});$("mode").onchange=save;$("clmode").onchange=save;document.querySelectorAll("#cfg input").forEach(i=>i.onkeydown=nextField);$("simbrief").oninput=save;$("aaourl").oninput=save;$("aaotest").onclick=testAao}
+  document.querySelectorAll("[data-k]").forEach(i=>i.oninput=()=>{save();localTime()});$("mode").onchange=save;$("clmode").onchange=save;document.querySelectorAll("#cfg input").forEach(i=>i.onkeydown=nextField);$("simbrief").oninput=save;$("aaourl").oninput=save;$("aaotest").onclick=testAao;
+  for(const a of ["start","next","back","skip","cancel"])$("thr"+a).onclick=()=>thrAct(a);$("thrclose").onclick=()=>thrAct("cancel");
+  $("thrclear").onclick=()=>{if(confirm("Clear the thrust levers calibration?"))thrAct("clear")}}
+let calKey="";
+async function thrAct(action){try{await api("/api/thrust-cal",{action});$("thrmsg").textContent="";await refresh()}catch(e){$("thrmsg").textContent=e.message;try{await refresh()}catch(x){}}}
+async function refresh(){const s=await api("/api/state");apply(s)}
+function calib(s){const c=s.calib,t=s.thr_cal,k=JSON.stringify([c,t]);if(k===calKey)return;calKey=k;
+  $("thrst").textContent=t?`Calibrated ${t.when}, guide L: ${t.guides.l}, R: ${t.guides.r}`:"Not calibrated";
+  $("thrstart").hidden=!!(c&&c.active);$("thrclear").hidden=!t;$("thrcard").hidden=!(c&&c.active);
+  if(!(c&&c.active))return;
+  $("thrtitle").textContent=c.done?"Calibration complete":`Step ${c.step+1}/${c.total}: ${c.name}`;
+  $("thrtext").textContent=c.done?"":c.text;$("thrwarn").hidden=c.done;$("threrr").textContent=c.error||(c.has_live||c.done?"":"No live data from AAO (is the simulator connected?)");
+  $("thrbtns").hidden=c.done;$("thrsum").hidden=!c.done;
+  $("thrback").disabled=c.step===0;$("thrskip").hidden=!c.can_skip;
+  if(c.done&&t)$("thrsumtxt").textContent=`Saved ${t.when}. Guide L: ${t.guides.l}; R: ${t.guides.r}.`;
+  const tb=$("thrtab");tb.textContent="";const mk=(tag,txt,cls)=>{const e=document.createElement(tag);e.textContent=txt;if(cls)e.className=cls;return e};
+  const h=document.createElement("tr");h.appendChild(mk("th","Variable"));h.appendChild(mk("th","Live"));for(const x of c.heads)h.appendChild(mk("th",x));tb.appendChild(h);
+  for(const r of c.rows){const tr=document.createElement("tr");if(r.guide)tr.className="gd";tr.appendChild(mk("td",r.name));tr.appendChild(mk("td",r.live===""?"n/d":r.live,"lv"));for(const v of r.vals)tr.appendChild(mk("td",v));tb.appendChild(tr)}}
 function localTime(){const el=$("deploc");if(!el)return;const v=(document.querySelector('[data-k="dep_time"]').value||"").trim();
   const m=v.match(/^(\d{1,2})[:.]?(\d{2})$/);if(!m||+m[1]>23||+m[2]>59){el.value="";return}
   const n=new Date(),d=new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate(),+m[1],+m[2]));
@@ -253,7 +286,7 @@ function render(){const s=last;if(!s)return;const fly=s.phase==="flying";
   $("phase").textContent=fly?"✈ Flying — reading the simulator":"📝 Briefing";
   const a=$("aao");a.textContent=s.aao_ok===null?"AAO: waiting":s.aao_ok?"AAO: connected":"AAO: not responding";a.className="pill "+(s.aao_ok===null?"":s.aao_ok?"ok":"bad");
   $("go").textContent=fly?"Back to flight":"Briefing complete";$("go").className="big "+(fly?"fly":"");$("end").hidden=!fly;$("end2").hidden=!fly;
-  $("info").textContent=s.info;chips(s);checklist(s);cockpit(s);plans(s);
+  $("info").textContent=s.info;chips(s);checklist(s);cockpit(s);plans(s);calib(s);
   speech(s);
   const l=s.log;
   $("log").innerHTML="";for(const t of l.slice(1)){const li=document.createElement("li");li.textContent=t;$("log").appendChild(li)}}
@@ -350,6 +383,13 @@ def make_handler(st: State):
                         else:
                             st.set_clearance(data)
                     except (ValueError, AttributeError) as e:
+                        return self._send(400, str(e).encode(), "text/plain")
+                elif self.path == "/api/thrust-cal":
+                    try:
+                        if not isinstance(data, dict):
+                            raise ValueError("body must be an object")
+                        st.calib_action(data.get("action"))
+                    except ValueError as e:
                         return self._send(400, str(e).encode(), "text/plain")
                 elif self.path == "/api/phase":
                     st.set_phase(data.get("phase", ""))

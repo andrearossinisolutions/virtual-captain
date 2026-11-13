@@ -91,6 +91,16 @@ def main():
         while True:
             if st.phase != "flying":
                 brain = None
+                if st.calib_active() and not sim:  # calibrazione leve in Briefing: solo lettura, nessun brain e nessun parlato
+                    if aao.base != st.aao_url:
+                        aao = AAO(st.aao_url)
+                    try:
+                        st.set_calib_raw(aao.read_all()[1])
+                        st.aao_ok = True
+                    except Exception:  # noqa: BLE001
+                        st.aao_ok = False
+                    time.sleep(0.5)
+                    continue
                 time.sleep(0.3)
                 continue
             if brain is None:  # appena premuto "Briefing complete"

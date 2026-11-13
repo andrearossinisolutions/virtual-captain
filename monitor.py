@@ -25,6 +25,7 @@ MAPS = {
     "signs": {0: "OFF", 1: "AUTO", 2: "ON"},  # provvisoria: da verificare dal vivo col grezzo
     "emerlt": {0: "OFF", 1: "ARM", 2: "ON"},  # provvisoria: da verificare dal vivo col grezzo
     "tcas": {0: "STBY", 1: "TA", 2: "TA/RA"},  # provvisoria (ipotesi): da verificare dal vivo col grezzo
+    "detent": {-1: "BETWEEN", 0: "REVERSE", 1: "REVERSE IDLE", 2: "IDLE", 3: "CLIMB", 4: "FLX", 5: "TOGA"},  # virtuale, dalla calibrazione (thrust.py)
     "numeric": {},  # nessuna mappa: si mostra solo il valore (nessun esito)
 }
 AMBIGUOUS = {"landing", "nose", "flap", "speedbrake", "engmode", "wxsys", "irmode", "signs", "emerlt", "tcas"}  # lo 0 non e' "spento": mostra anche il grezzo
@@ -127,6 +128,11 @@ ITEMS: list[Item] = [
     Item("thr_pos_2", "Thrust", "Throttle lever pos 2 (raw)", "numeric", {}, None, "WT_VIRTUAL_THROTTLE_LEVER_POS_2"),  # solo grezzo
     Item("thr_rev_l", "Thrust", "Throttle max reverse L (raw)", "numeric", {}, None, "S_FC_THROTTLE_LEFT_MAX_REVERSE"),  # solo grezzo
     Item("thr_rev_r", "Thrust", "Throttle max reverse R (raw)", "numeric", {}, None, "S_FC_THROTTLE_RIGHT_MAX_REVERSE"),  # solo grezzo
+    Item("thr_pos_3", "Thrust", "Throttle lever pos 3 (raw)", "numeric", {}, None, "WT_VIRTUAL_THROTTLE_LEVER_POS_3"),  # solo diagnostica
+    Item("thr_pos_4", "Thrust", "Throttle lever pos 4 (raw)", "numeric", {}, None, "WT_VIRTUAL_THROTTLE_LEVER_POS_4"),  # solo diagnostica
+    # Virtuali (nessuna sorgente): detent calcolato dalla calibrazione; None se non calibrato o dato assente
+    Item("thr_det_l", "Thrust", "Thrust lever L detent", "detent"),
+    Item("thr_det_r", "Thrust", "Thrust lever R detent", "detent"),
 ]
 
 

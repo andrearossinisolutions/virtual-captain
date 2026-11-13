@@ -52,6 +52,8 @@ def test_links_reference_real_things():
                 assert c["show_ref"] in REFS
             elif "qnh" in c:
                 assert c["qnh"] in REFS
+            elif "detent" in c:
+                assert c["detent"]
             else:
                 assert all(k in keys for k in c["show"]) if "show" in c else c["key"] in keys
     for link in cl.links.values():
@@ -516,11 +518,38 @@ def test_flap_and_taxi_alt_links():
 def test_thrust_levers_show():
     cl = C.load()
     keys = ["thr_gate_l", "thr_gate_r", "thr_pos_1", "thr_pos_2"]
-    for i in ("before-start.thrust-levers", "takeoff.thrust-levers", "takeoff.thrust-levers_2", "takeoff.thrust-levers_3",
-              "go-around.thrust-levers", "go-around.thrust-levers_2", "landing.thrust-levers", "landing.thrust-levers_2",
-              "landing.thrust-levers_3"):
-        assert cl.links[i] == {"check": {"show": keys}, "verified": False}, i
-    assert [i.group for i in mon.ITEMS if i.key in keys + ["thr_in_l", "thr_in_r", "thr_rev_l", "thr_rev_r"]] == ["Thrust"] * 8
+    assert cl.links["takeoff.thrust-levers"] == {"check": {"show": keys}, "verified": False}  # 50% N1: solo NOW
+    det = {"before-start.thrust-levers": "IDLE", "takeoff.thrust-levers_2": ["FLX", "TOGA"], "takeoff.thrust-levers_3": "CLIMB",
+           "go-around.thrust-levers": "TOGA", "go-around.thrust-levers_2": "CLIMB", "landing.thrust-levers": "IDLE",
+           "landing.thrust-levers_2": "REVERSE IDLE", "landing.thrust-levers_3": "IDLE"}
+    for i, d in det.items():
+        assert cl.links[i] == {"check": {"detent": d}, "verified": False}, i
+        assert C.check_keys(cl.links[i]["check"]) == ["thr_det_l", "thr_det_r"]
+    assert [i.group for i in mon.ITEMS if i.key.startswith("thr_")] == ["Thrust"] * 12
+    for bad in ({"detent": "NOPE"}, {"detent": []}, {"detent": "IDLE", "x": 1}, {"detent": ["IDLE", "BETWEEN"]}):
+        try:
+            C._check_keys(bad, "x")
+            assert False, bad
+        except ValueError:
+            pass
+    C._check_keys({"detent": ["FLX", "TOGA"]}, "x")
+    try:
+        C._check_keys({"all": [{"detent": "IDLE"}]}, "x")
+        assert False
+    except ValueError:
+        pass
+    # righe: non calibrato -> solo NOW con i 4 grezzi; calibrato -> dettaglio dei detent
+    raw4 = {"thr_gate_l": "0.1", "thr_gate_r": "0.2", "thr_pos_1": "3", "thr_pos_2": "4"}
+    rows = {i["id"]: i for s in cl.evaluate_phase("landing", raw4, True, expected={"cal.thrust": ""})["subphases"] for i in s["items"]}
+    r = rows["landing.thrust-levers"]
+    assert r["status"] == "none" and r["show"] is True and [v[1] for v in r["live"]] == ["0.1", "0.2", "3", "4"]
+    rows = {i["id"]: i for s in cl.evaluate_phase("landing", {"thr_det_l": "IDLE", "thr_det_r": "CLIMB", **raw4}, True, expected={"cal.thrust": "1"})["subphases"] for i in s["items"]}
+    r = rows["landing.thrust-levers"]
+    assert r["status"] == "bad" and "show" not in r and r["live"] == [["Thrust lever L detent", "IDLE"], ["Thrust lever R detent", "CLIMB"]]
+    assert "actual CLIMB" in r["detail"]
+    raw = cl.evaluate_phase("landing", {}, True, raw={"thr_det_l": 2, "thr_gate_l": 0.5}, expected={"cal.thrust": "1"})
+    names = [n for s in raw["subphases"] for i in s["items"] if i["id"] == "landing.thrust-levers" for n, _ in i["raw"]]
+    assert names[:2] == ["Thrust lever L detent", "Thrust lever R detent"] and len(names) == 6
 
 
 if __name__ == "__main__":
