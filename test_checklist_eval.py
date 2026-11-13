@@ -64,7 +64,7 @@ def test_numeric():
     assert MAPS["numeric"] == {}
     assert label(by["wx_gain"], 0.5) == "0.5" and label(by["wx_gain"], 12) == "12" and label(by["wx_gain"], None) == "n/d"
     assert clean_label(by["wx_gain"], 0.5) == "0.5" and clean_label(by["wx_mode"], None) is None
-    assert label(by["wx_sys"], 2) == "SYS 2 (2)" and label(by["ir1"], 1) == "NAV (1)"
+    assert label(by["wx_sys"], 2) == "SYS 2 (2)" and label(by["wx_sys"], 1) == "OFF (1)" and label(by["ir1"], 1) == "NAV (1)"
     assert clean_label(by["ir1"], 1) == "NAV" and clean_label(by["bat1"], 1) == "ON"
 
 

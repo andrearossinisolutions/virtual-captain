@@ -26,7 +26,7 @@ def test_files_valid():
     pre = cl.phase("preliminary-cockpit-prep")["subphases"]
     assert [s["name"][:1] for s in pre] == ["1", "2", "3", "4"]
     assert cl.phase("sim-preparation")["subphases"][0]["name"] == ""
-    verified = {"apu_bleed", "spoilers", "parking", "eng1", "eng2", "engmode", "gear", "apu_master", "navlogo", "strobe", "flap"}
+    verified = {"apu_bleed", "spoilers", "parking", "eng1", "eng2", "engmode", "gear", "apu_master", "navlogo", "strobe", "flap", "wx_sys"}
     for k, l in cl.links.items():
         v = {c["key"] for c in l["check"].get("all", [l["check"]]) if "key" in c}
         if k.startswith("preliminary-cockpit-prep."):

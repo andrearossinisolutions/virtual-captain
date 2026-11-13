@@ -20,7 +20,7 @@ MAPS = {
     "speedbrake": {0: "ARM", 1: "RETRACT", 2: "HALF", 3: "FULL"},
     "engmode": {0: "CRANK", 1: "NORM", 2: "START"},
     "gear": {0: "UP", 1: "DOWN"},
-    "wxsys": {0: "OFF", 1: "SYS 1", 2: "SYS 2"},  # provvisoria: da verificare dal vivo col grezzo
+    "wxsys": {0: "SYS 1", 1: "OFF", 2: "SYS 2"},  # verificata dal vivo 13/11
     "irmode": {0: "OFF", 1: "NAV", 2: "ATT"},  # provvisoria: da verificare dal vivo col grezzo
     "numeric": {},  # nessuna mappa: si mostra solo il valore (nessun esito)
 }
