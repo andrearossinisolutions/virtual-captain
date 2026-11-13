@@ -354,14 +354,15 @@ def test_expected_links():
     cl = C.load()
     P = "fmgs-performance-glareshield."
     assert cl.links[P + "squawk-code"] == {"check": {"key": "squawk", "eq_ref": "clr.t"}, "verified": False}
-    for k, ref in (("initial-climb", "clr.a"), ("t-o-rwy", "fld.runway"), ("sid", "plan.sid"), ("transition-altitude", "fld.ta")):
+    for k, ref in (("t-o-rwy", "fld.runway"), ("sid", "plan.sid"), ("transition-altitude", "fld.ta")):
         assert cl.links[P + k] == {"check": {"show_ref": ref}, "verified": False}, k
+    assert cl.links[P + "initial-climb"] == {"check": {"key": "fcu_alt", "eq_ref": "clr.a"}, "verified": False}
     exp = {"clr.a": "FL100", "fld.runway": "35R", "plan.sid": "TOSNU", "fld.ta": "5000", "clr.t": "2000"}
     res = cl.evaluate_phase("fmgs-performance-glareshield", {"squawk": "2000"}, expected=exp)
     rows = {i["id"]: i for s in res["subphases"] for i in s["items"]}
-    assert rows[P + "initial-climb"]["expected"] == "FL100" and rows[P + "initial-climb"]["status"] == "none"
+    assert rows[P + "initial-climb"]["expected"] == "FL100" and rows[P + "initial-climb"]["status"] == "na"  # verified:false
     assert rows[P + "t-o-rwy"]["expected"] == "35R" and rows[P + "sid"]["expected"] == "TOSNU" and rows[P + "transition-altitude"]["expected"] == "5000"
-    assert rows[P + "initial-climb"]["live"] == [] and rows[P + "squawk-code"]["expected"] == "2000"
+    assert rows[P + "initial-climb"]["live"] == [["FCU altitude", "n/d"]] and rows[P + "squawk-code"]["expected"] == "2000"
     assert rows[P + "squawk-code"]["status"] == "na" and rows[P + "squawk-code"]["kind"] == "unverified"  # verified:false e sorgente da provare
     assert "expected" not in rows[P + "flight-director-pb"] and res["bad"] == 0
     empty = {i["id"]: i for s in cl.evaluate_phase("fmgs-performance-glareshield", {})["subphases"] for i in s["items"]}
@@ -369,6 +370,15 @@ def test_expected_links():
     # con link verificato (come --test-links) l'esito esce dal confronto, ma la sorgente uncertain resta na
     r = cl.evaluate_phase("fmgs-performance-glareshield", {"squawk": "7000"}, demo=True, expected=exp)
     assert {i["id"]: i for s in r["subphases"] for i in s["items"]}[P + "squawk-code"]["status"] == "na"
+    # Initial climb: quota FCU contro clearance (demo = link verificato)
+    def ic(lab, clr):
+        r = cl.evaluate_phase("fmgs-performance-glareshield", {"fcu_alt": lab}, demo=True, expected={"clr.a": clr})
+        return {i["id"]: i for s in r["subphases"] for i in s["items"]}[P + "initial-climb"]
+    assert ic("7000", "FL070")["status"] == "ok" and ic("7000", "FL070")["kind"] == "ok"
+    row = ic("6000", "FL070")
+    assert row["status"] == "bad" and row["detail"] == "expected FL070, actual 6000" and row["live"] == [["FCU altitude", "6000"]]
+    row = ic("6000", "")  # atteso vuoto: solo NOW
+    assert row["status"] == "none" and row["show"] is True and row["live"] == [["FCU altitude", "6000"]]
 
 
 def test_clearance_state():

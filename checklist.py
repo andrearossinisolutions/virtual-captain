@@ -149,7 +149,7 @@ class Checklist:
                 bad += res["status"] == "bad"
                 row = {"id": it["id"], "text": it["text"], "response": it["response"], "type": it["type"],
                        "live": live_values(link["check"], labels) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
-                if link and "show" in link["check"]:
+                if link and ("show" in link["check"] or ("eq_ref" in link["check"] and res["status"] == "none")):
                     row["show"] = True  # solo da mostrare: la pagina scrive sempre "NOW: <valore>"
                 ref = (link["check"].get("eq_ref") or link["check"].get("show_ref")) if link else None
                 if ref:

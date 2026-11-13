@@ -9,6 +9,8 @@ Esito: {"status": "ok|bad|na|opt|none", "kind": "ok|mismatch|unverified|unreadab
 """
 from __future__ import annotations
 
+import re
+
 import monitor as mon
 
 BY_KEY = {it.key: it for it in mon.ITEMS}
@@ -17,9 +19,29 @@ UNREADABLE = "unreadable"
 REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "plan.sid")
 
 
-def _norm(kind: str, text) -> str:
-    """Confronto normalizzato: per i numerici 02000 == 2000 (e 2000.0), altrimenti testo senza spazi e maiuscolo."""
+ALT_KEYS = ("fcu_alt",)  # voci in piedi: l'atteso puo' essere "5000", "7000 ft", "FL070", "FL 70"
+_FL = re.compile(r"^FL\s*(\d{1,3})$")
+_FT = re.compile(r"^(\d+(?:\.\d+)?)\s*(?:FT|FEET)?$")
+
+
+def altitude_ft(text) -> float | None:
+    """Quota in piedi: FLnnn -> nnn*100 (solo FL esplicito), numero puro (con eventuale "ft") in piedi, altrimenti None."""
+    s = str(text).strip().upper()
+    m = _FL.match(s)
+    if m:
+        return float(int(m.group(1)) * 100)
+    m = _FT.match(s)
+    return float(m.group(1)) if m else None
+
+
+def _norm(kind: str, text, key: str = "") -> str:
+    """Confronto normalizzato: per i numerici 02000 == 2000 (e 2000.0), altrimenti testo senza spazi e maiuscolo.
+    Per le quote (ALT_KEYS) tutto in piedi."""
     s = str(text).strip()
+    if key in ALT_KEYS:
+        ft = altitude_ft(s)
+        if ft is not None:
+            return f"{ft:g}"
     if kind == "numeric":
         try:
             v = float(s)
@@ -49,7 +71,7 @@ def _single(check: dict, labels: dict, expected: dict | None = None) -> dict:
         want = str((expected or {}).get(check["eq_ref"]) or "").strip()
         if cur is None:
             return _res("na", UNREADABLE, "unreadable")
-        if _norm(item.kind, cur) == _norm(item.kind, want):
+        if _norm(item.kind, cur, item.key) == _norm(item.kind, want, item.key):
             return _res("ok")
         return _res("bad", f"expected {want}, actual {cur}", "mismatch")
     if cur is None or cur not in mon.MAPS[item.kind].values():

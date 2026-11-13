@@ -290,7 +290,7 @@ def test_clearance_endpoint():
 def test_craft_markup():
     p = web.PAGE
     for m in ("/api/clearance", "function craftNode", "function syncCraft", ".craft{background", 'inputMode="numeric"', "i.maxLength=4",
-              "Reset to plan", "setTimeout(clrSend,400)", "document.activeElement!==i", "Expected: ", ".cl .cli .exp", "scroll-margin-bottom"):
+              "Reset to plan", "setTimeout(clrSend,400)", "document.activeElement!==i", "it.expected||it.response", ".cli .a.set", "scroll-margin-bottom"):
         assert m in p, m
     key = p[p.index("bk=JSON.stringify"):p.index("showLive,s.test_links")]
     assert "clearance" not in key and "i.expected" in key  # i valori scritti dall'utente non fanno ricostruire la pagina

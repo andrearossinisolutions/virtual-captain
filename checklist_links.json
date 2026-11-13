@@ -764,7 +764,8 @@
  },
  "fmgs-performance-glareshield.initial-climb": {
   "check": {
-   "show_ref": "clr.a"
+   "key": "fcu_alt",
+   "eq_ref": "clr.a"
   },
   "verified": false
  },

@@ -102,8 +102,24 @@ def test_expected_refs():
     assert evaluate({"key": "apu_master", "eq": "ON"}, {"apu_master": "OFF"}, expected={"clr.t": "1"})["status"] == "bad"
 
 
+def test_fcu_alt():
+    from checklist_eval import altitude_ft
+    for t, ft in (("5000", 5000), ("FL070", 7000), ("FL 70", 7000), ("fl70", 7000), ("7000 ft", 7000), ("070", 70), ("FL350", 35000)):
+        assert altitude_ft(t) == ft, t
+    assert altitude_ft("abc") is None and altitude_ft("") is None
+    c = {"key": "fcu_alt", "eq_ref": "clr.a"}
+    ev = lambda lab, want: evaluate(c, {"fcu_alt": lab}, expected={"clr.a": want})
+    assert ev("7000", "FL070") == {"status": "ok", "kind": "ok", "detail": ""}
+    assert ev("5000", "5000")["status"] == "ok" and ev("7000", "7000 ft")["status"] == "ok" and ev("7000", "FL 70")["status"] == "ok"
+    assert ev("7000", "FL80") == {"status": "bad", "kind": "mismatch", "detail": "expected FL80, actual 7000"}
+    assert ev("70", "FL070")["status"] == "bad"  # niente tolleranza, 70 ft != FL070
+    assert ev("7000", "xyz")["status"] == "bad" and ev(None, "FL070")["kind"] == "unreadable"
+    assert ev("7000", "")["status"] == "none"
+
+
 if __name__ == "__main__":
     test_expected_refs()
+    test_fcu_alt()
     test_none_and_single()
     test_na_cases()
     test_eq_list()
