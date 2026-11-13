@@ -34,7 +34,7 @@ def test_files_valid():
             assert l["verified"] is bool(v & verified) and (v <= verified or not l["verified"]), k
     assert [k for k, l in cl.links.items() if l["verified"] and not k.startswith("preliminary-cockpit-prep.")
             and "apu_bleed" not in json.dumps(l["check"]) and "spoilers" not in json.dumps(l["check"])
-            and "tcas" not in json.dumps(l["check"])] == [
+            and "tcas" not in json.dumps(l["check"]) and "detent" not in json.dumps(l["check"])] == [
         "before-start.atc-transponder", "after-engine-startup.flap-levers", "taxi-checklist.cleared-altitude-on-fcu",
         "ils-approach.flaps-full", "non-precision-approach.flaps-full",
         "fmgs-performance-glareshield.squawk-code", "fmgs-performance-glareshield.initial-climb", "taxi-checklist.t-o-data-flaps-lever"]
@@ -523,7 +523,7 @@ def test_thrust_levers_show():
            "go-around.thrust-levers": "TOGA", "go-around.thrust-levers_2": "CLIMB", "landing.thrust-levers": "IDLE",
            "landing.thrust-levers_2": "REVERSE IDLE", "landing.thrust-levers_3": "IDLE"}
     for i, d in det.items():
-        assert cl.links[i] == {"check": {"detent": d}, "verified": False}, i
+        assert cl.links[i] == {"check": {"detent": d}, "verified": True}, i
         assert C.check_keys(cl.links[i]["check"]) == ["thr_det_l", "thr_det_r"]
     assert [i.group for i in mon.ITEMS if i.key.startswith("thr_")] == ["Thrust"] * 12
     for bad in ({"detent": "NOPE"}, {"detent": []}, {"detent": "IDLE", "x": 1}, {"detent": ["IDLE", "BETWEEN"]}):

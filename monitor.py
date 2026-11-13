@@ -100,6 +100,9 @@ ITEMS: list[Item] = [
     Item("cstr2", "Glareshield", "Constraint pb 2", "onoff", {"Before start": "ON"}, None, "I_FCU_EFIS2_CSTR"),
     Item("fd1", "Glareshield", "Flight director pb 1", "onoff", {"Before start": "ON"}, None, "I_FCU_EFIS1_FD"),
     Item("fd2", "Glareshield", "Flight director pb 2", "onoff", {"Before start": "ON"}, None, "I_FCU_EFIS2_FD"),
+    Item("ap1", "Glareshield", "Autopilot 1", "onoff", {}, None, "I_FCU_AP1"),  # lampada, da verificare dal vivo
+    Item("ap2", "Glareshield", "Autopilot 2", "onoff", {}, None, "I_FCU_AP2"),
+    Item("athr", "Glareshield", "Autothrust", "onoff", {}, None, "I_FCU_ATHR"),
     Item("autobrake_max", "Autobrake", "Autobrake MAX (lamp L)", "onoff", {"Before T/O": "ON"}, None, "I_MIP_AUTOBRAKE_MAX_L"),  # ipotesi: la lampada L si accende a MAX armato, da provare dal vivo
     Item("baro_std", "Glareshield", "Baro STD (EFIS 1)", "numeric", {"Before start": "set"}, None, "B_FCU_EFIS1_BARO_STD"),
     Item("baro_hpa", "Glareshield", "Baro hPa (EFIS 1)", "numeric", {"Before start": "set"}, None, "N_FCU_EFIS1_BARO_HPA"),

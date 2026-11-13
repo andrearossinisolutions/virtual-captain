@@ -987,7 +987,7 @@
   "check": {
    "detent": "IDLE"
   },
-  "verified": false
+  "verified": true
  },
  "takeoff.thrust-levers": {
   "check": {
@@ -1007,41 +1007,50 @@
     "TOGA"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "takeoff.thrust-levers_3": {
   "check": {
    "detent": "CLIMB"
   },
-  "verified": false
+  "verified": true
  },
  "go-around.thrust-levers": {
   "check": {
    "detent": "TOGA"
   },
-  "verified": false
+  "verified": true
  },
  "go-around.thrust-levers_2": {
   "check": {
    "detent": "CLIMB"
   },
-  "verified": false
+  "verified": true
  },
  "landing.thrust-levers": {
   "check": {
    "detent": "IDLE"
   },
-  "verified": false
+  "verified": true
  },
  "landing.thrust-levers_2": {
   "check": {
    "detent": "REVERSE IDLE"
   },
-  "verified": false
+  "verified": true
  },
  "landing.thrust-levers_3": {
   "check": {
    "detent": "IDLE"
+  },
+  "verified": true
+ },
+ "takeoff.autopilot": {
+  "check": {
+   "show": [
+    "ap1",
+    "ap2"
+   ]
   },
   "verified": false
  }
