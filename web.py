@@ -51,7 +51,7 @@ button:disabled{opacity:.5}#info{color:var(--mut);font-size:15px;margin:10px 0 0
 @media (min-width:900px){
 main.fv{max-width:none;padding:12px 16px}
 .cl .cli{display:grid;grid-template-columns:1.8em minmax(0,1fr) auto;column-gap:10px;break-inside:avoid}.cl .cli.wl{grid-template-columns:5.2em minmax(0,1fr) auto}.cl .cli .rw{grid-column:2}.cl .cli .now.nv{color:var(--mut)}.cl .cli .now{grid-column:3;text-align:right;font-size:14px;color:var(--bad);white-space:nowrap}
-.cl .cli .exp,.cl .cli .inp{grid-column:2/4}
+.cl .cli .exp{grid-column:2/4}
 .cl .cli .tx{display:contents}.cl .cli .ic{grid-column:1}.cl .cli .e{grid-column:2}
 .cl .cli .a{grid-column:3;text-align:right;max-width:16em}.cl .cli .d{grid-column:2/4;margin-top:0;font-size:14px}
 #clbody{columns:420px 2;column-gap:24px}.cl h3{break-after:avoid;margin-top:12px}
@@ -87,9 +87,10 @@ main.fv{max-width:none;padding:12px 16px}
 .craft label{display:block;font-size:11px;color:var(--mut);line-height:1.2}
 .craft input,.craft textarea{width:100%;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--fg);scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}
 .craft textarea{font:16px/1.3 ui-monospace,monospace;text-transform:uppercase;min-height:3.6em;resize:vertical}
-.inp{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:flex-end;margin-top:6px}.inp .f{flex:1 1 6.5em;max-width:11em}.inp label{font-size:11px;color:var(--mut);line-height:1.2;margin-bottom:2px}
-.inp input{width:100%;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:#0c131b;color:var(--fg);scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}
-.inp button{padding:4px 10px;font-size:13px}
+.inp{display:inline-flex;flex-wrap:wrap;gap:4px 6px;align-items:center;margin-left:8px;vertical-align:middle}
+.inp .chip.fld{cursor:pointer;padding:2px 10px;font-size:15px;white-space:nowrap}.inp .chip.fld b{font-size:12px}.inp .chip.fld.nv{color:var(--mut)}
+.inp .chip input{width:5.5em;font-size:15px;padding:2px 6px;scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}.inp .chip.fld.w input{width:7.5em}
+.inp button{padding:2px 10px;font-size:12px}
 .craft .cb{margin-top:6px}.craft .cb button{padding:4px 10px;font-size:13px}
 #clnextbtn{margin-top:14px}
 #thrtab{border-collapse:collapse;font:13px ui-monospace,monospace;width:100%}#thrtab th,#thrtab td{border-bottom:1px solid var(--bd);padding:3px 6px;text-align:right;white-space:nowrap}#thrtab th:first-child,#thrtab td:first-child{text-align:left}#thrtab .lv{font-weight:700}#thrtab .gd td:first-child{color:var(--fg)}
@@ -248,19 +249,23 @@ function craftNode(it){if(craftEl)return craftEl;
 function syncCraft(c,force){if(c&&!sqkEdit){sqkVal=c.t||"";sqkShow()}if(!craftEl||!c||(clrTimer&&!force))return;
   craftEl.querySelectorAll("[data-c]").forEach(i=>{const v=c[i.dataset.c]||"";if(i.value!==v&&(force||document.activeElement!==i))i.value=v})}
 let inpDirty={},inpTimer=null;
-function inpSend(){clearTimeout(inpTimer);inpTimer=null;const o=inpDirty;inpDirty={};if(Object.keys(o).length)api("/api/fields",o).then(s=>{lastRev=s.rev}).catch(()=>{})}
-function inputsNode(it){const el=document.createElement("div");el.className="inp";
-  for(const f of it.inputs){const d=document.createElement("div");d.className="f";const lb=document.createElement("label");lb.textContent=f.label;const i=document.createElement("input");i.dataset.f=f.k;
-    i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
-    const txt=f.k==="runway"||f.k==="flap";i.inputMode=txt?"text":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");
-    i.oninput=()=>{if(f.k==="runway")i.value=i.value.toUpperCase();inpDirty[f.k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400)};
-    i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();i.blur()}};i.onblur=inpSend;
-    d.appendChild(lb);d.appendChild(i);el.appendChild(d)}
+function inpSend(){clearTimeout(inpTimer);inpTimer=null;const o=inpDirty;inpDirty={};if(last)Object.assign(last.fields,o);if(Object.keys(o).length)api("/api/fields",o).then(s=>{lastRev=s.rev}).catch(()=>{})}
+function fval(k){return k in inpDirty?inpDirty[k]:((last&&last.fields[k])||"")}
+function fShow(el){if(el.querySelector("input"))return;const v=fval(el.dataset.f);el.textContent="";el.className="chip fld"+(v?"":" nv")+(el.dataset.w?" w":"");const b=document.createElement("b");b.textContent=el.dataset.l;el.append(b,v||"---")}
+function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f,i=document.createElement("input");i.value=fval(k);i.dataset.f=k;
+  const txt=k==="runway"||k==="flap";i.inputMode=txt?"text":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
+  let done=false;const end=()=>{if(done)return;done=true;inpSend();i.remove();fShow(el)};
+  i.oninput=()=>{if(k==="runway")i.value=i.value.toUpperCase();inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400)};
+  i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();end()}};i.onblur=end;
+  el.textContent="";const b=document.createElement("b");b.textContent=el.dataset.l;el.append(b,i);i.focus({preventScroll:true});
+  if(sel){try{i.setSelectionRange(sel[0],sel[1])}catch(e){}}else i.select()}
+function inputsNode(it){const el=document.createElement("span");el.className="inp";
+  for(const f of it.inputs){const c=document.createElement("span");c.dataset.f=f.k;c.dataset.l=f.label;if(f.k==="runway"||f.k==="flap")c.dataset.w="1";c.onclick=()=>fStart(c);fShow(c);el.appendChild(c)}
   const ks=it.inputs.filter(f=>f.plan).map(f=>f.k);
   if(ks.length){const b=document.createElement("button");b.className="ghost";b.textContent="Reset to plan";
-    b.onclick=async()=>{clearTimeout(inpTimer);inpTimer=null;ks.forEach(k=>delete inpDirty[k]);try{const s=await api("/api/fields",{reset:ks});lastRev=s.rev;syncInputs(s,true)}catch(e){}};el.appendChild(b)}
+    b.onclick=async ev=>{ev.stopPropagation();clearTimeout(inpTimer);inpTimer=null;ks.forEach(k=>delete inpDirty[k]);try{const s=await api("/api/fields",{reset:ks});lastRev=s.rev;last=s;syncInputs(s)}catch(e){}};el.appendChild(b)}
   return el}
-function syncInputs(s,force){document.querySelectorAll("#clbody [data-f]").forEach(i=>{const k=i.dataset.f,v=k in inpDirty?inpDirty[k]:(s.fields[k]||"");if(i.value!==v&&(force||document.activeElement!==i))i.value=v})}
+function syncInputs(s){document.querySelectorAll("#clbody .fld").forEach(fShow)}
 function clGo(body){api("/api/checklist-phase",body).then(apply).catch(()=>{})}
 function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!c)return;
   const idx=ph.findIndex(p=>p.id===cur),strip=$("clstrip"),key=ph.length+"|"+cur;
@@ -281,17 +286,16 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(ic.length>2)r.classList.add("wl");
       r.appendChild(mk("div","ic"+(ic.length>2?" w":""),ic));const tx=mk("div","tx");const e=mk("div","e");
       if(it.type==="atc")e.appendChild(mk("span","badge","ATC"));if(it.type==="announce")e.appendChild(mk("span","badge","ANNOUNCE"));
-      e.append(it.text);tx.appendChild(e);
+      e.append(it.text);if(it.inputs)e.appendChild(inputsNode(it));tx.appendChild(e);
       const av=(it.expected||it.response);if(av&&it.type!=="announce")tx.appendChild(mk("div","a"+(it.expected?" set":""),av));
       if(showLive&&it.live&&it.live.length)tx.appendChild(mk("div","lv","Actual: "+it.live.map(l=>(it.live.length>1?l[0]+" ":"")+l[1]).join(" \u00b7 ")));
       if(s.test_links&&it.raw&&it.raw.length)tx.appendChild(mk("div","rw",it.raw.map(l=>l[0]+"="+l[1]).join(" \u00b7 ")));
       if(it.show&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","NOW: "+it.live.map(l=>l[1]).join(", ")));
       if(it.kind==="mismatch"){const mm=[...it.detail.matchAll(/actual ([^;,]+)/g)].map(m=>m[1].trim());
         tx.appendChild(mm.length?mk("div","now","NOW: "+mm.join(", ")):mk("div","d",it.detail))}
-      if(it.inputs)tx.appendChild(inputsNode(it));
       r.appendChild(tx);body.appendChild(r)}}
   if(keep){const i=craftEl.querySelector('[data-c="'+keep[0]+'"]');if(i){i.focus({preventScroll:true});try{i.setSelectionRange(keep[1],keep[2])}catch(e){}}}
-  if(keepF){const i=body.querySelector('[data-f="'+keepF[0]+'"]');if(i){i.focus({preventScroll:true});try{i.setSelectionRange(keepF[1],keepF[2])}catch(e){}}}
+  if(keepF){const c=body.querySelector('.fld[data-f="'+keepF[0]+'"]');if(c)fStart(c,[keepF[1],keepF[2]])}
   window.scrollTo(x,y)}
   syncCraft(s.clearance);syncInputs(s);
   const nb=$("clnextbtn"),nx=ph[idx+1];nb.hidden=!nx;if(nx){nb.textContent="Next phase: "+nx.name;nb.onclick=()=>{clGo({step:1});$("clcard").scrollIntoView({block:"start"})}}}
