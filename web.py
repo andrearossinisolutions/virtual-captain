@@ -194,8 +194,8 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(it.response&&it.type!=="announce")tx.appendChild(mk("div","a",it.response));
       if(showLive&&it.live&&it.live.length)tx.appendChild(mk("div","lv","Actual: "+it.live.map(l=>(it.live.length>1?l[0]+" ":"")+l[1]).join(" \u00b7 ")));
       if(s.test_links&&it.raw&&it.raw.length)tx.appendChild(mk("div","rw",it.raw.map(l=>l[0]+"="+l[1]).join(" \u00b7 ")));
-      if(it.kind==="mismatch"){const mm=/^expected [^;]*, actual ([^;]+)$/.exec(it.detail);
-        if(mm)tx.appendChild(mk("div","now","NOW: "+mm[1]));else tx.appendChild(mk("div","d",it.detail.replace(/, actual/g," \u00b7 actual")))}
+      if(it.kind==="mismatch"){const mm=[...it.detail.matchAll(/actual ([^;,]+)/g)].map(m=>m[1].trim());
+        tx.appendChild(mm.length?mk("div","now","NOW: "+mm.join(", ")):mk("div","d",it.detail))}
       r.appendChild(tx);body.appendChild(r)}}
   window.scrollTo(x,y)}
   const nb=$("clnextbtn"),nx=ph[idx+1];nb.hidden=!nx;if(nx){nb.textContent="Next phase: "+nx.name;nb.onclick=()=>{clGo({step:1});$("clcard").scrollIntoView({block:"start"})}}}
