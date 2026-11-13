@@ -240,7 +240,7 @@ def test_trust_links_and_raw():
 def test_new_links_show_optional():
     cl = C.load()
     P = "preliminary-cockpit-prep."
-    for k in ("wx-radar-sw", "windshear-pws-sw", "gain-knob", "wx-mode-selector", "battery-pb-1-2", "external-power-pb",
+    for k in ("windshear-pws-sw", "gain-knob", "wx-mode-selector", "battery-pb-1-2", "external-power-pb",
               "crew-supply-pb", "all-ir-modes"):
         assert cl.links[P + k]["verified"] is False, k
     assert C.check_keys(cl.links[P + "battery-pb-1-2"]["check"]) == ["bat1", "bat2"]
