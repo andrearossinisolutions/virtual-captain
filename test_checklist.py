@@ -251,6 +251,16 @@ def test_new_links_show_optional():
     assert rows[P + "gain-knob"]["status"] == "none" and rows[P + "gain-knob"]["live"] == [["WX Gain knob", "0.5"]]
     assert rows[P + "gain-knob"]["raw"] == [["A_WR_GAIN", "0.5"]] and res["bad"] == 0
     assert rows[P + "wx-mode-selector"]["live"] == [["WX Mode", "2"]]
+    assert rows[P + "gain-knob"]["show"] is True and "show" not in rows[P + "battery-pb-1-2"]
+    # ATC Transponder: show su squawk, intero senza decimali, n/d se manca
+    assert cl.links["before-start.atc-transponder"]["check"] == {"show": ["squawk"]}
+    assert mon.BY_KEY["squawk"].lvar == "N_FREQ_XPDR_SELECTED" if hasattr(mon, "BY_KEY") else True
+    for raw, txt in ((2000.0, "2000"), (None, "n/d")):
+        r = cl.evaluate_phase("before-start", mon.clean_labels({"squawk": raw}))
+        row = {i["id"]: i for s in r["subphases"] for i in s["items"]}["before-start.atc-transponder"]
+        assert row["live"] == [["Squawk code", txt]] and row["status"] == "none" and row["show"] is True
+    page = __import__("web").PAGE
+    assert '"now nv","NOW: "' in page and ".now.nv{color:var(--mut)}" in page and "i.raw,i.show" in page
     for ph in ("ils-approach", "non-precision-approach"):
         assert cl.links[ph + ".flaps-full"]["optional"] is True and cl.links[ph + ".flaps-full"]["verified"] is True
         for raw, st in ((4, "ok"), (3, "opt")):

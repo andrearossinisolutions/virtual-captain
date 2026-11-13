@@ -13,6 +13,14 @@
   },
   "verified": false
  },
+ "before-start.atc-transponder": {
+  "check": {
+   "show": [
+    "squawk"
+   ]
+  },
+  "verified": false
+ },
  "preliminary-cockpit-prep.gain-knob": {
   "check": {
    "show": [

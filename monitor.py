@@ -84,6 +84,7 @@ ITEMS: list[Item] = [
     Item("wx_pws", "Weather radar", "Windshear PWS sw", "onoff", {"Prep": "OFF"}, None, "S_WR_PRED_WS"),
     Item("wx_gain", "Weather radar", "WX Gain knob", "numeric", {"Prep": "AUTO/CAL"}, None, "A_WR_GAIN"),
     Item("wx_mode", "Weather radar", "WX Mode", "numeric", {"Prep": "as required"}, None, "S_WR_MODE"),
+    Item("squawk", "Transponder", "Squawk code", "numeric", {"Before start": "as cleared"}, None, "N_FREQ_XPDR_SELECTED", uncertain=True),  # nome da provare dal vivo
     Item("bat1", "Electrical", "Battery 1", "onoff", {"Prep": "ON"}, None, "S_OH_ELEC_BAT1"),
     Item("bat2", "Electrical", "Battery 2", "onoff", {"Prep": "ON"}, None, "S_OH_ELEC_BAT2"),
     Item("ext_pwr", "Electrical", "External power", "onoff", {"Prep": "ON if avail"}, None, "S_OH_ELEC_EXT_PWR"),
