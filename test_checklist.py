@@ -515,7 +515,7 @@ def test_flap_and_taxi_alt_links():
 def test_thrust_levers_show():
     cl = C.load()
     keys = ["thr_gate_l", "thr_gate_r", "thr_pos_1", "thr_pos_2"]
-    assert "takeoff.thrust-levers" not in cl.links  # 50% N1: nessun NOW (valori di detent incomprensibili), controllo manuale
+    assert cl.links["takeoff.thrust-levers"] == {"check": {"detent": "BETWEEN"}, "verified": True}  # 50% N1: leve fuori dai detent (BETWEEN)
     det = {"before-start.thrust-levers": "IDLE", "takeoff.thrust-levers_2": ["FLX", "TOGA"], "takeoff.thrust-levers_3": "CLIMB",
            "go-around.thrust-levers": "TOGA", "go-around.thrust-levers_2": "CLIMB", "landing.thrust-levers": "IDLE",
            "landing.thrust-levers_2": "REVERSE IDLE", "landing.thrust-levers_3": "IDLE"}
@@ -523,7 +523,7 @@ def test_thrust_levers_show():
         assert cl.links[i] == {"check": {"detent": d}, "verified": True}, i
         assert C.check_keys(cl.links[i]["check"]) == ["thr_det_l", "thr_det_r"]
     assert [i.group for i in mon.ITEMS if i.key.startswith("thr_")] == ["Thrust"] * 12
-    for bad in ({"detent": "NOPE"}, {"detent": []}, {"detent": "IDLE", "x": 1}, {"detent": ["IDLE", "BETWEEN"]}):
+    for bad in ({"detent": "NOPE"}, {"detent": []}, {"detent": "IDLE", "x": 1}, {"detent": ["IDLE", "BETWEEN"]}):  # BETWEEN solo da solo
         try:
             C._check_keys(bad, "x")
             assert False, bad

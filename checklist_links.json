@@ -1081,5 +1081,11 @@
    "tol_pct": 2
   },
   "verified": true
+ },
+ "takeoff.thrust-levers": {
+  "check": {
+   "detent": "BETWEEN"
+  },
+  "verified": true
  }
 }

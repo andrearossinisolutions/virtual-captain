@@ -27,7 +27,7 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
     if "detent" in check:
         d = check["detent"]
         names = [d] if isinstance(d, str) else d
-        if inner or set(check) != {"detent"} or not isinstance(names, list) or not names or any(n not in thrust.DETENTS for n in names):
+        if inner or set(check) != {"detent"} or not isinstance(names, list) or not names or (names != ["BETWEEN"] and any(n not in thrust.DETENTS for n in names)):  # BETWEEN ammesso solo da solo
             raise ValueError(f"{where}: 'detent' non valido")
         return
     if "std" in check:
