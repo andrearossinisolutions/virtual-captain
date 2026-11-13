@@ -989,17 +989,6 @@
   },
   "verified": true
  },
- "takeoff.thrust-levers": {
-  "check": {
-   "show": [
-    "thr_gate_l",
-    "thr_gate_r",
-    "thr_pos_1",
-    "thr_pos_2"
-   ]
-  },
-  "verified": true
- },
  "takeoff.thrust-levers_2": {
   "check": {
    "detent": [

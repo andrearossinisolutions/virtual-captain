@@ -515,7 +515,7 @@ def test_flap_and_taxi_alt_links():
 def test_thrust_levers_show():
     cl = C.load()
     keys = ["thr_gate_l", "thr_gate_r", "thr_pos_1", "thr_pos_2"]
-    assert cl.links["takeoff.thrust-levers"] == {"check": {"show": keys}, "verified": True}  # 50% N1: solo NOW
+    assert "takeoff.thrust-levers" not in cl.links  # 50% N1: nessun NOW (valori di detent incomprensibili), controllo manuale
     det = {"before-start.thrust-levers": "IDLE", "takeoff.thrust-levers_2": ["FLX", "TOGA"], "takeoff.thrust-levers_3": "CLIMB",
            "go-around.thrust-levers": "TOGA", "go-around.thrust-levers_2": "CLIMB", "landing.thrust-levers": "IDLE",
            "landing.thrust-levers_2": "REVERSE IDLE", "landing.thrust-levers_3": "IDLE"}
