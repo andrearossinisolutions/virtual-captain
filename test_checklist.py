@@ -34,7 +34,7 @@ def test_files_valid():
             assert l["verified"] is bool(v & verified) and (v <= verified or not l["verified"]), k
     assert [k for k, l in cl.links.items() if l["verified"] and not k.startswith("preliminary-cockpit-prep.")
             and "apu_bleed" not in json.dumps(l["check"]) and "spoilers" not in json.dumps(l["check"])] == [
-        "ils-approach.flaps-full", "non-precision-approach.flaps-full",
+        "before-start.atc-transponder", "ils-approach.flaps-full", "non-precision-approach.flaps-full",
         "fmgs-performance-glareshield.squawk-code", "fmgs-performance-glareshield.initial-climb"]
     assert any(i["id"] == "engine-startup.engine-idle-parameters_2" for i in items)
 
@@ -251,13 +251,13 @@ def test_new_links_show_optional():
     assert rows[P + "gain-knob"]["raw"] == [["A_WR_GAIN", "0.5"]] and res["bad"] == 0
     assert rows[P + "wx-mode-selector"]["live"] == [["WX Mode", "2"]]
     assert rows[P + "gain-knob"]["show"] is True and "show" not in rows[P + "battery-pb-1-2"]
-    # ATC Transponder: show su squawk, intero senza decimali, n/d se manca
-    assert cl.links["before-start.atc-transponder"]["check"] == {"show": ["squawk"]}
+    # ATC Transponder: confronto con lo squawk di clearance (verificato dal vivo), intero senza decimali, n/d se manca
+    assert cl.links["before-start.atc-transponder"] == {"check": {"key": "squawk", "eq_ref": "clr.t"}, "verified": True}
     assert mon.BY_KEY["squawk"].lvar == "N_FREQ_XPDR_SELECTED" if hasattr(mon, "BY_KEY") else True
     for raw, txt in ((2000.0, "2000"), (None, "n/d")):
         r = cl.evaluate_phase("before-start", mon.clean_labels({"squawk": raw}))
         row = {i["id"]: i for s in r["subphases"] for i in s["items"]}["before-start.atc-transponder"]
-        assert row["live"] == [["Squawk code", txt]] and row["status"] == "none" and row["show"] is True
+        assert row["live"] == [["Squawk code", txt]] and row["status"] == "none"  # atteso vuoto: solo NOW
     page = __import__("web").PAGE
     assert '"now nv","NOW: "' in page and ".now.nv{color:var(--mut)}" in page and "i.raw,i.show" in page
     for ph in ("ils-approach", "non-precision-approach"):

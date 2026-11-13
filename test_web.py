@@ -296,6 +296,34 @@ def test_craft_markup():
     assert "clearance" not in key and "i.expected" in key  # i valori scritti dall'utente non fanno ricostruire la pagina
 
 
+def test_squawk_pill_markup():
+    p = web.PAGE
+    for m in ('id="sqk"', "function sqkStart", "function sqkShow", 'api("/api/clearance",{t:v})', 'ev.key==="Escape"', "i.onblur=()=>end(true)",
+              "sqkVal=c.t", "SQK", ".chip input{"):
+        assert m in p, m
+    assert "prompt(" not in p and "alert(" not in p
+
+
+def test_squawk_pill_roundtrip():
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "q.json")
+    srv = web.serve(st, "127.0.0.1", 0)
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        s = call(base, "/api/clearance", {"t": "4512"})
+        assert s["clearance"]["t"] == "4512"
+        assert call(base, "/api/state")["clearance"]["t"] == "4512"
+        for bad in ("4812", "12345", "ab"):
+            try:
+                call(base, "/api/clearance", {"t": bad})
+                assert False, bad
+            except Exception:
+                pass
+        assert call(base, "/api/state")["clearance"]["t"] == "4512"
+        assert call(base, "/api/clearance", {"t": ""})["clearance"]["t"] == ""
+    finally:
+        srv.shutdown()
+
+
 def test_spoke_counters():
     with tempfile.TemporaryDirectory() as d:
         st = State(pathlib.Path(d) / "c.json")
@@ -328,6 +356,8 @@ def test_sim_finish_keeps_flying():
 if __name__ == "__main__":
     test_clearance_endpoint()
     test_craft_markup()
+    test_squawk_pill_markup()
+    test_squawk_pill_roundtrip()
     test_layout_markers()
     test_test_links_markup()
     test_optional_markup()

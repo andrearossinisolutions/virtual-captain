@@ -15,11 +15,10 @@
  },
  "before-start.atc-transponder": {
   "check": {
-   "show": [
-    "squawk"
-   ]
+   "key": "squawk",
+   "eq_ref": "clr.t"
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.gain-knob": {
   "check": {

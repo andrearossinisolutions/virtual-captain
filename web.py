@@ -34,6 +34,7 @@ button.big{width:100%;padding:20px;font-size:23px;background:var(--ok)}button.bi
 button.ghost{background:transparent;border:1px solid var(--bd);color:var(--mut);font-weight:500}
 button:disabled{opacity:.5}#info{color:var(--mut);font-size:15px;margin:10px 0 0;min-height:1.4em}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.chip{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:6px 12px;font-size:17px}
+.chip.sqk{cursor:pointer}.chip input{width:5.5em;font-size:16px;padding:2px 6px;border-radius:6px;border:1px solid var(--bd);background:var(--card);color:var(--fg)}
 .chip b{color:var(--mut);font-weight:500;font-size:13px;margin-right:6px}
 #flt{padding-bottom:calc(var(--sp-h,120px) + env(safe-area-inset-bottom) + 12px)}
 #hdr{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0 0 8px}#hdr .pill{margin:0}#hdr .chips{margin:0}
@@ -91,7 +92,7 @@ main.fv{max-width:none;padding:12px 16px}
 ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{padding:6px 0;border-bottom:1px solid var(--bd);color:var(--mut)}
 </style></head><body><main id="main">
 <header id="hdr"><h1>Virtual Captain</h1><span class="pill" id="phase"></span><span class="pill" id="aao"></span>
-  <div class="chips" id="chips" hidden></div>
+  <div class="chips" id="chips" hidden></div><span class="chip" id="sqk" hidden></span>
   <details id="more" hidden><summary>More</summary>
     <label class="livesw"><input type="checkbox" id="livesw"> Show real values on checklist</label>
     <details class="card cs" id="cs"><summary>Cockpit state</summary><div id="csbody"></div></details>
@@ -182,7 +183,17 @@ function cockpit(s){const k=JSON.stringify(s.monitor);if(k===csKey)return;csKey=
     b.appendChild(grid)}}
 let clKey="",showLive=localStorage.getItem("showLive")==="1";
 $("livesw").checked=showLive;$("livesw").onchange=()=>{showLive=$("livesw").checked;localStorage.setItem("showLive",showLive?"1":"0");if(last)checklist(last)};
-let craftEl=null,clrTimer=null;
+let craftEl=null,clrTimer=null,sqkEdit=false,sqkVal="";
+function sqkShow(){const e=$("sqk");if(sqkEdit)return;e.className="chip sqk";e.innerHTML="<b>SQK</b>";e.append(sqkVal||"\u2014")}
+function sqkStart(){if(sqkEdit)return;sqkEdit=true;const e=$("sqk"),i=document.createElement("input");i.inputMode="numeric";i.maxLength=4;i.pattern="[0-7]*";i.value=sqkVal;
+  i.setAttribute("autocomplete","off");i.spellcheck=false;let done=false;
+  const end=save=>{if(done)return;done=true;sqkEdit=false;const v=i.value;sqkShow();
+    if(save&&v!==sqkVal){sqkVal=v;sqkShow();clearTimeout(clrTimer);clrTimer=null;api("/api/clearance",{t:v}).then(s=>{if(s&&s.clearance)syncCraft(s.clearance,true)}).catch(()=>{})}};
+  i.oninput=()=>{const v=i.value.replace(/[^0-7]/g,"");if(v!==i.value)i.value=v};
+  i.onkeydown=ev=>{if(ev.key==="Enter"){ev.preventDefault();end(true)}else if(ev.key==="Escape"){ev.preventDefault();end(false)}};
+  i.onblur=()=>end(true);e.textContent="";const b=document.createElement("b");b.textContent="SQK";e.append(b,i);i.focus();i.select()}
+$("sqk").onclick=sqkStart;
+
 function clrCollect(){const o={};craftEl.querySelectorAll("[data-c]").forEach(i=>o[i.dataset.c]=i.value);return o}
 function clrSend(){clearTimeout(clrTimer);clrTimer=null;if(craftEl)api("/api/clearance",clrCollect()).catch(()=>{})}
 function craftNode(it){if(craftEl)return craftEl;
@@ -198,7 +209,7 @@ function craftNode(it){if(craftEl)return craftEl;
   el.appendChild(g);const b=document.createElement("div");b.className="cb";const rb=document.createElement("button");rb.className="ghost";rb.textContent="Reset to plan";
   rb.onclick=async()=>{clearTimeout(clrTimer);clrTimer=null;try{const s=await api("/api/clearance",{reset:true});syncCraft(s.clearance,true)}catch(e){}};
   b.appendChild(rb);el.appendChild(b);craftEl=el;return el}
-function syncCraft(c,force){if(!craftEl||!c||(clrTimer&&!force))return;
+function syncCraft(c,force){if(c&&!sqkEdit){sqkVal=c.t||"";sqkShow()}if(!craftEl||!c||(clrTimer&&!force))return;
   craftEl.querySelectorAll("[data-c]").forEach(i=>{const v=c[i.dataset.c]||"";if(i.value!==v&&(force||document.activeElement!==i))i.value=v})}
 function clGo(body){api("/api/checklist-phase",body).then(apply).catch(()=>{})}
 function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!c)return;
@@ -238,7 +249,7 @@ function speech(s){const sp=$("speech"),tx=$("sptxt"),l=s.log,ago=s.spoke_ago==n
   if(l.length){const [t,...rest]=l[0].split("  ");tx.textContent=big?rest.join("  "):t+"  "+rest.join("  ");tx.className="";$("sptime").textContent=t}
   else{tx.textContent="Listening…";tx.className="idle";$("sptime").textContent=""}}
 function render(){const s=last;if(!s)return;const fly=s.phase==="flying";
-  $("main").classList.toggle("fv",view==="flight");$("cfg").hidden=view!=="config";$("flt").hidden=view!=="flight";$("chips").hidden=$("more").hidden=view!=="flight";
+  $("main").classList.toggle("fv",view==="flight");$("cfg").hidden=view!=="config";$("flt").hidden=view!=="flight";$("chips").hidden=$("more").hidden=$("sqk").hidden=view!=="flight";
   $("phase").textContent=fly?"✈ Flying — reading the simulator":"📝 Briefing";
   const a=$("aao");a.textContent=s.aao_ok===null?"AAO: waiting":s.aao_ok?"AAO: connected":"AAO: not responding";a.className="pill "+(s.aao_ok===null?"":s.aao_ok?"ok":"bad");
   $("go").textContent=fly?"Back to flight":"Briefing complete";$("go").className="big "+(fly?"fly":"");$("end").hidden=!fly;$("end2").hidden=!fly;
