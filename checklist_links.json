@@ -1087,9 +1087,9 @@
  },
  "before-start.zfw-zfwcg": {
   "check": {
-   "show": [
-    "zfw_calc"
-   ]
+   "key": "zfw_calc",
+   "tol_ref": "fld.zfw",
+   "tol_pct": 2
   },
   "verified": true
  }

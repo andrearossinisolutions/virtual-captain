@@ -586,7 +586,7 @@ def test_fob_zfw_items_and_tolerance():
     fob = {"key": "fob_now", "tol_ref": "fld.fob", "tol_pct": 2}
     for k in ("before-start.fob", "fmgs-initialization.fob"):
         assert cl.links[k]["check"] == fob and cl.links[k]["verified"] is True
-    assert cl.links["before-start.zfw-zfwcg"]["check"] == {"show": ["zfw_calc"]}
+    assert cl.links["before-start.zfw-zfwcg"]["check"] == {"key": "zfw_calc", "tol_ref": "fld.zfw", "tol_pct": 2}  # confrontato col ZFW del piano (loadsheet Fenix 58,101 kg = calcolo MSFS)
     rows = {i["id"]: i for s in cl.evaluate_phase("before-start", {})["subphases"] for i in s["items"]}
     assert [f["k"] for f in rows["before-start.zfw-zfwcg"]["inputs"]] == ["zfw", "zfwcg"] and [f["k"] for f in rows["before-start.fob"]["inputs"]] == ["fob"]
     from checklist_eval import evaluate
