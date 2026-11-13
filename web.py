@@ -258,7 +258,8 @@ function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f
   const nextF=()=>{let n=el.nextElementSibling;while(n&&!n.dataset.f)n=n.nextElementSibling;return n};
   const adv=()=>{const n=nextF();end();if(n)fStart(n)};
   i.oninput=()=>{if(k==="runway")i.value=i.value.toUpperCase();inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400);
-    if((k==="v1"||k==="vr"||k==="v2")&&/^\d{3}$/.test(i.value)&&nextF())adv()};  // 3 cifre: il focus passa al campo successivo
+    const full={v1:/^\d{3}$/,vr:/^\d{3}$/,v2:/^\d{3}$/,runway:/^\d{2}[LRC]$/,ta:/^\d{4}$/,thr_red_agl:/^\d{4}$/,accel_agl:/^\d{4}$/,flap:/^[1-3]$/}[k];
+    if(full&&full.test(i.value))adv()};  // valore completo: passa al campo successivo, o chiude la modifica se è l'ultimo
   i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();adv()}};i.onblur=end;
   el.textContent="";i.placeholder=el.dataset.l;el.append(i);i.focus({preventScroll:true});
   if(sel){try{i.setSelectionRange(sel[0],sel[1])}catch(e){}}else i.select()}
