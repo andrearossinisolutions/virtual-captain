@@ -947,14 +947,14 @@
     "TA/RA"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "after-takeoff.tcas-mode-selector": {
   "check": {
    "key": "tcas",
    "eq": "TA/RA"
   },
-  "verified": false
+  "verified": true
  },
  "ils-approach.tcas": {
   "check": {
@@ -964,7 +964,7 @@
     "TA/RA"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "non-precision-approach.tcas": {
   "check": {
@@ -974,12 +974,111 @@
     "TA/RA"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "after-landing.tcas-mode-selector": {
   "check": {
    "key": "tcas",
    "eq": "STBY"
+  },
+  "verified": true
+ },
+ "before-start.thrust-levers": {
+  "check": {
+   "show": [
+    "thr_gate_l",
+    "thr_gate_r",
+    "thr_pos_1",
+    "thr_pos_2"
+   ]
+  },
+  "verified": false
+ },
+ "takeoff.thrust-levers": {
+  "check": {
+   "show": [
+    "thr_gate_l",
+    "thr_gate_r",
+    "thr_pos_1",
+    "thr_pos_2"
+   ]
+  },
+  "verified": false
+ },
+ "takeoff.thrust-levers_2": {
+  "check": {
+   "show": [
+    "thr_gate_l",
+    "thr_gate_r",
+    "thr_pos_1",
+    "thr_pos_2"
+   ]
+  },
+  "verified": false
+ },
+ "takeoff.thrust-levers_3": {
+  "check": {
+   "show": [
+    "thr_gate_l",
+    "thr_gate_r",
+    "thr_pos_1",
+    "thr_pos_2"
+   ]
+  },
+  "verified": false
+ },
+ "go-around.thrust-levers": {
+  "check": {
+   "show": [
+    "thr_gate_l",
+    "thr_gate_r",
+    "thr_pos_1",
+    "thr_pos_2"
+   ]
+  },
+  "verified": false
+ },
+ "go-around.thrust-levers_2": {
+  "check": {
+   "show": [
+    "thr_gate_l",
+    "thr_gate_r",
+    "thr_pos_1",
+    "thr_pos_2"
+   ]
+  },
+  "verified": false
+ },
+ "landing.thrust-levers": {
+  "check": {
+   "show": [
+    "thr_gate_l",
+    "thr_gate_r",
+    "thr_pos_1",
+    "thr_pos_2"
+   ]
+  },
+  "verified": false
+ },
+ "landing.thrust-levers_2": {
+  "check": {
+   "show": [
+    "thr_gate_l",
+    "thr_gate_r",
+    "thr_pos_1",
+    "thr_pos_2"
+   ]
+  },
+  "verified": false
+ },
+ "landing.thrust-levers_3": {
+  "check": {
+   "show": [
+    "thr_gate_l",
+    "thr_gate_r",
+    "thr_pos_1",
+    "thr_pos_2"
+   ]
   },
   "verified": false
  }

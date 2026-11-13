@@ -33,7 +33,8 @@ def test_files_valid():
         if k.startswith("preliminary-cockpit-prep."):
             assert l["verified"] is bool(v & verified) and (v <= verified or not l["verified"]), k
     assert [k for k, l in cl.links.items() if l["verified"] and not k.startswith("preliminary-cockpit-prep.")
-            and "apu_bleed" not in json.dumps(l["check"]) and "spoilers" not in json.dumps(l["check"])] == [
+            and "apu_bleed" not in json.dumps(l["check"]) and "spoilers" not in json.dumps(l["check"])
+            and "tcas" not in json.dumps(l["check"])] == [
         "before-start.atc-transponder", "after-engine-startup.flap-levers", "taxi-checklist.cleared-altitude-on-fcu",
         "ils-approach.flaps-full", "non-precision-approach.flaps-full",
         "fmgs-performance-glareshield.squawk-code", "fmgs-performance-glareshield.initial-climb", "taxi-checklist.t-o-data-flaps-lever"]
@@ -512,11 +513,22 @@ def test_flap_and_taxi_alt_links():
             pass
 
 
+def test_thrust_levers_show():
+    cl = C.load()
+    keys = ["thr_gate_l", "thr_gate_r", "thr_pos_1", "thr_pos_2"]
+    for i in ("before-start.thrust-levers", "takeoff.thrust-levers", "takeoff.thrust-levers_2", "takeoff.thrust-levers_3",
+              "go-around.thrust-levers", "go-around.thrust-levers_2", "landing.thrust-levers", "landing.thrust-levers_2",
+              "landing.thrust-levers_3"):
+        assert cl.links[i] == {"check": {"show": keys}, "verified": False}, i
+    assert [i.group for i in mon.ITEMS if i.key in keys + ["thr_in_l", "thr_in_r", "thr_rev_l", "thr_rev_r"]] == ["Thrust"] * 8
+
+
 if __name__ == "__main__":
     test_flap_and_taxi_alt_links()
     test_files_valid()
     test_links_reference_real_things()
     test_new_links_show_optional()
+    test_thrust_levers_show()
     test_validation_rejects_bad_data()
     test_departure_clearance()
     test_craft_validation()
@@ -538,7 +550,7 @@ def test_tcas_links():
     for k, eq in (("before-takeoff.tcas-mode-selector", ["TA", "TA/RA"]), ("after-takeoff.tcas-mode-selector", "TA/RA"),
                   ("ils-approach.tcas", ["TA", "TA/RA"]), ("non-precision-approach.tcas", ["TA", "TA/RA"]),
                   ("after-landing.tcas-mode-selector", "STBY")):
-        assert cl.links[k] == {"check": {"key": "tcas", "eq": eq}, "verified": False}, k
+        assert cl.links[k] == {"check": {"key": "tcas", "eq": eq}, "verified": True}, k
     by = {i.key: i for i in mon.ITEMS}
     assert by["tcas"].lvar == "S_XPDR_MODE" and by["tcas"].group == "Transponder"
     assert mon.label(by["tcas"], 2) == "TA/RA (2)" and mon.clean_label(by["tcas"], 1) == "TA"

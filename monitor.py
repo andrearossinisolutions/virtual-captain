@@ -118,6 +118,15 @@ ITEMS: list[Item] = [
     Item("fuel_c2", "Fuel", "Fuel pump C2", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_CENTER_2"),
     Item("fuel_r1", "Fuel", "Fuel pump R1", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_RIGHT_1"),
     Item("fuel_r2", "Fuel", "Fuel pump R2", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_RIGHT_2"),
+    # Thrust levers: solo valori correnti (soglie dei detent da ricavare dal vivo)
+    Item("thr_gate_l", "Thrust", "Throttle gate L (raw)", "numeric", {}, None, "A_FC_THROTTLE_LEFT_GATE"),  # solo grezzo
+    Item("thr_gate_r", "Thrust", "Throttle gate R (raw)", "numeric", {}, None, "A_FC_THROTTLE_RIGHT_GATE"),  # solo grezzo
+    Item("thr_in_l", "Thrust", "Throttle input L (raw)", "numeric", {}, None, "A_FC_THROTTLE_LEFT_INPUT"),  # solo grezzo
+    Item("thr_in_r", "Thrust", "Throttle input R (raw)", "numeric", {}, None, "A_FC_THROTTLE_RIGHT_INPUT"),  # solo grezzo
+    Item("thr_pos_1", "Thrust", "Throttle lever pos 1 (raw)", "numeric", {}, None, "WT_VIRTUAL_THROTTLE_LEVER_POS_1"),  # solo grezzo
+    Item("thr_pos_2", "Thrust", "Throttle lever pos 2 (raw)", "numeric", {}, None, "WT_VIRTUAL_THROTTLE_LEVER_POS_2"),  # solo grezzo
+    Item("thr_rev_l", "Thrust", "Throttle max reverse L (raw)", "numeric", {}, None, "S_FC_THROTTLE_LEFT_MAX_REVERSE"),  # solo grezzo
+    Item("thr_rev_r", "Thrust", "Throttle max reverse R (raw)", "numeric", {}, None, "S_FC_THROTTLE_RIGHT_MAX_REVERSE"),  # solo grezzo
 ]
 
 
