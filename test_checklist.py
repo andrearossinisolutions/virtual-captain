@@ -211,6 +211,25 @@ def test_snapshot_uses_live_labels_and_demo():
     assert st.labels == {}
 
 
+def test_trust_links_and_raw():
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    st.set_cl_phase("before-start")
+    st.set_phase("flying")
+    st.set_monitor({"pack1": 1, "pack2": 1, "beacon": 0})
+    snap = st.snapshot()
+    assert snap["test_links"] is False
+    assert all("raw" not in i for s in snap["checklist"]["subphases"] for i in s["items"])  # normale: nessun raw
+    assert snap["checklist"]["bad"] == 0
+    st.cl_trust_links = True
+    snap = st.snapshot()
+    rows = {i["id"]: i for s in snap["checklist"]["subphases"] for i in s["items"]}
+    assert snap["test_links"] is True and snap["checklist"]["bad"] >= 2
+    assert rows["before-start.packs-pb"]["status"] == "bad"
+    raw = rows["before-start.packs-pb"]["raw"]
+    assert raw and all(len(r) == 2 for r in raw) and any(r[1] == "1" for r in raw)
+    assert all("raw" not in i for i in rows.values() if i["live"] == [])  # solo voci con link
+
+
 def test_live_values():
     cl = C.load()
     labels = {"parking": "ON", "eng1": "OFF", "eng2": None}
@@ -237,5 +256,6 @@ if __name__ == "__main__":
     test_cl_phase_state()
     test_simplified_hides_empty_phases()
     test_snapshot_uses_live_labels_and_demo()
+    test_trust_links_and_raw()
     test_live_values()
     print("ok")

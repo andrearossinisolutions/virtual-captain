@@ -1,4 +1,4 @@
-"""Virtual Captain. Uso: python main.py [--sim] [--port 8080] [--host IP] [--no-firewall]
+"""Virtual Captain. Uso: python main.py [--sim] [--test-links] [--port 8080] [--host IP] [--no-firewall]
 
 Avvia la pagina web del briefing (raggiungibile dal tablet via Tailscale) e, quando dal tablet si preme
 "Briefing complete", legge il simulatore (AAO) e parla. --sim = volo simulato, senza AAO.
@@ -69,6 +69,7 @@ def main():
     if "--no-firewall" not in sys.argv:
         firewall.ensure(port)
     st = State()
+    st.cl_trust_links = "--test-links" in sys.argv  # solo prova: link valutati come verified + valori grezzi accanto alle voci
     st.cl_demo = sim  # solo in --sim: link della checklist trattati come verificati (resa dimostrativa)
     srv = web.serve(st, host, port)
     url = f"http://{host}:{port}"

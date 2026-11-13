@@ -63,6 +63,8 @@ class State:
         self.cl_phase = saved if self.cl.has_phase(saved) else self.cl.ids[0]  # sconosciuta -> prima fase
         self._fix_cl_phase()
         self.cl_demo = False  # SOLO --sim: tratta i link come verificati per vedere verde/rosso/grigio (in volo reale restano verified:false)
+        self.cl_trust_links = False  # SOLO --test-links: valuta i link come verified:true, senza altri effetti demo
+        self.raw: dict = {}  # {chiave: grezzo|None} per mostrare i valori letti in --test-links
         self.labels: dict = {}  # {chiave: etichetta pulita|None} per la checklist (vuoto fuori dal volo)
         self.monitor: list = []  # gruppi gia' etichettati: [[gruppo, [[nome, etichetta, atteso, grezzo], ...]], ...]
 
@@ -100,6 +102,7 @@ class State:
                 if phase != "flying":
                     self.monitor = []
                     self.labels = {}
+                    self.raw = {}
 
     def set_monitor(self, raw: dict | None):
         """Riceve i grezzi {chiave: valore|None}, li etichetta e li tiene per la pagina (vuoto in briefing)."""
@@ -107,6 +110,7 @@ class State:
             live = raw is not None and self.phase == "flying"
             self.monitor = mon.build(raw) if live else []
             self.labels = mon.clean_labels(raw) if live else {}
+            self.raw = dict(raw) if live and raw else {}
 
     def cl_visible(self) -> list[str]:
         return self.cl.visible_ids(self.checklist_mode == "simplified")
@@ -191,5 +195,7 @@ class State:
                     "cl_phases": [{"id": p["id"], "name": p["name"]} for p in self.cl.phases
                                   if p["id"] in self.cl_visible()],
                     "cl_phase": self.cl_phase,
-                    "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo,
-                                                       self.checklist_mode == "simplified")}
+                    "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo or self.cl_trust_links,
+                                                       self.checklist_mode == "simplified",
+                                                       self.raw if self.cl_trust_links else None),
+                    "test_links": self.cl_trust_links}

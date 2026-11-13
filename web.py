@@ -49,7 +49,7 @@ button:disabled{opacity:.5}#info{color:var(--mut);font-size:15px;margin:10px 0 0
 #sptxt.idle{color:var(--mut)}#sptime{color:var(--mut);font-size:13px}#speech:not(.big) #sptime{display:none}
 @media (min-width:900px){
 main.fv{max-width:none;padding:12px 16px}
-.cl .cli{display:grid;grid-template-columns:1.8em minmax(0,1fr) auto;column-gap:10px;break-inside:avoid}
+.cl .cli{display:grid;grid-template-columns:1.8em minmax(0,1fr) auto;column-gap:10px;break-inside:avoid}.cl .cli.wl{grid-template-columns:5.2em minmax(0,1fr) auto}.cl .cli .rw{grid-column:2/4}
 .cl .cli .tx{display:contents}.cl .cli .ic{grid-column:1}.cl .cli .e{grid-column:2}
 .cl .cli .a{grid-column:3;text-align:right;max-width:16em}.cl .cli .d{grid-column:2/4;margin-top:0;font-size:14px}
 #clbody{columns:420px 2;column-gap:24px}.cl h3{break-after:avoid;margin-top:12px}
@@ -70,11 +70,11 @@ main.fv{max-width:none;padding:12px 16px}
 .clname{font-size:28px;font-weight:700;margin:12px 0 2px;line-height:1.2}.clsum{font-size:16px;color:var(--mut);margin-bottom:6px}.clsum.bad{color:var(--bad);font-weight:600}
 .cl h3{font-size:13px;color:var(--mut);margin:16px 0 6px;text-transform:uppercase;letter-spacing:.06em}
 .cli{display:flex;gap:10px;align-items:flex-start;padding:9px 8px;border-bottom:1px solid var(--bd);border-left:4px solid transparent}
-.cli .ic{flex:0 0 1.6em;text-align:center;font-weight:700;color:var(--mut)}.cli .tx{flex:1;min-width:0}
+.cli .ic{flex:0 0 1.6em;min-width:1.6em;text-align:center;font-weight:700;color:var(--mut)}.cli .tx{flex:1;min-width:0}
 .cli .e{font-size:18px;word-break:break-word}.cli .a{font-size:15px;color:var(--mut);word-break:break-word}.cli .d{font-size:15px;color:var(--bad);margin-top:2px}
 .cli.st-ok{border-left-color:var(--ok)}.cli.st-ok .ic{color:var(--ok)}
 .cli.st-bad{border-left-color:var(--bad);background:rgba(227,86,74,.08)}.cli.st-bad .ic{color:var(--bad)}
-.cli.st-na{border-left-color:#5d6d7d}.cli.st-na .ic{color:#6b7c8d;font-size:12px;font-weight:500}
+.cli.st-na{border-left-color:#5d6d7d}.cli.st-na .ic{color:#6b7c8d;font-size:12px;font-weight:500}.cli .ic.w{flex:0 0 5.2em;min-width:5.2em;white-space:nowrap;text-align:left}.cli .rw{font:12px ui-monospace,monospace;color:var(--mut);word-break:break-all}
 .cli.t-atc .e,.cli.t-announce .e,.cli.t-note .e{font-style:italic;color:var(--mut)}
 .badge{display:inline-block;font-size:11px;font-style:normal;font-weight:700;letter-spacing:.05em;border:1px solid var(--bd);border-radius:6px;padding:1px 6px;margin-right:6px;color:var(--warn)}
 #clnextbtn{margin-top:14px}
@@ -181,17 +181,19 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
   $("clprev").onclick=()=>clGo({step:-1});$("clnext").onclick=()=>clGo({step:1});
   $("clprev").disabled=idx<=0;$("clnext").disabled=idx>=ph.length-1;
   $("clname").textContent=c.phase.name;const sm=$("clsum");sm.textContent=c.bad+" out of spec";sm.className="clsum"+(c.bad?" bad":"");
-  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live])]),showLive]);
+  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live,i.raw])]),showLive,s.test_links]);
   if(bk!==clBodyKey){clBodyKey=bk;const y=window.scrollY,x=window.scrollX;body.textContent="";
   const mk=(t,cls,txt)=>{const e=document.createElement(t);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e};
   for(const sp of c.subphases){if(sp.name)body.appendChild(mk("h3","",sp.name));
     for(const it of sp.items){const r=mk("div","cli st-"+it.status+" t-"+it.type);
       const ic=it.status==="ok"?"\u2713":it.status==="bad"?"\u2717":it.status==="na"?(it.kind==="unverified"?"unverified":"n/d"):"\u00b7";
-      r.appendChild(mk("div","ic",ic));const tx=mk("div","tx");const e=mk("div","e");
+      if(ic.length>2)r.classList.add("wl");
+      r.appendChild(mk("div","ic"+(ic.length>2?" w":""),ic));const tx=mk("div","tx");const e=mk("div","e");
       if(it.type==="atc")e.appendChild(mk("span","badge","ATC"));if(it.type==="announce")e.appendChild(mk("span","badge","ANNOUNCE"));
       e.append(it.text);tx.appendChild(e);
       if(it.response&&it.type!=="announce")tx.appendChild(mk("div","a",it.response));
       if(showLive&&it.live&&it.live.length)tx.appendChild(mk("div","lv","Actual: "+it.live.map(l=>(it.live.length>1?l[0]+" ":"")+l[1]).join(" \u00b7 ")));
+      if(s.test_links&&it.raw&&it.raw.length)tx.appendChild(mk("div","rw",it.raw.map(l=>l[0]+"="+l[1]).join(" \u00b7 ")));
       if(it.kind==="mismatch")tx.appendChild(mk("div","d",it.detail.replace(/, actual/g," \u00b7 actual")));
       r.appendChild(tx);body.appendChild(r)}}
   window.scrollTo(x,y)}

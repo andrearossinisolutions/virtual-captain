@@ -39,6 +39,15 @@ def check_keys(check: dict) -> list:
     return list(dict.fromkeys(c["key"] for c in subs if c.get("key")))
 
 
+def raw_values(check: dict | None, raw: dict) -> list:
+    """Valori grezzi letti per un check (solo --test-links): [[variabile, valore|"n/d"], ...]."""
+    out = []
+    for k in check_keys(check or {}):
+        it = BY_KEY[k]
+        out.append([it.lvar or it.std or it.name, mon.raw_text(raw.get(k))])
+    return out
+
+
 def live_values(check: dict | None, labels: dict) -> list:
     """Valori reali letti per un check: [[nome, etichetta|"n/d"], ...] (sola lettura, vuoto se la voce non ha variabile)."""
     return [[BY_KEY[k].name, labels.get(k) or mon.NA] for k in check_keys(check or {})]
@@ -92,8 +101,9 @@ class Checklist:
     def phase(self, phase_id: str) -> dict:
         return self.phases[self.ids.index(phase_id)]
 
-    def evaluate_phase(self, phase_id: str, labels: dict, demo: bool = False, simplified: bool = False) -> dict:
+    def evaluate_phase(self, phase_id: str, labels: dict, demo: bool = False, simplified: bool = False, raw: dict | None = None) -> dict:
         """Sottofasi e voci della fase con status/detail; "bad" = numero di voci rosse (solo quelle visibili). demo=True tratta i link come verificati.
+        raw (solo --test-links): aggiunge a ogni voce con link "raw" = [[variabile, grezzo], ...].
         simplified=True salta le voci escluse prima della valutazione e scarta le sottofasi rimaste vuote."""
         ph, bad, subs = self.phase(phase_id), 0, []
         for sp in ph["subphases"]:
@@ -106,6 +116,8 @@ class Checklist:
                 bad += res["status"] == "bad"
                 row = {"id": it["id"], "text": it["text"], "response": it["response"], "type": it["type"],
                        "live": live_values(link["check"], labels) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
+                if raw is not None and link:
+                    row["raw"] = raw_values(link["check"], raw)
                 if it.get("note"):
                     row["note"] = it["note"]
                 rows.append(row)

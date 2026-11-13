@@ -241,6 +241,11 @@ def test_old_mode_values_migrate():
     assert state._mode("allenamento") == "training" and state._mode(None) == "normal"
 
 
+def test_test_links_markup():
+    assert 'class="rw"' in web.PAGE or '"rw"' in web.PAGE
+    assert "s.test_links" in web.PAGE and ".cli.wl" in web.PAGE
+
+
 def test_layout_markers():
     p = web.PAGE
     for m in ("--sp-h", "env(safe-area-inset-bottom)", "viewport-fit=cover", "min-width:900px", "ResizeObserver",
@@ -280,6 +285,7 @@ def test_sim_finish_keeps_flying():
 
 if __name__ == "__main__":
     test_layout_markers()
+    test_test_links_markup()
     test_spoke_counters()
     test_sim_finish_keeps_flying()
     test_api_flow()
