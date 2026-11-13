@@ -131,6 +131,26 @@ def test_fcu_alt():
     assert ev("7000", "")["status"] == "none"
 
 
+def test_qnh():
+    c = {"qnh": "wx.qnh_dep"}
+    e = {"wx.qnh_dep": "1013 hPa"}
+
+    def ev(lab, exp=e, ver=True):
+        return evaluate(c, lab, verified=ver, expected=exp)
+    base = {"baro_std": "0", "baro_hpa": "1013", "baro_inch": None}
+    assert ev(base)["status"] == "ok"
+    assert ev({**base, "baro_hpa": "1014"})["status"] == "ok" and ev({**base, "baro_hpa": "1012"})["status"] == "ok"
+    r = ev({**base, "baro_hpa": "1015"})
+    assert r["status"] == "bad" and r["detail"] == "expected 1013, actual 1015"
+    r = ev({**base, "baro_std": "1"})
+    assert r["status"] == "bad" and r["detail"] == "expected 1013, actual STD"
+    assert ev(base, exp={})["status"] == "none"
+    assert ev({"baro_std": "0", "baro_hpa": None, "baro_inch": "29.92"})["status"] == "ok"
+    assert ev({"baro_std": "0", "baro_hpa": None, "baro_inch": None})["status"] == "na"
+    assert ev({"baro_hpa": "1013"})["kind"] == "unreadable"
+    assert ev(base, ver=False)["kind"] == "unverified"
+
+
 if __name__ == "__main__":
     test_expected_refs()
     test_fcu_alt()
@@ -142,4 +162,5 @@ if __name__ == "__main__":
     test_show_and_optional()
     test_numeric()
     test_clean_label()
+    test_qnh()
     print("ok")

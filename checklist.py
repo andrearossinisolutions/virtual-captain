@@ -5,7 +5,7 @@ import json
 import pathlib
 
 import monitor as mon
-from checklist_eval import BY_KEY, REFS, _refs, evaluate
+from checklist_eval import BY_KEY, REFS, _refs, evaluate, qnh_actual
 
 HERE = pathlib.Path(__file__).resolve().parent
 TYPES = ("action", "announce", "atc", "note", "craft")
@@ -21,6 +21,10 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
         keys = check["show"]
         if set(check) != {"show"} or not isinstance(keys, list) or not keys or any(k not in BY_KEY for k in keys):
             raise ValueError(f"{where}: 'show' non valido")
+        return
+    if "qnh" in check:
+        if inner or set(check) != {"qnh"} or check["qnh"] not in ("wx.qnh_dep", "wx.qnh_dest"):
+            raise ValueError(f"{where}: 'qnh' non valido")
         return
     if "all" in check:
         if not isinstance(check["all"], list) or not check["all"] or set(check) != {"all"}:
@@ -64,6 +68,8 @@ def check_keys(check: dict) -> list:
     """Chiavi del monitor usate da un check (singolo o composto), in ordine e senza doppioni."""
     if "show" in check:
         return list(dict.fromkeys(check["show"]))
+    if "qnh" in check:
+        return ["baro_std", "baro_hpa", "baro_inch"]
     subs = check.get("all") or [check]
     return list(dict.fromkeys(c["key"] for c in subs if c.get("key")))
 
@@ -79,6 +85,9 @@ def raw_values(check: dict | None, raw: dict) -> list:
 
 def live_values(check: dict | None, labels: dict) -> list:
     """Valori reali letti per un check: [[nome, etichetta|"n/d"], ...] (sola lettura, vuoto se la voce non ha variabile)."""
+    if "qnh" in (check or {}):
+        a = qnh_actual(labels)
+        return [["Baro", "STD" if a == "STD" else (f"{a:.0f}" if a is not None else mon.NA)]]
     return [[BY_KEY[k].name, labels.get(k) or mon.NA] for k in check_keys(check or {})]
 
 

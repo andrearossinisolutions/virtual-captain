@@ -48,6 +48,8 @@ def test_links_reference_real_things():
         for c in check.get("all", [check]):
             if "show_ref" in c:
                 assert c["show_ref"] in REFS
+            elif "qnh" in c:
+                assert c["qnh"] in REFS
             else:
                 assert all(k in keys for k in c["show"]) if "show" in c else c["key"] in keys
     for link in cl.links.values():
@@ -380,6 +382,7 @@ def test_expected_links():
     assert rw[P + "constraint-pb"]["status"] == "bad" and rw[P + "flight-director-pb"]["status"] == "ok"
     for k in ("flex-toga", "t-o-flaps-conf-ths", "barometric-reference"):
         assert rw[P + k]["status"] == "none" and rw[P + k]["show"] is True, k
+    assert rw[P + "barometric-reference"]["live"] == [["Baro", "n/d"]]
     assert rw[P + "flex-toga"]["live"] == [["Flex temp", "55"]] and rw[P + "t-o-flaps-conf-ths"]["live"] == [["Flaps", "1"]]
     assert cl.evaluate_phase("fmgs-performance-glareshield", lab, expected={})["bad"] == 0  # non verificati: nessun rosso
     emp = {i["id"]: i for s in cl.evaluate_phase("fmgs-performance-glareshield", {"v1": "0"}, demo=True, expected={})["subphases"] for i in s["items"]}
@@ -447,6 +450,38 @@ def test_clearance_state():
     assert st.clearance == {"c": "LIPZ", "r": "AAA DCT BBB", "a": "", "f": "", "t": ""}
 
 
+def test_qnh_links():
+    cl = C.load()
+    for iid, ref in (("fmgs-performance-glareshield.barometric-reference", "wx.qnh_dep"), ("descent-checklist.barometric-reference", "wx.qnh_dest")):
+        assert cl.links[iid]["check"] == {"qnh": ref} and cl.links[iid]["verified"] is False
+    assert "climb.barometric-reference" not in cl.links
+    assert C.check_keys({"qnh": "wx.qnh_dep"}) == ["baro_std", "baro_hpa", "baro_inch"]
+    for bad in ({"qnh": "clr.a"}, {"qnh": "wx.qnh_dep", "key": "baro_hpa"}, {"all": [{"qnh": "wx.qnh_dep"}]}):
+        try:
+            C._check_keys(bad, "x")
+        except ValueError:
+            continue
+        raise AssertionError(bad)
+    assert C.live_values({"qnh": "wx.qnh_dep"}, {"baro_std": "1"}) == [["Baro", "STD"]]
+    assert C.live_values({"qnh": "wx.qnh_dep"}, {"baro_std": "0", "baro_hpa": "1013"}) == [["Baro", "1013"]]
+    from weather import Weather
+    w = Weather()
+    w.seed("LIRF", "Q1013")
+    w.seed("LIML", "Q1009")
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json", weather=w)
+    st.fields.update(origin="LIRF", destination="LIML")
+    st.cl_demo = True
+    st.labels = {"baro_std": "0", "baro_hpa": "1013"}
+    s = st.snapshot()
+    assert s["checklist"]["phase"]["id"] == st.cl_phase
+    exp = st._expected()
+    assert exp["wx.qnh_dep"] == "1013 hPa" and exp["wx.qnh_dest"] == "1009 hPa"
+    r = cl.evaluate_phase("fmgs-performance-glareshield", st.labels, demo=True, expected=exp)
+    row = {i["id"]: i for sp in r["subphases"] for i in sp["items"]}["fmgs-performance-glareshield.barometric-reference"]
+    assert row["status"] == "ok" and row["expected"] == "1013 hPa" and row["live"] == [["Baro", "1013"]]
+    assert State(pathlib.Path(tempfile.mkdtemp()) / "d.json")._expected()["wx.qnh_dep"] == ""
+
+
 if __name__ == "__main__":
     test_files_valid()
     test_links_reference_real_things()
@@ -463,6 +498,7 @@ if __name__ == "__main__":
     test_snapshot_uses_live_labels_and_demo()
     test_trust_links_and_raw()
     test_live_values()
+    test_qnh_links()
     print("ok")
 
 

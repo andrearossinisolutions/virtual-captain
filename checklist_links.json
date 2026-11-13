@@ -854,10 +854,13 @@
  },
  "fmgs-performance-glareshield.barometric-reference": {
   "check": {
-   "show": [
-    "baro_std",
-    "baro_hpa"
-   ]
+   "qnh": "wx.qnh_dep"
+  },
+  "verified": false
+ },
+ "descent-checklist.barometric-reference": {
+  "check": {
+   "qnh": "wx.qnh_dest"
   },
   "verified": false
  }

@@ -13,6 +13,7 @@ import monitor as mon
 from brain import Briefing
 from aao import AAO, normalize_url
 from simbrief import fetch_latest, to_briefing
+from weather import Weather
 
 CFG = pathlib.Path.home() / ".virtual-captain.json"
 FIELDS = [("origin", "Departure"), ("destination", "Arrival"), ("dep_time", "Departure time (UTC)"), ("runway", "Runway"),
@@ -50,8 +51,9 @@ def _mode(m):
 
 
 class State:
-    def __init__(self, cfg_path: pathlib.Path = CFG):
+    def __init__(self, cfg_path: pathlib.Path = CFG, weather=None):
         self.lock = threading.RLock()
+        self.weather = weather or Weather()  # senza rete di default; main.py passa quella reale
         self.cfg_path = cfg_path
         try:
             cfg = json.loads(cfg_path.read_text())
@@ -189,6 +191,8 @@ class State:
                 if v is None:
                     missing.append(dict(FIELDS)[k])
             self.plan = data.get("plan") or {}
+            self.weather.seed(data.get("origin"), self.plan.get("orig_metar"))
+            self.weather.seed(data.get("destination"), self.plan.get("dest_metar"))
             self.reset_clearance()
             self.info = (f"{data['origin']} → {data['destination']}  (generated: {_when(data['generated'])})"
                          + (f" — not in plan, enter manually: {', '.join(missing)}" if missing else ""))
@@ -212,6 +216,9 @@ class State:
         for k in ("v1", "vr", "v2"):
             v = self.fields.get(k)
             e[f"fld.{k}"] = "" if v in (None, "") else (str(int(v)) if isinstance(v, float) and v == int(v) else str(v))
+        for ref, k in (("wx.qnh_dep", "origin"), ("wx.qnh_dest", "destination")):
+            q = self.weather.get(self.fields.get(k, ""))
+            e[ref] = f"{q:.0f} hPa" if q is not None else ""
         e["plan.sid"] = str((self.plan or {}).get("sid") or "")
         return e
 

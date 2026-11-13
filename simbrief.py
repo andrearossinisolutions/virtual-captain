@@ -89,6 +89,10 @@ def _hhmm(sec):
     return None if n is None else f"{n // 3600}h{(n % 3600) // 60:02d}"
 
 
+def _metar(v):
+    return v.strip() if isinstance(v, str) and v.strip() else None
+
+
 def extract_plan(ofp: dict) -> dict:
     """Piano di volo da mostrare. Campi assenti restano vuoti (parsing difensivo: formato non verificato)."""
     g = _g(ofp, "general", default={}) or {}
@@ -108,6 +112,8 @@ def extract_plan(ofp: dict) -> dict:
         "distance_nm": _num(g.get("air_distance") or g.get("route_distance")),
         "ete": _hhmm(_g(ofp, "times", "est_time_enroute")),
         "alternate": _g(ofp, "alternate", "icao_code"),
+        "orig_metar": _metar(_g(ofp, "weather", "orig_metar")),
+        "dest_metar": _metar(_g(ofp, "weather", "dest_metar")),
         "waypoints": wpts,
     }
 

@@ -12,6 +12,7 @@ from aao import AAO
 from brain import Brain, readout
 from speak import say, wait
 from state import State
+from weather import Weather, online_fetch
 
 
 def simulated():
@@ -40,7 +41,8 @@ def sim_monitor(t, roll):
     return {"apu_master": 0, "apu_bleed": 0, "pack1": 1 if t > 3 else 0, "pack2": 1 if t > 3 else 0,
             "landing_l": 2, "landing_r": 2, "nose": 2 if roll else 0, "strobe": 2, "beacon": 1, "navlogo": 1,
             "rwy_turnoff": 1 if roll else 0, "seatbelt": 1, "flap": 1, "spoilers": 0, "gear": 1.0 if t < 45 else 0.0,
-            "engmode": 1, "eng1": 1, "eng2": 1, "parking": None}
+            "engmode": 1, "eng1": 1, "eng2": 1, "parking": None,
+            "baro_std": 0 if t < 20 else 1, "baro_hpa": 1013, "baro_inch": 29.92}
 
 
 def show_qr(url):
@@ -68,7 +70,7 @@ def main():
         print("⚠ Tailscale non trovato: pagina raggiungibile solo da questo PC. Avvia Tailscale o usa --host <IP>.")
     if "--no-firewall" not in sys.argv:
         firewall.ensure(port)
-    st = State()
+    st = State(weather=Weather(fetch=(lambda icao: 1013.0 if icao == st.fields.get("origin") else 1009.0) if sim else online_fetch))
     st.cl_trust_links = "--test-links" in sys.argv  # solo prova: link valutati come verified + valori grezzi accanto alle voci
     st.cl_demo = sim  # solo in --sim: link della checklist trattati come verificati (resa dimostrativa)
     srv = web.serve(st, host, port)

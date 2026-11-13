@@ -16,7 +16,8 @@ import monitor as mon
 BY_KEY = {it.key: it for it in mon.ITEMS}
 UNVERIFIED = "unverified"
 UNREADABLE = "unreadable"
-REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "fld.v1", "fld.vr", "fld.v2", "plan.sid")
+REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "fld.v1", "fld.vr", "fld.v2", "plan.sid", "wx.qnh_dep", "wx.qnh_dest")
+QNH_TOL = 1.0  # hPa
 
 
 ALT_KEYS = ("fcu_alt",)  # voci in piedi: l'atteso puo' essere "5000", "7000 ft", "FL070", "FL 70"
@@ -60,8 +61,46 @@ def _want(expected, ref) -> str:
     return str((expected or {}).get(ref) or "").strip()
 
 
+def _num(v):
+    try:
+        return float(str(v).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def qnh_actual(labels: dict):
+    """"STD" se baro_std=1, altrimenti QNH impostato in hPa (ripiego: inHg convertito), altrimenti None."""
+    std = _num(labels.get("baro_std"))
+    if std is not None and std >= 0.5:
+        return "STD"
+    hpa = _num(labels.get("baro_hpa"))
+    if hpa is not None and hpa > 0:
+        return hpa
+    inch = _num(labels.get("baro_inch"))
+    if inch is not None and inch > 0:
+        return inch * 33.8639
+    return None
+
+
+def _qnh_single(ref: str, labels: dict, expected) -> dict:
+    m = re.search(r"\d+(?:\.\d+)?", _want(expected, ref))
+    want = float(m.group(0))
+    if _num(labels.get("baro_std")) is None:
+        return _res("na", UNREADABLE, "unreadable")
+    act = qnh_actual(labels)
+    if act == "STD":
+        return _res("bad", f"expected {want:g}, actual STD", "mismatch")
+    if act is None:
+        return _res("na", UNREADABLE, "unreadable")
+    if abs(act - want) <= QNH_TOL + 1e-6:
+        return _res("ok")
+    return _res("bad", f"expected {want:g}, actual {act:.0f}", "mismatch")
+
+
 def _refs(check: dict) -> list:
-    """Riferimenti eq_ref di un check (singolo o composto)."""
+    """Riferimenti eq_ref di un check (singolo o composto); {"qnh": ref} -> [ref]."""
+    if "qnh" in check:
+        return [check["qnh"]]
     return [c["eq_ref"] for c in (check.get("all") or [check]) if "eq_ref" in c]
 
 
@@ -107,6 +146,8 @@ def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: 
 def _evaluate(check: dict, labels: dict, verified: bool, expected: dict | None = None) -> dict:
     if not verified:
         return _res("na", UNVERIFIED, "unverified")
+    if "qnh" in check:
+        return _qnh_single(check["qnh"], labels, expected)
     if "all" not in check:
         return _single(check, labels, expected)
     subs = [sub for sub in check["all"] if "eq_ref" not in sub or _want(expected, sub["eq_ref"])]  # atteso vuoto: voce saltata
