@@ -40,7 +40,10 @@ def test_items_are_valid():
         assert it.std_fallback is False or (it.std and it.lvar) or it.key == "gear"
         for v in it.expected.values():
             assert v
-    assert "autobrake" not in keys
+    assert "autobrake" not in keys and not any(i.uncertain for i in ITEMS if i.key == "squawk")
+    for k in ("v1", "vr", "v2", "flex", "cstr1", "cstr2", "fd1", "fd2", "baro_std", "baro_hpa"):
+        assert k in keys, k
+    assert BY["cstr1"].kind == "onoff" and BY["cstr1"].uncertain is False and BY["v1"].lvar == "N_MISC_PERF_TO_V1"
     for k in ("apu_master", "apu_bleed", "pack1", "pack2", "landing_l", "landing_r", "nose", "strobe", "beacon",
               "navlogo", "rwy_turnoff", "seatbelt", "flap", "spoilers", "gear", "engmode", "eng1", "eng2", "parking"):
         assert k in keys, k

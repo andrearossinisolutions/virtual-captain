@@ -5,7 +5,7 @@ import json
 import pathlib
 
 import monitor as mon
-from checklist_eval import BY_KEY, REFS, evaluate
+from checklist_eval import BY_KEY, REFS, _refs, evaluate
 
 HERE = pathlib.Path(__file__).resolve().parent
 TYPES = ("action", "announce", "atc", "note", "craft")
@@ -29,12 +29,14 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
             if "all" in sub:
                 raise ValueError(f"{where}: 'all' annidato non ammesso")
             _check_keys(sub, where, True)
+            if "eq_ref" in sub and not all("eq_ref" in c for c in check["all"]):
+                raise ValueError(f"{where}: eq_ref dentro 'all' solo se tutte le voci lo usano")
         return
     key = check.get("key")
     if key not in BY_KEY:
         raise ValueError(f"{where}: chiave sconosciuta {key!r}")
     if "eq_ref" in check:
-        if inner or set(check) != {"key", "eq_ref"} or check["eq_ref"] not in REFS:
+        if set(check) != {"key", "eq_ref"} or check["eq_ref"] not in REFS:
             raise ValueError(f"{where}: 'eq_ref' non valido")
         if mon.MAPS[BY_KEY[key].kind]:
             raise ValueError(f"{where}: eq_ref non ammesso su {key} (ha una mappa di etichette)")
@@ -149,11 +151,11 @@ class Checklist:
                 bad += res["status"] == "bad"
                 row = {"id": it["id"], "text": it["text"], "response": it["response"], "type": it["type"],
                        "live": live_values(link["check"], labels) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
-                if link and ("show" in link["check"] or ("eq_ref" in link["check"] and res["status"] == "none")):
+                if link and ("show" in link["check"] or (_refs(link["check"]) and res["status"] == "none")):
                     row["show"] = True  # solo da mostrare: la pagina scrive sempre "NOW: <valore>"
-                ref = (link["check"].get("eq_ref") or link["check"].get("show_ref")) if link else None
-                if ref:
-                    row["expected"] = (expected or {}).get(ref, "")  # la pagina scrive "Expected: <valore>" se non vuoto
+                refs = ([link["check"]["show_ref"]] if "show_ref" in link["check"] else _refs(link["check"])) if link else []
+                if refs:
+                    row["expected"] = " / ".join(str((expected or {}).get(r, "")) for r in refs) if len(refs) > 1 else (expected or {}).get(refs[0], "")  # la pagina scrive "Expected: <valore>" se non vuoto
                 if it["type"] == "craft":
                     row["fields"] = it["fields"]
                 if raw is not None and link:

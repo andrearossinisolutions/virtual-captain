@@ -84,8 +84,19 @@ ITEMS: list[Item] = [
     Item("wx_pws", "Weather radar", "Windshear PWS sw", "onoff", {"Prep": "OFF"}, None, "S_WR_PRED_WS"),
     Item("wx_gain", "Weather radar", "WX Gain knob", "numeric", {"Prep": "AUTO/CAL"}, None, "A_WR_GAIN"),
     Item("wx_mode", "Weather radar", "WX Mode", "numeric", {"Prep": "as required"}, None, "S_WR_MODE"),
-    Item("squawk", "Transponder", "Squawk code", "numeric", {"Before start": "as cleared"}, None, "N_FREQ_XPDR_SELECTED", uncertain=True),  # nome da provare dal vivo
-    Item("fcu_alt", "FCU", "FCU altitude", "numeric", {"Climb": "as cleared"}, None, "N_FCU_ALTITUDE"),  # piedi (da provare dal vivo col grezzo)
+    Item("squawk", "Transponder", "Squawk code", "numeric", {"Before start": "as cleared"}, None, "N_FREQ_XPDR_SELECTED"),  # verificata dal vivo 13/11
+    Item("fcu_alt", "FCU", "FCU altitude", "numeric", {"Climb": "as cleared"}, None, "N_FCU_ALTITUDE"),  # piedi, verificata dal vivo 13/11
+    # FMGS performance & glareshield (nodi, 0 = non inserita; lampade 0/1; da verificare dal vivo col grezzo)
+    Item("v1", "FMGS performance", "V1", "numeric", {"Before start": "as briefing"}, None, "N_MISC_PERF_TO_V1"),
+    Item("vr", "FMGS performance", "VR", "numeric", {"Before start": "as briefing"}, None, "N_MISC_PERF_TO_VR"),
+    Item("v2", "FMGS performance", "V2", "numeric", {"Before start": "as briefing"}, None, "N_MISC_PERF_TO_V2"),
+    Item("flex", "FMGS performance", "Flex temp", "numeric", {"Before start": "as briefing"}, None, "N_MISC_PERF_TO_FLEX"),
+    Item("cstr1", "Glareshield", "Constraint pb 1", "onoff", {"Before start": "ON"}, None, "I_FCU_EFIS1_CSTR"),
+    Item("cstr2", "Glareshield", "Constraint pb 2", "onoff", {"Before start": "ON"}, None, "I_FCU_EFIS2_CSTR"),
+    Item("fd1", "Glareshield", "Flight director pb 1", "onoff", {"Before start": "ON"}, None, "I_FCU_EFIS1_FD"),
+    Item("fd2", "Glareshield", "Flight director pb 2", "onoff", {"Before start": "ON"}, None, "I_FCU_EFIS2_FD"),
+    Item("baro_std", "Glareshield", "Baro STD (EFIS 1)", "numeric", {"Before start": "set"}, None, "B_FCU_EFIS1_BARO_STD"),
+    Item("baro_hpa", "Glareshield", "Baro hPa (EFIS 1)", "numeric", {"Before start": "set"}, None, "N_FCU_EFIS1_BARO_HPA"),
     Item("bat1", "Electrical", "Battery 1", "onoff", {"Prep": "ON"}, None, "S_OH_ELEC_BAT1"),
     Item("bat2", "Electrical", "Battery 2", "onoff", {"Prep": "ON"}, None, "S_OH_ELEC_BAT2"),
     Item("ext_pwr", "Electrical", "External power", "onoff", {"Prep": "ON if avail"}, None, "S_OH_ELEC_EXT_PWR"),

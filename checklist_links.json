@@ -760,14 +760,14 @@
    "key": "squawk",
    "eq_ref": "clr.t"
   },
-  "verified": false
+  "verified": true
  },
  "fmgs-performance-glareshield.initial-climb": {
   "check": {
    "key": "fcu_alt",
    "eq_ref": "clr.a"
   },
-  "verified": false
+  "verified": true
  },
  "fmgs-performance-glareshield.t-o-rwy": {
   "check": {
@@ -784,6 +784,80 @@
  "fmgs-performance-glareshield.transition-altitude": {
   "check": {
    "show_ref": "fld.ta"
+  },
+  "verified": false
+ },
+ "fmgs-performance-glareshield.v1-vr-v2": {
+  "check": {
+   "all": [
+    {
+     "key": "v1",
+     "eq_ref": "fld.v1"
+    },
+    {
+     "key": "vr",
+     "eq_ref": "fld.vr"
+    },
+    {
+     "key": "v2",
+     "eq_ref": "fld.v2"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "fmgs-performance-glareshield.flex-toga": {
+  "check": {
+   "show": [
+    "flex"
+   ]
+  },
+  "verified": false
+ },
+ "fmgs-performance-glareshield.t-o-flaps-conf-ths": {
+  "check": {
+   "show": [
+    "flap"
+   ]
+  },
+  "verified": false
+ },
+ "fmgs-performance-glareshield.constraint-pb": {
+  "check": {
+   "all": [
+    {
+     "key": "cstr1",
+     "eq": "ON"
+    },
+    {
+     "key": "cstr2",
+     "eq": "ON"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "fmgs-performance-glareshield.flight-director-pb": {
+  "check": {
+   "all": [
+    {
+     "key": "fd1",
+     "eq": "ON"
+    },
+    {
+     "key": "fd2",
+     "eq": "ON"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "fmgs-performance-glareshield.barometric-reference": {
+  "check": {
+   "show": [
+    "baro_std",
+    "baro_hpa"
+   ]
   },
   "verified": false
  }

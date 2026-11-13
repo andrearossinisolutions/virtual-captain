@@ -34,7 +34,8 @@ def test_files_valid():
             assert l["verified"] is bool(v & verified) and (v <= verified or not l["verified"]), k
     assert [k for k, l in cl.links.items() if l["verified"] and not k.startswith("preliminary-cockpit-prep.")
             and "apu_bleed" not in json.dumps(l["check"]) and "spoilers" not in json.dumps(l["check"])] == [
-        "ils-approach.flaps-full", "non-precision-approach.flaps-full"]
+        "ils-approach.flaps-full", "non-precision-approach.flaps-full",
+        "fmgs-performance-glareshield.squawk-code", "fmgs-performance-glareshield.initial-climb"]
     assert any(i["id"] == "engine-startup.engine-idle-parameters_2" for i in items)
 
 
@@ -330,7 +331,8 @@ def test_craft_validation():
     bad = [{"check": {"key": "squawk", "eq_ref": "clr.x"}, "verified": False},  # riferimento non chiuso
            {"check": {"key": "squawk", "eq_ref": "clr.t", "eq": "1"}, "verified": False},
            {"check": {"key": "apu_master", "eq_ref": "clr.t"}, "verified": False},  # kind a mappa di etichette
-           {"check": {"all": [{"key": "squawk", "eq_ref": "clr.t"}]}, "verified": False},
+           {"check": {"all": [{"key": "squawk", "eq_ref": "clr.t"}, {"key": "apu_master", "eq": "ON"}]}, "verified": False},  # misto
+           {"check": {"all": [{"key": "apu_master", "eq_ref": "clr.t"}]}, "verified": False},
            {"check": {"show_ref": "nope"}, "verified": False},
            {"check": {"show_ref": "clr.a", "show": ["squawk"]}, "verified": False}]
     for link in bad:
@@ -353,23 +355,35 @@ def test_craft_validation():
 def test_expected_links():
     cl = C.load()
     P = "fmgs-performance-glareshield."
-    assert cl.links[P + "squawk-code"] == {"check": {"key": "squawk", "eq_ref": "clr.t"}, "verified": False}
+    assert cl.links[P + "squawk-code"] == {"check": {"key": "squawk", "eq_ref": "clr.t"}, "verified": True}
     for k, ref in (("t-o-rwy", "fld.runway"), ("sid", "plan.sid"), ("transition-altitude", "fld.ta")):
         assert cl.links[P + k] == {"check": {"show_ref": ref}, "verified": False}, k
-    assert cl.links[P + "initial-climb"] == {"check": {"key": "fcu_alt", "eq_ref": "clr.a"}, "verified": False}
+    assert cl.links[P + "initial-climb"] == {"check": {"key": "fcu_alt", "eq_ref": "clr.a"}, "verified": True}
     exp = {"clr.a": "FL100", "fld.runway": "35R", "plan.sid": "TOSNU", "fld.ta": "5000", "clr.t": "2000"}
     res = cl.evaluate_phase("fmgs-performance-glareshield", {"squawk": "2000"}, expected=exp)
     rows = {i["id"]: i for s in res["subphases"] for i in s["items"]}
-    assert rows[P + "initial-climb"]["expected"] == "FL100" and rows[P + "initial-climb"]["status"] == "na"  # verified:false
+    assert rows[P + "initial-climb"]["expected"] == "FL100" and rows[P + "initial-climb"]["status"] == "na"  # fcu_alt non letto
     assert rows[P + "t-o-rwy"]["expected"] == "35R" and rows[P + "sid"]["expected"] == "TOSNU" and rows[P + "transition-altitude"]["expected"] == "5000"
     assert rows[P + "initial-climb"]["live"] == [["FCU altitude", "n/d"]] and rows[P + "squawk-code"]["expected"] == "2000"
-    assert rows[P + "squawk-code"]["status"] == "na" and rows[P + "squawk-code"]["kind"] == "unverified"  # verified:false e sorgente da provare
+    assert rows[P + "squawk-code"]["status"] == "ok"
     assert "expected" not in rows[P + "flight-director-pb"] and res["bad"] == 0
     empty = {i["id"]: i for s in cl.evaluate_phase("fmgs-performance-glareshield", {})["subphases"] for i in s["items"]}
     assert empty[P + "sid"]["expected"] == "" and empty[P + "sid"]["status"] == "none"
-    # con link verificato (come --test-links) l'esito esce dal confronto, ma la sorgente uncertain resta na
-    r = cl.evaluate_phase("fmgs-performance-glareshield", {"squawk": "7000"}, demo=True, expected=exp)
-    assert {i["id"]: i for s in r["subphases"] for i in s["items"]}[P + "squawk-code"]["status"] == "na"
+    r = cl.evaluate_phase("fmgs-performance-glareshield", {"squawk": "7000"}, expected=exp)
+    assert {i["id"]: i for s in r["subphases"] for i in s["items"]}[P + "squawk-code"]["status"] == "bad"
+    # V1/VR/V2, lampade e show (link non verificati: con demo=True l'esito esce dal confronto)
+    lab = {"v1": "140", "vr": "145", "v2": "0", "cstr1": "ON", "cstr2": "OFF", "fd1": "ON", "fd2": "ON", "flap": "1", "flex": "55"}
+    r = cl.evaluate_phase("fmgs-performance-glareshield", lab, demo=True, expected={"fld.v1": "140", "fld.vr": "145", "fld.v2": "150"})
+    rw = {i["id"]: i for s in r["subphases"] for i in s["items"]}
+    assert rw[P + "v1-vr-v2"]["status"] == "bad" and rw[P + "v1-vr-v2"]["expected"] == "140 / 145 / 150"
+    assert rw[P + "v1-vr-v2"]["live"] == [["V1", "140"], ["VR", "145"], ["V2", "0"]]
+    assert rw[P + "constraint-pb"]["status"] == "bad" and rw[P + "flight-director-pb"]["status"] == "ok"
+    for k in ("flex-toga", "t-o-flaps-conf-ths", "barometric-reference"):
+        assert rw[P + k]["status"] == "none" and rw[P + k]["show"] is True, k
+    assert rw[P + "flex-toga"]["live"] == [["Flex temp", "55"]] and rw[P + "t-o-flaps-conf-ths"]["live"] == [["Flaps", "1"]]
+    assert cl.evaluate_phase("fmgs-performance-glareshield", lab, expected={})["bad"] == 0  # non verificati: nessun rosso
+    emp = {i["id"]: i for s in cl.evaluate_phase("fmgs-performance-glareshield", {"v1": "0"}, demo=True, expected={})["subphases"] for i in s["items"]}
+    assert emp[P + "v1-vr-v2"]["status"] == "none" and emp[P + "v1-vr-v2"]["show"] is True and emp[P + "v1-vr-v2"]["expected"] == " / "*2
     # Initial climb: quota FCU contro clearance (demo = link verificato)
     def ic(lab, clr):
         r = cl.evaluate_phase("fmgs-performance-glareshield", {"fcu_alt": lab}, demo=True, expected={"clr.a": clr})

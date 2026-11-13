@@ -89,17 +89,31 @@ def test_expected_refs():
     assert ev(None, {"clr.t": "2000"})["status"] == "na" and ev(None, {"clr.t": "2000"})["kind"] == "unreadable"
     assert ev("2000", {"clr.t": "2000"}, verified=False) == {"status": "na", "kind": "unverified", "detail": "unverified"}
     assert ev("2100", {"clr.t": "2000"}, optional=True)["status"] == "opt"
-    # squawk: sorgente da provare dal vivo, mai verde ne' rosso
+    # squawk: verificato dal vivo (13/11), esito normale
     sq = {"key": "squawk", "eq_ref": "clr.t"}
-    for lab in ("2000", "7000", None):
-        r = evaluate(sq, {"squawk": lab}, expected={"clr.t": "2000"})
-        assert r["status"] == "na" and r["kind"] == "unverified"
+    assert evaluate(sq, {"squawk": "2000"}, expected={"clr.t": "2000"})["status"] == "ok"
+    assert evaluate(sq, {"squawk": "7000"}, expected={"clr.t": "2000"})["status"] == "bad"
+    assert evaluate(sq, {"squawk": None}, expected={"clr.t": "2000"})["kind"] == "unreadable"
     assert evaluate(sq, {"squawk": "2000"}, expected={})["status"] == "none"
     # solo-atteso: nessun esito, anche senza lettura
     assert evaluate({"show_ref": "clr.a"}, {}, expected={"clr.a": "FL100"}) == {"status": "none", "kind": "none", "detail": ""}
     assert evaluate({"show_ref": "clr.a"}, {}, verified=False)["status"] == "none"
     # eq e show esistenti invariati con expected passato
     assert evaluate({"key": "apu_master", "eq": "ON"}, {"apu_master": "OFF"}, expected={"clr.t": "1"})["status"] == "bad"
+
+
+def test_v_speeds_all_eq_ref():
+    c = {"all": [{"key": k, "eq_ref": "fld." + k} for k in ("v1", "vr", "v2")]}
+    exp = {"fld.v1": "140", "fld.vr": "145", "fld.v2": "150"}
+    ev = lambda lab, e: evaluate(c, lab, expected=e)
+    assert ev({"v1": "140", "vr": "145", "v2": "150"}, exp)["status"] == "ok"
+    r = ev({"v1": "140", "vr": "0", "v2": "150"}, exp)
+    assert r["status"] == "bad" and r["detail"] == "VR: expected 145, actual 0"
+    assert ev({"v1": "140", "vr": None, "v2": "150"}, exp)["kind"] == "unreadable"
+    assert ev({"v1": "0", "vr": "0", "v2": "0"}, {})["status"] == "none"  # briefing vuoto: solo NOW
+    assert ev({"v1": "0", "vr": "0", "v2": "0"}, {"fld.v1": "", "fld.vr": " ", "fld.v2": None})["status"] == "none"
+    assert ev({"v1": "140", "vr": "0", "v2": "0"}, {"fld.v1": "140"})["status"] == "ok"  # voce vuota saltata
+    assert evaluate(c, {}, verified=False, expected=exp)["kind"] == "unverified"
 
 
 def test_fcu_alt():
@@ -120,6 +134,7 @@ def test_fcu_alt():
 if __name__ == "__main__":
     test_expected_refs()
     test_fcu_alt()
+    test_v_speeds_all_eq_ref()
     test_none_and_single()
     test_na_cases()
     test_eq_list()

@@ -209,6 +209,9 @@ class State:
         """Valori attesi per i riferimenti dei link (clr.*, fld.*, plan.*); chiamare con il lock preso."""
         e = {f"clr.{k}": v for k, v in self.clearance.items()}
         e["fld.runway"], e["fld.ta"] = self.fields.get("runway", ""), self.fields.get("ta", "")
+        for k in ("v1", "vr", "v2"):
+            v = self.fields.get(k)
+            e[f"fld.{k}"] = "" if v in (None, "") else (str(int(v)) if isinstance(v, float) and v == int(v) else str(v))
         e["plan.sid"] = str((self.plan or {}).get("sid") or "")
         return e
 

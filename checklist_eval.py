@@ -1,7 +1,7 @@
 """Confronto puro tra uno stato atteso della checklist e le etichette lette dal cockpit (sola lettura, nessun I/O).
 
 check: {"key": k, "eq": "ON" | ["ON", "OFF"]}, {"all": [check, ...]} oppure {"show": [chiavi]} (solo mostrare: nessun esito).
-Valore atteso da un riferimento chiuso (REFS): {"key": k, "eq_ref": "clr.t"} (solo kind senza mappa di etichette, mai dentro "all")
+Valore atteso da un riferimento chiuso (REFS): {"key": k, "eq_ref": "clr.t"} (solo kind senza mappa di etichette; ammesso dentro "all", dove i riferimenti con atteso vuoto sono saltati)
 e {"show_ref": "clr.a"} (solo atteso, nessun esito). expected: {riferimento: testo}; atteso vuoto => "none" (si mostra solo NOW).
 optional (campo del link): se la voce non e' conforme l'esito e' "opt" (neutro, non conta come bad) invece di "bad".
 labels: {chiave: etichetta pulita | None}.
@@ -16,7 +16,7 @@ import monitor as mon
 BY_KEY = {it.key: it for it in mon.ITEMS}
 UNVERIFIED = "unverified"
 UNREADABLE = "unreadable"
-REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "plan.sid")
+REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "fld.v1", "fld.vr", "fld.v2", "plan.sid")
 
 
 ALT_KEYS = ("fcu_alt",)  # voci in piedi: l'atteso puo' essere "5000", "7000 ft", "FL070", "FL 70"
@@ -56,6 +56,15 @@ def _res(status: str, detail: str = "", kind: str = "") -> dict:
     return {"status": status, "kind": kind or status, "detail": detail}
 
 
+def _want(expected, ref) -> str:
+    return str((expected or {}).get(ref) or "").strip()
+
+
+def _refs(check: dict) -> list:
+    """Riferimenti eq_ref di un check (singolo o composto)."""
+    return [c["eq_ref"] for c in (check.get("all") or [check]) if "eq_ref" in c]
+
+
 def _eq_list(eq) -> list:
     return [eq] if isinstance(eq, str) else list(eq)
 
@@ -87,7 +96,7 @@ def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: 
     {"show": [...]} => sempre "none" (si mostra solo il valore). optional=True: il "bad" diventa "opt"."""
     if not check or "show" in check or "show_ref" in check:
         return _res("none")
-    if "eq_ref" in check and not str((expected or {}).get(check["eq_ref"]) or "").strip():
+    if _refs(check) and not any(_want(expected, r) for r in _refs(check)):
         return _res("none")  # niente atteso: si mostra solo NOW
     res = _evaluate(check, labels, verified, expected)
     if optional and res["status"] == "bad":
@@ -100,7 +109,8 @@ def _evaluate(check: dict, labels: dict, verified: bool, expected: dict | None =
         return _res("na", UNVERIFIED, "unverified")
     if "all" not in check:
         return _single(check, labels, expected)
-    parts = [(sub, _single(sub, labels)) for sub in check["all"]]
+    subs = [sub for sub in check["all"] if "eq_ref" not in sub or _want(expected, sub["eq_ref"])]  # atteso vuoto: voce saltata
+    parts = [(sub, _single(sub, labels, expected)) for sub in subs]
     bad = [f"{BY_KEY[s['key']].name}: {r['detail']}" for s, r in parts if r["status"] == "bad"]
     if bad:
         return _res("bad", "; ".join(bad), "mismatch")
