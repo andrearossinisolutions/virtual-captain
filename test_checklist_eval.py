@@ -102,6 +102,22 @@ def test_expected_refs():
     assert evaluate({"key": "apu_master", "eq": "ON"}, {"apu_master": "OFF"}, expected={"clr.t": "1"})["status"] == "bad"
 
 
+def test_flap_eq_ref():
+    from checklist_eval import norm_label
+    for t, w in (("1", "1"), ("CONF 1", "1"), ("flap 1", "1"), ("1+F", "1"), ("conf 2", "2"), ("3", "3"), ("FULL", "FULL"), ("4", "FULL"), ("full", "FULL"), ("0", "UP"), ("UP", "UP")):
+        assert norm_label("flap", t) == w, t
+    for t in ("", "5", "x", "CONF"):
+        assert norm_label("flap", t) is None, t
+    c = {"key": "flap", "eq_ref": "fld.flap"}
+    ev = lambda lab, w: evaluate(c, {"flap": lab}, expected={"fld.flap": w})
+    assert ev("1", "CONF 1")["status"] == "ok" and ev("1", "1+F")["status"] == "ok" and ev("FULL", "4")["status"] == "ok"
+    r = ev("2", "1+F")
+    assert r["status"] == "bad" and r["detail"] == "expected 1, actual 2"
+    for w in ("", "  ", "9", "boh", None):
+        assert ev("2", w)["status"] == "none"
+    assert ev(None, "1")["kind"] == "unreadable"
+
+
 def test_v_speeds_all_eq_ref():
     c = {"all": [{"key": k, "eq_ref": "fld." + k} for k in ("v1", "vr", "v2")]}
     exp = {"fld.v1": "140", "fld.vr": "145", "fld.v2": "150"}
@@ -154,6 +170,7 @@ def test_qnh():
 if __name__ == "__main__":
     test_expected_refs()
     test_fcu_alt()
+    test_flap_eq_ref()
     test_v_speeds_all_eq_ref()
     test_none_and_single()
     test_na_cases()

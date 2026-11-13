@@ -9,6 +9,7 @@ from collections import deque
 from datetime import datetime
 
 import checklist as cl
+import checklist_eval as ceval
 import monitor as mon
 from brain import Briefing
 from aao import AAO, normalize_url
@@ -216,6 +217,7 @@ class State:
         for k in ("v1", "vr", "v2"):
             v = self.fields.get(k)
             e[f"fld.{k}"] = "" if v in (None, "") else (str(int(v)) if isinstance(v, float) and v == int(v) else str(v))
+        e["fld.flap"] = ceval.norm_label("flap", self.fields.get("flap") or "") or ""  # non riconosciuto -> vuoto (solo NOW)
         for ref, k in (("wx.qnh_dep", "origin"), ("wx.qnh_dest", "destination")):
             q = self.weather.get(self.fields.get(k, ""))
             e[ref] = f"{q:.0f} hPa" if q is not None else ""

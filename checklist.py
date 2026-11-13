@@ -42,7 +42,9 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
     if "eq_ref" in check:
         if set(check) != {"key", "eq_ref"} or check["eq_ref"] not in REFS:
             raise ValueError(f"{where}: 'eq_ref' non valido")
-        if mon.MAPS[BY_KEY[key].kind]:
+        if (check["eq_ref"] == "fld.flap") != (BY_KEY[key].kind == "flap"):  # fld.flap solo sui flap, e i flap solo con fld.flap
+            raise ValueError(f"{where}: eq_ref {check['eq_ref']} non ammesso su {key}")
+        if mon.MAPS[BY_KEY[key].kind] and BY_KEY[key].kind != "flap":
             raise ValueError(f"{where}: eq_ref non ammesso su {key} (ha una mappa di etichette)")
         return
     eq = check.get("eq")

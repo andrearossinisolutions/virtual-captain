@@ -1,7 +1,7 @@
 """Confronto puro tra uno stato atteso della checklist e le etichette lette dal cockpit (sola lettura, nessun I/O).
 
 check: {"key": k, "eq": "ON" | ["ON", "OFF"]}, {"all": [check, ...]} oppure {"show": [chiavi]} (solo mostrare: nessun esito).
-Valore atteso da un riferimento chiuso (REFS): {"key": k, "eq_ref": "clr.t"} (solo kind senza mappa di etichette; ammesso dentro "all", dove i riferimenti con atteso vuoto sono saltati)
+Valore atteso da un riferimento chiuso (REFS): {"key": k, "eq_ref": "clr.t"} (kind con mappa di etichette ammessi solo se l'atteso normalizzato e' un'etichetta valida, altrimenti "none"; ammesso dentro "all", dove i riferimenti con atteso vuoto sono saltati)
 e {"show_ref": "clr.a"} (solo atteso, nessun esito). expected: {riferimento: testo}; atteso vuoto => "none" (si mostra solo NOW).
 optional (campo del link): se la voce non e' conforme l'esito e' "opt" (neutro, non conta come bad) invece di "bad".
 labels: {chiave: etichetta pulita | None}.
@@ -16,7 +16,7 @@ import monitor as mon
 BY_KEY = {it.key: it for it in mon.ITEMS}
 UNVERIFIED = "unverified"
 UNREADABLE = "unreadable"
-REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "fld.v1", "fld.vr", "fld.v2", "plan.sid", "wx.qnh_dep", "wx.qnh_dest")
+REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "fld.v1", "fld.vr", "fld.v2", "fld.flap", "plan.sid", "wx.qnh_dep", "wx.qnh_dest")
 QNH_TOL = 1.0  # hPa
 
 
@@ -52,6 +52,20 @@ def _norm(kind: str, text, key: str = "") -> str:
     return s.upper()
 
 
+_FLAP = re.compile(r"^(?:CONF(?:IG(?:URATION)?)?|FLAPS?)?\s*(\d)(?:\s*\+\s*F)?$")
+
+
+def norm_label(kind: str, text) -> str | None:
+    """Atteso -> etichetta valida della mappa del kind (es. flap: '1', 'CONF 1', 'flap 1', '1+F' -> '1'; '0' -> UP; '4' -> FULL), altrimenti None."""
+    s = re.sub(r"\s+", " ", str(text).strip().upper())
+    valid = set(mon.MAPS.get(kind, {}).values())
+    if kind == "flap":
+        m = _FLAP.match(s)
+        if m:
+            s = {"0": "UP", "4": "FULL"}.get(m.group(1), m.group(1))
+    return s if s in valid else None
+
+
 def _res(status: str, detail: str = "", kind: str = "") -> dict:
     """kind e' il motivo leggibile dal codice (la UI non dipende dal testo di detail)."""
     return {"status": status, "kind": kind or status, "detail": detail}
@@ -59,6 +73,15 @@ def _res(status: str, detail: str = "", kind: str = "") -> dict:
 
 def _want(expected, ref) -> str:
     return str((expected or {}).get(ref) or "").strip()
+
+
+def _active(sub: dict, expected) -> bool:
+    """Riferimento eq_ref con un atteso utilizzabile (non vuoto e, per i kind a mappa, un'etichetta valida)."""
+    want = _want(expected, sub["eq_ref"])
+    item = BY_KEY.get(sub.get("key"))
+    if want and item is not None and mon.MAPS[item.kind]:
+        return norm_label(item.kind, want) is not None
+    return bool(want)
 
 
 def _num(v):
@@ -119,6 +142,8 @@ def _single(check: dict, labels: dict, expected: dict | None = None) -> dict:
         want = str((expected or {}).get(check["eq_ref"]) or "").strip()
         if cur is None:
             return _res("na", UNREADABLE, "unreadable")
+        if mon.MAPS[item.kind]:
+            want = norm_label(item.kind, want) or want
         if _norm(item.kind, cur, item.key) == _norm(item.kind, want, item.key):
             return _res("ok")
         return _res("bad", f"expected {want}, actual {cur}", "mismatch")
@@ -135,7 +160,10 @@ def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: 
     {"show": [...]} => sempre "none" (si mostra solo il valore). optional=True: il "bad" diventa "opt"."""
     if not check or "show" in check or "show_ref" in check:
         return _res("none")
-    if _refs(check) and not any(_want(expected, r) for r in _refs(check)):
+    if "qnh" in check:
+        if not _want(expected, check["qnh"]):
+            return _res("none")
+    elif _refs(check) and not any(_active(c, expected) for c in (check.get("all") or [check]) if "eq_ref" in c):
         return _res("none")  # niente atteso: si mostra solo NOW
     res = _evaluate(check, labels, verified, expected)
     if optional and res["status"] == "bad":
@@ -150,7 +178,7 @@ def _evaluate(check: dict, labels: dict, verified: bool, expected: dict | None =
         return _qnh_single(check["qnh"], labels, expected)
     if "all" not in check:
         return _single(check, labels, expected)
-    subs = [sub for sub in check["all"] if "eq_ref" not in sub or _want(expected, sub["eq_ref"])]  # atteso vuoto: voce saltata
+    subs = [sub for sub in check["all"] if "eq_ref" not in sub or _active(sub, expected)]  # atteso vuoto: voce saltata
     parts = [(sub, _single(sub, labels, expected)) for sub in subs]
     bad = [f"{BY_KEY[s['key']].name}: {r['detail']}" for s, r in parts if r["status"] == "bad"]
     if bad:

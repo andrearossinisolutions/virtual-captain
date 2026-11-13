@@ -34,8 +34,9 @@ def test_files_valid():
             assert l["verified"] is bool(v & verified) and (v <= verified or not l["verified"]), k
     assert [k for k, l in cl.links.items() if l["verified"] and not k.startswith("preliminary-cockpit-prep.")
             and "apu_bleed" not in json.dumps(l["check"]) and "spoilers" not in json.dumps(l["check"])] == [
-        "before-start.atc-transponder", "ils-approach.flaps-full", "non-precision-approach.flaps-full",
-        "fmgs-performance-glareshield.squawk-code", "fmgs-performance-glareshield.initial-climb"]
+        "before-start.atc-transponder", "after-engine-startup.flap-levers", "taxi-checklist.cleared-altitude-on-fcu",
+        "ils-approach.flaps-full", "non-precision-approach.flaps-full",
+        "fmgs-performance-glareshield.squawk-code", "fmgs-performance-glareshield.initial-climb", "taxi-checklist.t-o-data-flaps-lever"]
     assert any(i["id"] == "engine-startup.engine-idle-parameters_2" for i in items)
 
 
@@ -482,7 +483,37 @@ def test_qnh_links():
     assert State(pathlib.Path(tempfile.mkdtemp()) / "d.json")._expected()["wx.qnh_dep"] == ""
 
 
+def test_flap_and_taxi_alt_links():
+    cl = C.load()
+    assert cl.links["after-engine-startup.flap-levers"] == {"check": {"key": "flap", "eq_ref": "fld.flap"}, "verified": True}
+    assert cl.links["taxi-checklist.cleared-altitude-on-fcu"] == {"check": {"key": "fcu_alt", "eq_ref": "clr.a"}, "verified": True}
+    T = "taxi-checklist."
+    assert cl.links[T + "t-o-data-runway"] == {"check": {"show_ref": "fld.runway"}, "verified": False}
+    assert cl.links[T + "t-o-data-flaps-lever"] == cl.links["after-engine-startup.flap-levers"]
+    assert cl.links[T + "t-o-data-v1-vr-v2"] == cl.links["fmgs-performance-glareshield.v1-vr-v2"]
+    assert cl.links[T + "flight-director"] == cl.links["fmgs-performance-glareshield.flight-director-pb"]
+    assert cl.links[T + "t-o-data-flx-to-temperature"] == {"check": {"show": ["flex"]}, "verified": False}
+    assert cl.links[T + "autobrake-pb"] == {"check": {"key": "autobrake_max", "eq": "ON"}, "verified": False}
+    from monitor import ITEMS
+    ab = {i.key: i for i in ITEMS}["autobrake_max"]
+    assert ab.lvar == "I_MIP_AUTOBRAKE_MAX_L" and ab.kind == "onoff" and ab.group == "Autobrake"
+    for k in ("takeoff-briefing", "takeoff-config-pb", "ecam-takeoff-memo"):
+        assert T + k not in cl.links
+    r = cl.evaluate_phase("after-engine-startup", {"flap": "2"}, expected={"fld.flap": "2"})
+    row = {i["id"]: i for s in r["subphases"] for i in s["items"]}["after-engine-startup.flap-levers"]
+    assert row["status"] == "ok" and row["expected"] == "2"
+    r = cl.evaluate_phase("taxi-checklist", {"fcu_alt": "5000"}, expected={"clr.a": "FL050"})
+    assert {i["id"]: i for s in r["subphases"] for i in s["items"]}["taxi-checklist.cleared-altitude-on-fcu"]["status"] == "ok"
+    for bad in ({"check": {"key": "flap", "eq_ref": "clr.t"}}, {"check": {"key": "apu_master", "eq_ref": "fld.flap"}}):
+        try:
+            C._check_keys(bad["check"], "x")
+            assert False
+        except ValueError:
+            pass
+
+
 if __name__ == "__main__":
+    test_flap_and_taxi_alt_links()
     test_files_valid()
     test_links_reference_real_things()
     test_new_links_show_optional()
@@ -513,3 +544,4 @@ def test_cabin_fuel_links():
         assert {c["eq"] for c in cl.links[k]["check"]["all"]} == {eq} and cl.links[k]["verified"] is False
     by = {i.key: i for i in mon.ITEMS}
     assert mon.label(by["smoking"], 1) == "AUTO (1)" and mon.clean_label(by["emer_lt"], 1) == "ARM"
+
