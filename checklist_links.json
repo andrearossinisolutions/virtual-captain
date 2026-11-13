@@ -938,5 +938,49 @@
    "eq": "ON"
   },
   "verified": false
+ },
+ "before-takeoff.tcas-mode-selector": {
+  "check": {
+   "key": "tcas",
+   "eq": [
+    "TA",
+    "TA/RA"
+   ]
+  },
+  "verified": false
+ },
+ "after-takeoff.tcas-mode-selector": {
+  "check": {
+   "key": "tcas",
+   "eq": "TA/RA"
+  },
+  "verified": false
+ },
+ "ils-approach.tcas": {
+  "check": {
+   "key": "tcas",
+   "eq": [
+    "TA",
+    "TA/RA"
+   ]
+  },
+  "verified": false
+ },
+ "non-precision-approach.tcas": {
+  "check": {
+   "key": "tcas",
+   "eq": [
+    "TA",
+    "TA/RA"
+   ]
+  },
+  "verified": false
+ },
+ "after-landing.tcas-mode-selector": {
+  "check": {
+   "key": "tcas",
+   "eq": "STBY"
+  },
+  "verified": false
  }
 }

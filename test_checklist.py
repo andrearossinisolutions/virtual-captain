@@ -533,6 +533,18 @@ if __name__ == "__main__":
     print("ok")
 
 
+def test_tcas_links():
+    cl = C.load()
+    for k, eq in (("before-takeoff.tcas-mode-selector", ["TA", "TA/RA"]), ("after-takeoff.tcas-mode-selector", "TA/RA"),
+                  ("ils-approach.tcas", ["TA", "TA/RA"]), ("non-precision-approach.tcas", ["TA", "TA/RA"]),
+                  ("after-landing.tcas-mode-selector", "STBY")):
+        assert cl.links[k] == {"check": {"key": "tcas", "eq": eq}, "verified": False}, k
+    by = {i.key: i for i in mon.ITEMS}
+    assert by["tcas"].lvar == "S_XPDR_MODE" and by["tcas"].group == "Transponder"
+    assert mon.label(by["tcas"], 2) == "TA/RA (2)" and mon.clean_label(by["tcas"], 1) == "TA"
+    assert mon.label(by["xpdr_operation"], 3) == "3" and by["xpdr_atc"].lvar == "S_XPDR_ATC"
+
+
 def test_cabin_fuel_links():
     cl = C.load()
     for k, key, eq in (("cockpit-preparation.no-smoking-elec-dev-signs-sw", "smoking", "AUTO"),
@@ -545,3 +557,9 @@ def test_cabin_fuel_links():
     by = {i.key: i for i in mon.ITEMS}
     assert mon.label(by["smoking"], 1) == "AUTO (1)" and mon.clean_label(by["emer_lt"], 1) == "ARM"
 
+
+
+if __name__ == "__main__":
+    test_tcas_links()
+    test_cabin_fuel_links()
+    print("ok tcas/cabin")

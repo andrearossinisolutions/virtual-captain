@@ -24,9 +24,10 @@ MAPS = {
     "irmode": {0: "OFF", 1: "NAV", 2: "ATT"},  # provvisoria: da verificare dal vivo col grezzo
     "signs": {0: "OFF", 1: "AUTO", 2: "ON"},  # provvisoria: da verificare dal vivo col grezzo
     "emerlt": {0: "OFF", 1: "ARM", 2: "ON"},  # provvisoria: da verificare dal vivo col grezzo
+    "tcas": {0: "STBY", 1: "TA", 2: "TA/RA"},  # provvisoria (ipotesi): da verificare dal vivo col grezzo
     "numeric": {},  # nessuna mappa: si mostra solo il valore (nessun esito)
 }
-AMBIGUOUS = {"landing", "nose", "flap", "speedbrake", "engmode", "wxsys", "irmode", "signs", "emerlt"}  # lo 0 non e' "spento": mostra anche il grezzo
+AMBIGUOUS = {"landing", "nose", "flap", "speedbrake", "engmode", "wxsys", "irmode", "signs", "emerlt", "tcas"}  # lo 0 non e' "spento": mostra anche il grezzo
 
 
 @dataclass(frozen=True)
@@ -85,6 +86,9 @@ ITEMS: list[Item] = [
     Item("wx_gain", "Weather radar", "WX Gain knob", "numeric", {"Prep": "AUTO/CAL"}, None, "A_WR_GAIN"),
     Item("wx_mode", "Weather radar", "WX Mode", "numeric", {"Prep": "as required"}, None, "S_WR_MODE"),
     Item("squawk", "Transponder", "Squawk code", "numeric", {"Before start": "as cleared"}, None, "N_FREQ_XPDR_SELECTED"),  # verificata dal vivo 13/11
+    Item("tcas", "Transponder", "TCAS mode selector", "tcas", {"Before T/O": "TA or TA/RA", "After landing": "STBY"}, None, "S_XPDR_MODE"),  # valori 0/1/2 ipotizzati
+    Item("xpdr_operation", "Transponder", "XPDR operation (raw)", "numeric", {}, None, "S_XPDR_OPERATION"),  # solo grezzo, per capire la mappa
+    Item("xpdr_atc", "Transponder", "XPDR ATC (raw)", "numeric", {}, None, "S_XPDR_ATC"),  # solo grezzo, per capire la mappa
     Item("fcu_alt", "FCU", "FCU altitude", "numeric", {"Climb": "as cleared"}, None, "N_FCU_ALTITUDE"),  # piedi, verificata dal vivo 13/11
     # FMGS performance & glareshield (nodi, 0 = non inserita; lampade 0/1; da verificare dal vivo col grezzo)
     Item("v1", "FMGS performance", "V1", "numeric", {"Before start": "as briefing"}, None, "N_MISC_PERF_TO_V1"),
