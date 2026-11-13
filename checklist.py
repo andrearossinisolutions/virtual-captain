@@ -11,6 +11,7 @@ from checklist_eval import BY_KEY, REFS, _refs, evaluate, qnh_actual
 HERE = pathlib.Path(__file__).resolve().parent
 TYPES = ("action", "announce", "atc", "note", "craft")
 CRAFT_KEYS = ("c", "r", "a", "f", "t")
+INPUT_KEYS = ("runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap")  # campi di State.fields modificabili dalle voci
 
 
 def _check_keys(check: dict, where: str, inner: bool = False) -> None:
@@ -77,6 +78,19 @@ def _check_craft(it: dict) -> None:
             raise ValueError(f"{it['id']}: campo craft non valido")
 
 
+def _check_inputs(it: dict) -> None:
+    """Campi inline di una voce action (valori in State.fields): chiavi note, niente doppioni, etichetta obbligatoria."""
+    inputs = it["inputs"]
+    if it["type"] != "action" or not isinstance(inputs, list) or not inputs:
+        raise ValueError(f"{it['id']}: 'inputs' ammesso solo su voci action, lista non vuota")
+    keys = [f.get("k") for f in inputs if isinstance(f, dict)]
+    if len(keys) != len(inputs) or any(k not in INPUT_KEYS for k in keys) or len(keys) != len(set(keys)):
+        raise ValueError(f"{it['id']}: 'inputs' con chiavi non valide o duplicate")
+    for f in inputs:
+        if not isinstance(f.get("label"), str) or not f["label"] or not isinstance(f.get("plan", False), bool):
+            raise ValueError(f"{it['id']}: campo di 'inputs' non valido")
+
+
 def check_keys(check: dict) -> list:
     """Chiavi del monitor usate da un check (singolo o composto), in ordine e senza doppioni."""
     if "show" in check:
@@ -130,6 +144,8 @@ class Checklist:
                         raise ValueError(f"id duplicato: {it['id']}")
                     if it["type"] == "craft":
                         _check_craft(it)
+                    if "inputs" in it:
+                        _check_inputs(it)
                     items[it["id"]] = it
         for iid, link in links.items():
             if iid not in items:
@@ -189,6 +205,8 @@ class Checklist:
                     row["expected"] = " / ".join(str((expected or {}).get(r, "")) for r in refs) if len(refs) > 1 else (expected or {}).get(refs[0], "")  # la pagina scrive "Expected: <valore>" se non vuoto
                 if it["type"] == "craft":
                     row["fields"] = it["fields"]
+                if it.get("inputs"):
+                    row["inputs"] = it["inputs"]  # la pagina li scrive inline; i valori stanno in snapshot["fields"]
                 if raw is not None and link:
                     row["raw"] = raw_values(link["check"], raw)
                 if it.get("note"):

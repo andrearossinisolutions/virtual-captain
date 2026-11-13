@@ -9,7 +9,7 @@ import time
 import firewall
 import web
 from aao import AAO
-from brain import Brain, readout
+from brain import Brain, parse_dep, readout
 from speak import say, wait
 from state import State
 from weather import Weather, online_fetch
@@ -70,7 +70,7 @@ def main():
         print("⚠ Tailscale non trovato: pagina raggiungibile solo da questo PC. Avvia Tailscale o usa --host <IP>.")
     if "--no-firewall" not in sys.argv:
         firewall.ensure(port)
-    st = State(weather=Weather(fetch=(lambda icao: 1013.0 if icao == st.fields.get("origin") else 1009.0) if sim else online_fetch))
+    st = State(weather=Weather(fetch=(lambda icao: 1013.0 if icao == parse_dep(st.fields.get("origin"))[0] else 1009.0) if sim else online_fetch))
     st.cl_trust_links = "--test-links" in sys.argv  # solo prova: link valutati come verified + valori grezzi accanto alle voci
     st.cl_demo = sim  # solo in --sim: link della checklist trattati come verificati (resa dimostrativa)
     try:

@@ -5,6 +5,8 @@ import ssl
 import urllib.parse
 import urllib.request
 
+from brain import join_dep, parse_dep
+
 URL = "https://www.simbrief.com/api/xml.fetcher.php"
 
 
@@ -53,8 +55,9 @@ def _num(v):
 def to_briefing(ofp: dict) -> dict:
     """Estrae i campi utili; ciò che non c'è resta None (da inserire a mano)."""
     rwy = _g(ofp, "origin", "plan_rwy")
+    icao, prwy = parse_dep(f"{_g(ofp, 'origin', 'icao_code') or ''}/{rwy or ''}")
     out = {
-        "origin": _g(ofp, "origin", "icao_code"),
+        "origin": join_dep(icao, prwy) if icao else _g(ofp, "origin", "icao_code"),  # ICAO/RWY, es. LIMC/17R
         "destination": _g(ofp, "destination", "icao_code"),
         "runway": rwy,
         "dep_time": _utc_time(_g(ofp, "times", "sched_out")),

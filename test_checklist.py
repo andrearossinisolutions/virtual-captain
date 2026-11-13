@@ -200,8 +200,8 @@ def test_simplified_hides_empty_phases():
 
 def test_snapshot_uses_live_labels_and_demo():
     st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
-    st.set_cl_phase("before-start")
     st.set_phase("flying")
+    st.set_cl_phase("before-start")
     st.set_monitor({"pack1": 1, "pack2": 1, "beacon": 0})
     rows = {i["id"]: i for s in st.snapshot()["checklist"]["subphases"] for i in s["items"]}
     assert rows["before-start.packs-pb"]["status"] in ("ok", "bad")
@@ -214,8 +214,8 @@ def test_snapshot_uses_live_labels_and_demo():
 
 def test_trust_links_and_raw():
     st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
-    st.set_cl_phase("before-start")
     st.set_phase("flying")
+    st.set_cl_phase("before-start")
     st.set_monitor({"pack1": 1, "pack2": 1, "beacon": 0})
     snap = st.snapshot()
     assert snap["test_links"] is False
@@ -549,7 +549,60 @@ def test_thrust_levers_show():
     assert names[:2] == ["Thrust lever L detent", "Thrust lever R detent"] and len(names) == 6
 
 
+def test_inputs_items():
+    cl = C.load()
+    P = "fmgs-performance-glareshield."
+    want = {"t-o-rwy": ["runway"], "v1-vr-v2": ["v1", "vr", "v2"], "t-o-flaps-conf-ths": ["flap"], "transition-altitude": ["ta"],
+            "thrust-reduction-acc-altitude": ["thr_red_agl", "accel_agl"]}
+    for simplified in (False, True):  # anche nella checklist semplificata
+        rows = {i["id"]: i for s in cl.evaluate_phase("fmgs-performance-glareshield", {}, simplified=simplified)["subphases"] for i in s["items"]}
+        for k, keys in want.items():
+            assert [f["k"] for f in rows[P + k]["inputs"]] == keys, k
+        assert "inputs" not in rows[P + "sid"] and "inputs" not in rows[P + "flex-toga"]
+    assert [f.get("plan", False) for f in cl.evaluate_phase("fmgs-performance-glareshield", {})["subphases"][0]["items"][-1]["inputs"]] == [False, False]
+    # i link (NOW / Expected) restano sulle voci con campi inline
+    assert cl.links[P + "t-o-rwy"]["check"] == {"show_ref": "fld.runway"}
+    bad = [{"k": "bogus", "label": "x"}], [], [{"k": "ta", "label": ""}], [{"k": "ta", "label": "a"}, {"k": "ta", "label": "b"}], "x", [{"k": "ta", "label": "a", "plan": "y"}]
+    for b in bad:
+        data = json.loads(json.dumps(cl.data))
+        data["phases"][0]["subphases"][0]["items"][0]["inputs"] = b
+        try:
+            C.Checklist(data, {})
+            assert False, b
+        except ValueError:
+            pass
+    data = json.loads(json.dumps(cl.data))  # solo sulle voci action
+    it = next(i for p in data["phases"] for s in p["subphases"] for i in s["items"] if i["type"] == "note")
+    it["inputs"] = [{"k": "ta", "label": "TA"}]
+    try:
+        C.Checklist(data, {})
+        assert False
+    except ValueError:
+        pass
+
+
+def test_briefing_complete_restarts_checklist():
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    st.set_cl_phase("fmgs-performance-glareshield")
+    st.set_phase("flying")
+    assert st.cl_phase == st.cl.ids[0]
+    st.set_cl_phase("fmgs-performance-glareshield")
+    st.set_phase("flying")  # gia' in volo: non riparte
+    assert st.cl_phase == "fmgs-performance-glareshield"
+    st.set_phase("briefing")  # Back to briefing: non tocca la fase
+    assert st.cl_phase == "fmgs-performance-glareshield"
+    st.set_phase("flying")
+    assert st.cl_phase == st.cl.ids[0]
+    st.update({"checklist_mode": "simplified"})
+    st.set_phase("briefing")
+    st.set_cl_phase(st.cl_visible()[-1])
+    st.set_phase("flying")
+    assert st.cl_phase == st.cl_visible()[0]
+
+
 if __name__ == "__main__":
+    test_briefing_complete_restarts_checklist()
+    test_inputs_items()
     test_flap_and_taxi_alt_links()
     test_files_valid()
     test_links_reference_real_things()

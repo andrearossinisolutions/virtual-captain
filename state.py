@@ -12,16 +12,20 @@ import checklist as cl
 import checklist_eval as ceval
 import monitor as mon
 import thrust
-from brain import Briefing
+from brain import Briefing, join_dep, parse_dep
 from aao import AAO, normalize_url
 from simbrief import fetch_latest, to_briefing
 from weather import Weather
 
 CFG = pathlib.Path.home() / ".virtual-captain.json"
-FIELDS = [("origin", "Departure"), ("destination", "Arrival"), ("dep_time", "Departure time (UTC)"), ("runway", "Runway"),
-          ("ta", "TA (ft)"), ("thr_red_agl", "Thrust reduction (ft AGL)"), ("accel_agl", "Acceleration (ft AGL)"),
-          ("v1", "V1"), ("vr", "VR"), ("v2", "V2"), ("flap", "Flap")]
-FROM_PLAN = ["origin", "destination", "dep_time", "runway", "ta", "v1", "vr", "v2", "flap"]  # accel_agl è solo manuale
+# Campi del Briefing (pagina di configurazione). origin contiene "ICAO/RWY" (es. LIMC/17R): la pista si ricava da li'.
+FIELDS = [("origin", "Departure"), ("destination", "Arrival"), ("dep_time", "Departure time (UTC)")]
+# Dati di decollo: si inseriscono nelle voci della checklist (FMGS PERFORMANCE); stesse chiavi in `fields`, non nel Briefing.
+INFLIGHT = [("runway", "T/O runway"), ("ta", "Transition altitude (ft)"), ("thr_red_agl", "Thrust reduction (ft AGL)"),
+            ("accel_agl", "Acceleration (ft AGL)"), ("v1", "V1"), ("vr", "VR"), ("v2", "V2"), ("flap", "Flap")]
+ALL_FIELDS = FIELDS + INFLIGHT
+FROM_PLAN = ["origin", "destination", "dep_time", "ta", "v1", "vr", "v2", "flap"]  # runway deriva da origin; accel/thr_red solo manuali
+PLAN_RESET = ["runway", "ta", "v1", "vr", "v2", "flap"]  # tornano al piano con "Reset to plan"
 REMEMBERED = ["thr_red_agl", "accel_agl"]  # unico campo dei dati di volo che si ricorda
 MODES = ("normal", "training")
 CL_MODES = ("complete", "simplified")
@@ -64,7 +68,8 @@ class State:
         except (OSError, ValueError):
             cfg = {}
         # All'apertura solo ID SimBrief, modalità e accelerazione: il resto viene dal piano o si inserisce.
-        self.fields = {k: (str(cfg.get(k, "")) if k in REMEMBERED else "") for k, _ in FIELDS}
+        self.fields = {k: (str(cfg.get(k, "")) if k in REMEMBERED else "") for k, _ in ALL_FIELDS}
+        self.plan_fields: dict = {}  # valori del piano per i campi di PLAN_RESET (vuoto senza piano)
         self.simbrief = str(cfg.get("simbrief", ""))
         self.mode = _mode(cfg.get("mode"))
         self.checklist_mode = cfg.get("checklist_mode") if cfg.get("checklist_mode") in CL_MODES else "complete"
@@ -95,9 +100,15 @@ class State:
     # -- modifiche dalla pagina --
     def update(self, data: dict):
         with self.lock:
-            for k, _ in FIELDS:
-                if k in data:
+            for k, _ in ALL_FIELDS:
+                if k in data and k not in ("origin", "runway"):
                     self.fields[k] = str(data[k]).strip()
+            if "origin" in data:
+                self._set_origin(str(data["origin"]))
+            if "runway" in data and "origin" not in data:
+                self._set_runway(str(data["runway"]))
+            if isinstance(data.get("reset"), list):
+                self.reset_to_plan([k for k in data["reset"] if k in PLAN_RESET])
             if "simbrief" in data:
                 self.simbrief = str(data["simbrief"]).strip()
             if data.get("mode") in MODES:
@@ -109,6 +120,30 @@ class State:
             if data.get("aao_url") is not None:
                 self.aao_url = normalize_url(str(data["aao_url"]).strip() or None)
             self._save()
+
+    def _set_origin(self, text: str) -> None:
+        """Departure scritto come "ICAO/RWY": la pista (se valida) diventa il T/O runway."""
+        text = text.strip().upper()
+        self.fields["origin"] = text
+        self.fields["runway"] = parse_dep(text)[1]
+
+    def _set_runway(self, text: str) -> None:
+        """T/O runway dalla checklist: aggiorna la pista dentro Departure. Vuoto = pista tolta; non valida = ignorata."""
+        rwy = text.strip().upper()
+        if rwy and not parse_dep("AAAA/" + rwy)[1]:
+            return
+        icao = parse_dep(self.fields["origin"])[0]
+        self.fields["origin"] = join_dep(icao, rwy) if (icao or rwy) else ""
+        self.fields["runway"] = rwy
+
+    def reset_to_plan(self, keys: list) -> None:
+        """Riporta ai valori del piano (vuoti se il piano non li ha) i campi indicati (chiamare con il lock preso)."""
+        for k in keys:
+            v = self.plan_fields.get(k, "")
+            if k == "runway":
+                self._set_runway(v)
+            else:
+                self.fields[k] = v
 
     def set_clearance(self, data: dict) -> None:
         """Aggiorna i campi CRAFT presenti in data (chiavi sconosciute ignorate). Valore non valido => ValueError, nulla cambia."""
@@ -145,6 +180,9 @@ class State:
     def set_phase(self, phase: str):
         if phase in ("briefing", "flying"):
             with self.lock:
+                if phase == "flying" and self.phase != "flying":
+                    self.cl_phase = self.cl_visible()[0]  # "Briefing complete": la checklist riparte dalla prima fase
+                    self._save()
                 self.phase = phase
                 if phase == "briefing":
                     self.reset_clearance()  # ritorno in briefing: CRAFT riparte dal piano
@@ -313,16 +351,23 @@ class State:
         data = to_briefing(fetch_latest(self.simbrief))
         with self.lock:
             missing = []
+            icao, rwy = parse_dep(data.get("origin"))
+            rwy = rwy or parse_dep("AAAA/" + str(data.get("runway") or ""))[1]
+            data = {**data, "origin": join_dep(icao, rwy) if icao else data.get("origin")}
             for k in FROM_PLAN:
                 v = data.get(k)
                 self.fields[k] = "" if v is None else str(v)
                 if v is None:
-                    missing.append(dict(FIELDS)[k])
+                    missing.append(dict(ALL_FIELDS)[k])
+            self.fields["runway"] = rwy
+            if not rwy:
+                missing.append(dict(ALL_FIELDS)["runway"])
+            self.plan_fields = {k: self.fields[k] for k in PLAN_RESET}
             self.plan = data.get("plan") or {}
-            self.weather.seed(data.get("origin"), self.plan.get("orig_metar"))
+            self.weather.seed(icao, self.plan.get("orig_metar"))
             self.weather.seed(data.get("destination"), self.plan.get("dest_metar"))
             self.reset_clearance()
-            self.info = (f"{data['origin']} → {data['destination']}  (generated: {_when(data['generated'])})"
+            self.info = (f"{icao or data['origin']} → {data['destination']}  (generated: {_when(data['generated'])})"
                          + (f" — not in plan, enter manually: {', '.join(missing)}" if missing else ""))
             self.rev += 1
             self._save()
@@ -347,7 +392,7 @@ class State:
             e[f"fld.{k}"] = "" if v in (None, "") else (str(int(v)) if isinstance(v, float) and v == int(v) else str(v))
         e["fld.flap"] = ceval.norm_label("flap", self.fields.get("flap") or "") or ""  # non riconosciuto -> vuoto (solo NOW)
         for ref, k in (("wx.qnh_dep", "origin"), ("wx.qnh_dest", "destination")):
-            q = self.weather.get(self.fields.get(k, ""))
+            q = self.weather.get(parse_dep(self.fields.get(k, ""))[0])
             e[ref] = f"{q:.0f} hPa" if q is not None else ""
         e["cal.thrust"] = "1" if self.thrust_cal else ""  # vuoto: i link {"detent"} mostrano solo NOW
         e["plan.sid"] = str((self.plan or {}).get("sid") or "")
@@ -355,15 +400,14 @@ class State:
 
     # -- letture --
     def briefing(self) -> Briefing:
-        def num(k, d):
+        def num(k):  # vuoto o non numerico = dato non noto (None): il capitano non lo annuncia mai
             try:
                 return int(self.fields[k])
             except ValueError:
-                return d
+                return None
         with self.lock:
-            return Briefing(ta=num("ta", 5000), thr_red_agl=num("thr_red_agl", 1500),
-                            accel_agl=num("accel_agl", 1500), mode=self.mode,
-                            v1=num("v1", None), vr=num("vr", None))
+            return Briefing(ta=num("ta"), thr_red_agl=num("thr_red_agl"), accel_agl=num("accel_agl"), mode=self.mode,
+                            v1=num("v1"), vr=num("vr"))
 
     def add_log(self, text: str):
         with self.lock:

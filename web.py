@@ -51,7 +51,7 @@ button:disabled{opacity:.5}#info{color:var(--mut);font-size:15px;margin:10px 0 0
 @media (min-width:900px){
 main.fv{max-width:none;padding:12px 16px}
 .cl .cli{display:grid;grid-template-columns:1.8em minmax(0,1fr) auto;column-gap:10px;break-inside:avoid}.cl .cli.wl{grid-template-columns:5.2em minmax(0,1fr) auto}.cl .cli .rw{grid-column:2}.cl .cli .now.nv{color:var(--mut)}.cl .cli .now{grid-column:3;text-align:right;font-size:14px;color:var(--bad);white-space:nowrap}
-.cl .cli .exp{grid-column:2/4}
+.cl .cli .exp,.cl .cli .inp{grid-column:2/4}
 .cl .cli .tx{display:contents}.cl .cli .ic{grid-column:1}.cl .cli .e{grid-column:2}
 .cl .cli .a{grid-column:3;text-align:right;max-width:16em}.cl .cli .d{grid-column:2/4;margin-top:0;font-size:14px}
 #clbody{columns:420px 2;column-gap:24px}.cl h3{break-after:avoid;margin-top:12px}
@@ -87,6 +87,9 @@ main.fv{max-width:none;padding:12px 16px}
 .craft label{display:block;font-size:11px;color:var(--mut);line-height:1.2}
 .craft input,.craft textarea{width:100%;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--fg);scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}
 .craft textarea{font:16px/1.3 ui-monospace,monospace;text-transform:uppercase;min-height:3.6em;resize:vertical}
+.inp{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:flex-end;margin-top:6px}.inp .f{flex:1 1 6.5em;max-width:11em}.inp label{font-size:11px;color:var(--mut);line-height:1.2;margin-bottom:2px}
+.inp input{width:100%;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:#0c131b;color:var(--fg);scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}
+.inp button{padding:4px 10px;font-size:13px}
 .craft .cb{margin-top:6px}.craft .cb button{padding:4px 10px;font-size:13px}
 #clnextbtn{margin-top:14px}
 #thrtab{border-collapse:collapse;font:13px ui-monospace,monospace;width:100%}#thrtab th,#thrtab td{border-bottom:1px solid var(--bd);padding:3px 6px;text-align:right;white-space:nowrap}#thrtab th:first-child,#thrtab td:first-child{text-align:left}#thrtab .lv{font-weight:700}#thrtab .gd td:first-child{color:var(--fg)}
@@ -155,7 +158,7 @@ const $=id=>document.getElementById(id);let lastRev=-1,spN=null,spUntil=0,spExp=
 async function api(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
   if(!r.ok){const t=await r.text();throw new Error(t||r.status)}return r.json()}
 function build(s){const g=$("grid");g.innerHTML="";$("apt").innerHTML="";for(const [k,l] of s.labels){const d=document.createElement("div");
-  d.innerHTML=`<label>${l}</label><input data-k="${k}" inputmode="${["origin","destination","dep_time","runway","flap"].includes(k)?"text":"numeric"}" autocomplete="off" enterkeyhint="next">`;(k==="origin"||k==="destination"||k==="dep_time"?$("apt"):g).appendChild(d);
+  d.innerHTML=`<label>${l}</label><input data-k="${k}" inputmode="${["origin","destination","dep_time"].includes(k)?"text":"numeric"}" autocomplete="off" enterkeyhint="next"${k==="origin"?' placeholder="LIMC/17R" autocapitalize="characters"':""}>`;(k==="origin"||k==="destination"||k==="dep_time"?$("apt"):g).appendChild(d);
   if(k==="dep_time"){const e=document.createElement("div");e.innerHTML='<label>Local time</label><input id="deploc" disabled>';$("apt").appendChild(e)}}
   $("mode").innerHTML=s.modes.map(m=>`<option value="${m}">${m[0].toUpperCase()+m.slice(1)}</option>`).join("");
   $("clmode").innerHTML=s.cl_modes.map(m=>`<option value="${m}">${m[0].toUpperCase()+m.slice(1)}</option>`).join("");
@@ -204,7 +207,7 @@ function planHtml(p,open){if(!p||!(p.route||p.waypoints&&p.waypoints.length))ret
 function plans(s){const k=JSON.stringify(s.plan);if(k===planKey)return;planKey=k;for(const [id,open] of [["plancfg",false],["planflt",false]]){const el=$(id);const keep=el.querySelector("details")?.open;const b=planHtml(s.plan,keep||open);el.innerHTML="";if(b)el.appendChild(b)}}
 function chips(s){const f=s.fields,c=$("chips"),k=JSON.stringify([f,s.mode]);if(k===chipsKey)return;chipsKey=k;c.innerHTML="";
   const add=(k,v)=>{if(v){const d=document.createElement("span");d.className="chip";d.innerHTML=`<b>${k}</b>`;d.append(v);c.appendChild(d)}};
-  add("RWY",[f.origin,f.runway].filter(Boolean).join(" "));add("TA",f.ta&&f.ta+" ft");add("V1",f.v1);add("VR",f.vr);add("V2",f.v2);add("FLAP",f.flap);add("MODE",s.mode[0].toUpperCase()+s.mode.slice(1))}
+  add("DEP",f.origin);add("MODE",s.mode[0].toUpperCase()+s.mode.slice(1))}
 function cockpit(s){const k=JSON.stringify(s.monitor);if(k===csKey)return;csKey=k;const b=$("csbody");b.textContent="";const m=s.monitor||[];
   if(!m.length){const p=document.createElement("div");p.className="meta";p.textContent="No data yet";b.appendChild(p);return}
   const mk=(c,t)=>{const e=document.createElement("div");e.className=c;e.textContent=t;return e};
@@ -244,6 +247,20 @@ function craftNode(it){if(craftEl)return craftEl;
   b.appendChild(rb);el.appendChild(b);craftEl=el;return el}
 function syncCraft(c,force){if(c&&!sqkEdit){sqkVal=c.t||"";sqkShow()}if(!craftEl||!c||(clrTimer&&!force))return;
   craftEl.querySelectorAll("[data-c]").forEach(i=>{const v=c[i.dataset.c]||"";if(i.value!==v&&(force||document.activeElement!==i))i.value=v})}
+let inpDirty={},inpTimer=null;
+function inpSend(){clearTimeout(inpTimer);inpTimer=null;const o=inpDirty;inpDirty={};if(Object.keys(o).length)api("/api/fields",o).then(s=>{lastRev=s.rev}).catch(()=>{})}
+function inputsNode(it){const el=document.createElement("div");el.className="inp";
+  for(const f of it.inputs){const d=document.createElement("div");d.className="f";const lb=document.createElement("label");lb.textContent=f.label;const i=document.createElement("input");i.dataset.f=f.k;
+    i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
+    const txt=f.k==="runway"||f.k==="flap";i.inputMode=txt?"text":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");
+    i.oninput=()=>{if(f.k==="runway")i.value=i.value.toUpperCase();inpDirty[f.k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400)};
+    i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();i.blur()}};i.onblur=inpSend;
+    d.appendChild(lb);d.appendChild(i);el.appendChild(d)}
+  const ks=it.inputs.filter(f=>f.plan).map(f=>f.k);
+  if(ks.length){const b=document.createElement("button");b.className="ghost";b.textContent="Reset to plan";
+    b.onclick=async()=>{clearTimeout(inpTimer);inpTimer=null;ks.forEach(k=>delete inpDirty[k]);try{const s=await api("/api/fields",{reset:ks});lastRev=s.rev;syncInputs(s,true)}catch(e){}};el.appendChild(b)}
+  return el}
+function syncInputs(s,force){document.querySelectorAll("#clbody [data-f]").forEach(i=>{const k=i.dataset.f,v=k in inpDirty?inpDirty[k]:(s.fields[k]||"");if(i.value!==v&&(force||document.activeElement!==i))i.value=v})}
 function clGo(body){api("/api/checklist-phase",body).then(apply).catch(()=>{})}
 function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!c)return;
   const idx=ph.findIndex(p=>p.id===cur),strip=$("clstrip"),key=ph.length+"|"+cur;
@@ -253,9 +270,9 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
   $("clprev").onclick=()=>clGo({step:-1});$("clnext").onclick=()=>clGo({step:1});
   $("clprev").disabled=idx<=0;$("clnext").disabled=idx>=ph.length-1;
   $("clname").textContent=c.phase.name;const sm=$("clsum");sm.textContent=c.bad+" out of spec";sm.className="clsum"+(c.bad?" bad":"");
-  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live,i.raw,i.show,i.expected])]),showLive,s.test_links]);
+  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live,i.raw,i.show,i.expected,i.inputs])]),showLive,s.test_links]);
   if(bk!==clBodyKey){clBodyKey=bk;const y=window.scrollY,x=window.scrollX;
-  const ae=document.activeElement,keep=craftEl&&ae&&craftEl.contains(ae)?[ae.dataset.c,ae.selectionStart,ae.selectionEnd]:null;body.textContent="";
+  const ae=document.activeElement,keep=craftEl&&ae&&craftEl.contains(ae)?[ae.dataset.c,ae.selectionStart,ae.selectionEnd]:null,keepF=ae&&ae.dataset&&ae.dataset.f?[ae.dataset.f,ae.selectionStart,ae.selectionEnd]:null;body.textContent="";
   const mk=(t,cls,txt)=>{const e=document.createElement(t);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e};
   for(const sp of c.subphases){if(sp.name)body.appendChild(mk("h3","",sp.name));
     for(const it of sp.items){if(it.type==="craft"){body.appendChild(craftNode(it));continue}
@@ -271,10 +288,12 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(it.show&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","NOW: "+it.live.map(l=>l[1]).join(", ")));
       if(it.kind==="mismatch"){const mm=[...it.detail.matchAll(/actual ([^;,]+)/g)].map(m=>m[1].trim());
         tx.appendChild(mm.length?mk("div","now","NOW: "+mm.join(", ")):mk("div","d",it.detail))}
+      if(it.inputs)tx.appendChild(inputsNode(it));
       r.appendChild(tx);body.appendChild(r)}}
   if(keep){const i=craftEl.querySelector('[data-c="'+keep[0]+'"]');if(i){i.focus({preventScroll:true});try{i.setSelectionRange(keep[1],keep[2])}catch(e){}}}
+  if(keepF){const i=body.querySelector('[data-f="'+keepF[0]+'"]');if(i){i.focus({preventScroll:true});try{i.setSelectionRange(keepF[1],keepF[2])}catch(e){}}}
   window.scrollTo(x,y)}
-  syncCraft(s.clearance);
+  syncCraft(s.clearance);syncInputs(s);
   const nb=$("clnextbtn"),nx=ph[idx+1];nb.hidden=!nx;if(nx){nb.textContent="Next phase: "+nx.name;nb.onclick=()=>{clGo({step:1});$("clcard").scrollIntoView({block:"start"})}}}
 function speech(s){const sp=$("speech"),tx=$("sptxt"),l=s.log,ago=s.spoke_ago==null?1e9:s.spoke_ago;
   if(s.spoke_n!==spN){if(spN!==null)spExp=false;spN=s.spoke_n;spUntil=Date.now()+Math.max(0,10-ago)*1000}
@@ -304,7 +323,7 @@ $("end").onclick=$("end2").onclick=async()=>{const s=await api("/api/phase",{pha
 $("speech").onclick=()=>{spExp=!spExp;if(last)speech(last)};
 if(window.ResizeObserver)new ResizeObserver(()=>document.documentElement.style.setProperty("--sp-h",$("speech").offsetHeight+"px")).observe($("speech"));
 
-$("edit").onclick=()=>{view="config";render()};
+$("edit").onclick=()=>{view="config";if(last)fill(last);render()};  // fill: Departure puo' essere cambiato dal T/O runway della checklist
 const _apply=apply;apply=function(s){phase=s.phase;_apply(s)};
 poll();
 </script></body></html>"""

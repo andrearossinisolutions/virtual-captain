@@ -29,6 +29,20 @@ def spell_runway(rwy: str) -> str:
     return " ".join([_DIGITS[int(d)] for d in digits] + ([_SIDE[side]] if side else []))
 
 
+_RWY = re.compile(r"\d{2}[LRC]?")
+
+
+def parse_dep(text) -> tuple[str, str]:
+    """"LIMC/17R" -> ("LIMC", "17R"). Maiuscole; la parte non valida (ICAO non di 4 lettere, pista non di 2 cifre + L/R/C opzionale) resta vuota."""
+    icao, _, rwy = str(text or "").strip().upper().partition("/")
+    icao, rwy = icao.strip(), rwy.strip()
+    return (icao if re.fullmatch(r"[A-Z]{4}", icao) else ""), (rwy if _RWY.fullmatch(rwy) else "")
+
+
+def join_dep(icao: str, rwy: str) -> str:
+    return f"{icao}/{rwy}" if rwy else icao
+
+
 def spell_proc(ident: str) -> str:
     """Nome di SID/STAR: lettere normali fino al numero, numero, ultima lettera in fonetico.
     EMPA5B → "EMPA 5 Bravo". Formati diversi da lettere+cifra+lettera restano com'è."""
@@ -41,9 +55,9 @@ def spell_proc(ident: str) -> str:
 
 @dataclass
 class Briefing:
-    ta: int = 5000
-    thr_red_agl: int = 1500
-    accel_agl: int = 1500
+    ta: int | None = None  # None = non noto: nessun callout (mai default presunti)
+    thr_red_agl: int | None = None
+    accel_agl: int | None = None
     mode: str = "normal"  # or "training"
     v1: int | None = None
     vr: int | None = None
@@ -93,13 +107,13 @@ class Brain:
             if "gear_repeat" not in self.done:
                 self.done.add("gear_repeat")
                 out.append("Gear is still down, gear up")
-        if s["agl"] >= self.b.thr_red_agl:
+        if self.b.thr_red_agl and s["agl"] >= self.b.thr_red_agl:
             out += self._once("thr_red", "Thrust reduction altitude",
                               "Thrust reduction altitude: bring the thrust levers back to the climb detent.")
-        if s["agl"] >= self.b.accel_agl:
+        if self.b.accel_agl and s["agl"] >= self.b.accel_agl:
             out += self._once("accel", "Acceleration altitude",
                               "Acceleration altitude: lower the nose, accelerate and retract the flaps on schedule.")
-        if s["alt"] >= self.b.ta:
+        if self.b.ta and s["alt"] >= self.b.ta:
             out += self._once("ta", "Transition altitude, standard",
                               "Transition altitude: set standard, 1013 or 29.92, and check both altimeters show it.")
         if s["alt"] >= 10000:
@@ -111,9 +125,10 @@ class Brain:
 def readout(fields: dict, plan: dict, mode: str) -> str:
     """Frase di apertura: ciò che il capitano legge quando premi "Briefing complete" (solo ciò che c'è)."""
     parts = ["Briefing received."]
-    dep = " ".join(x for x in (
-        f"Departure {spell_icao(fields['origin'])}" if fields.get("origin") else "",
-        f"runway {spell_runway(fields['runway'])}" if fields.get("runway") else "") if x)
+    icao, rwy = parse_dep(fields.get("origin"))
+    rwy = rwy or parse_dep("AAAA/" + str(fields.get("runway") or ""))[1]
+    dep = " ".join(x for x in (f"Departure {spell_icao(icao)}" if icao else "",
+                               f"{'runway' if icao else 'Runway'} {spell_runway(rwy)}" if rwy else "") if x)
     sid = (plan or {}).get("sid")
     if dep or sid:
         parts.append((dep + (" " if dep and sid else "") + (f"via {spell_proc(sid)}" if sid else "")).strip() + ".")

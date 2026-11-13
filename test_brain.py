@@ -83,7 +83,43 @@ def test_no_speeds_no_callouts():
     assert b.update(s(on_ground=1, ias=150), 1) == []
 
 
+def test_parse_dep():
+    from brain import parse_dep, join_dep
+    assert parse_dep("limc/17r") == ("LIMC", "17R") and parse_dep(" LIMC / 17R ") == ("LIMC", "17R")
+    assert parse_dep("LIMC") == ("LIMC", "") and parse_dep("EDDF/09") == ("EDDF", "09") and parse_dep("EDDF/09L") == ("EDDF", "09L")
+    assert parse_dep("LIM/17R") == ("", "17R") and parse_dep("LIMC/1") == ("LIMC", "") and parse_dep("LIMC/17X") == ("LIMC", "")
+    assert parse_dep("/17R") == ("", "17R") and parse_dep("") == ("", "") and parse_dep(None) == ("", "")
+    assert join_dep("LIMC", "17R") == "LIMC/17R" and join_dep("LIMC", "") == "LIMC"
+
+
+def test_readout_dep_with_runway_and_silent_on_unknown():
+    from brain import readout
+    t = readout(dict(origin="LIMC/17R", destination="EDDF"), dict(sid="ROBE1A"), "normal")
+    assert t == ("Briefing received. Departure Lima India Mike Charlie runway one seven Right via ROBE 1 Alpha. "
+                 "Arrival Echo Delta Delta Foxtrot.")
+    assert readout(dict(origin="LIMC"), {}, "normal") == "Briefing received. Departure Lima India Mike Charlie."
+    # dati non noti: il capitano tace (niente TA, V, pista, ICAO non valido)
+    assert readout(dict(origin="", runway="", ta="", v1="", vr="", v2=""), {}, "normal") == "Briefing received."
+    assert readout(dict(origin="Milan/17R"), {}, "normal") == "Briefing received. Runway one seven Right."
+
+
+def test_unknown_data_no_callouts():
+    b = Brain(Briefing(mode="normal"))  # ta, thr_red, accel, v1, vr tutti non noti
+    b.update(s(on_ground=1, ias=0), 0)
+    assert b.update(s(on_ground=1, ias=170), 1) == []
+    assert b.update(s(vs=1500, agl=50, alt=50), 2) == ["Positive rate, gear up"]
+    for agl in (1000, 1600, 3000, 5100, 6500):
+        assert b.update(s(vs=2000, agl=agl, alt=agl, gear=0), 10 + agl / 100) == []  # niente default 1500/1500/5000
+    assert "Ten thousand" in b.update(s(alt=10100, agl=10100, gear=0), 200)[0]  # soglia standard, non e' un dato inserito
+    only = Brain(Briefing(accel_agl=1200, mode="normal"))
+    only.update(s(vs=1500, agl=50, gear=0), 0)
+    assert only.update(s(vs=2000, agl=1600, alt=1600, gear=0), 5) == ["Acceleration altitude"]  # solo quello noto
+
+
 if __name__ == "__main__":
+    test_parse_dep()
+    test_readout_dep_with_runway_and_silent_on_unknown()
+    test_unknown_data_no_callouts()
     test_climb_sequence()
     test_gear_repeat_and_rearm()
     test_readout()

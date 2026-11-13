@@ -210,7 +210,82 @@ def test_bad_values_use_defaults():
     st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
     st.update({"ta": "abc", "accel_agl": ""})
     b = st.briefing()
-    assert (b.ta, b.thr_red_agl, b.accel_agl) == (5000, 1500, 1500)
+    assert (b.ta, b.thr_red_agl, b.accel_agl) == (None, None, None)  # non noti: nessun default presunto
+
+
+def test_briefing_fields_and_inflight():
+    import state as S
+    assert [k for k, _ in S.FIELDS] == ["origin", "destination", "dep_time"]
+    assert [k for k, _ in S.INFLIGHT] == ["runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap"]
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    s = st.snapshot()
+    assert [k for k, _ in s["labels"]] == ["origin", "destination", "dep_time"] and set(s["fields"]) >= {"runway", "ta", "v1", "flap"}
+    # origin "ICAO/RWY": la pista deriva da li' e viceversa
+    st.update({"origin": "limc/17r"})
+    assert st.fields["origin"] == "LIMC/17R" and st.fields["runway"] == "17R"
+    st.update({"runway": "35l"})  # dalla checklist
+    assert st.fields["origin"] == "LIMC/35L" and st.fields["runway"] == "35L"
+    st.update({"runway": "zz"})  # non valida: ignorata
+    assert st.fields["runway"] == "35L"
+    st.update({"runway": ""})
+    assert st.fields["origin"] == "LIMC" and st.fields["runway"] == ""
+    st.update({"origin": "LIMC"})
+    assert st.fields["runway"] == ""
+    st.update({"v1": " 140 ", "vr": "141", "v2": "145", "flap": "1+F", "ta": "6000", "thr_red_agl": "800", "accel_agl": "1000"})
+    assert (st.fields["v1"], st.fields["flap"]) == ("140", "1+F")
+    b = st.briefing()
+    assert (b.ta, b.thr_red_agl, b.accel_agl, b.v1, b.vr) == (6000, 800, 1000, 140, 141)
+    # solo thr_red e accel si ricordano nel file; il resto no
+    assert State(st.cfg_path).fields["thr_red_agl"] == "800" and State(st.cfg_path).fields["v1"] == ""
+    # il QNH usa l'ICAO, non la pista
+    st.update({"origin": "LIRF/16L"})
+    got = []
+    st.weather.get = lambda icao: got.append(icao) or 1013.0
+    assert st._expected()["wx.qnh_dep"] == "1013 hPa" and got[0] == "LIRF"
+
+
+def test_load_plan_dep_and_reset():
+    import state as S
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    orig = (S.fetch_latest, S.to_briefing)
+    S.fetch_latest = lambda uid: {}
+    S.to_briefing = lambda ofp: {"origin": "LIMC/17R", "destination": "EDDF", "runway": "17R", "dep_time": "10:00", "ta": 6000, "generated": 1,
+                                 "v1": 140, "vr": None, "v2": None, "flap": "1+F", "plan": {"orig_metar": "LIMC 1Z Q1011"}}
+    try:
+        st.load_plan("x")
+        assert (st.fields["origin"], st.fields["runway"], st.fields["ta"], st.fields["v1"], st.fields["flap"]) == ("LIMC/17R", "17R", "6000", "140", "1+F")
+        assert st.weather.get("LIMC") == 1011.0 and "T/O runway" not in st.info and "VR" in st.info
+        st.update({"runway": "35L", "ta": "5000", "v1": "150", "thr_red_agl": "900"})
+        st.update({"reset": ["runway", "ta", "v1", "bogus"]})
+        assert (st.fields["origin"], st.fields["ta"], st.fields["v1"], st.fields["thr_red_agl"]) == ("LIMC/17R", "6000", "140", "900")
+        S.to_briefing = lambda ofp: {"origin": "LIMC", "destination": "EDDF", "runway": None, "dep_time": None, "ta": None, "generated": 1,
+                                     "v1": None, "vr": None, "v2": None, "flap": None, "plan": {}}
+        st.load_plan("x")
+        assert (st.fields["origin"], st.fields["runway"], st.fields["ta"]) == ("LIMC", "", "") and "T/O runway" in st.info
+        st.update({"runway": "09"})
+        st.update({"reset": ["runway"]})  # il piano non ha pista: torna vuota
+        assert st.fields["runway"] == "" and st.fields["origin"] == "LIMC"
+    finally:
+        S.fetch_latest, S.to_briefing = orig
+
+
+def test_to_briefing_dep_runway():
+    from simbrief import to_briefing
+    assert to_briefing({"origin": {"icao_code": "LIMC", "plan_rwy": "17R"}})["origin"] == "LIMC/17R"
+    assert to_briefing({"origin": {"icao_code": "limc", "plan_rwy": "09"}})["origin"] == "LIMC/09"
+    assert to_briefing({"origin": {"icao_code": "LIMC"}})["origin"] == "LIMC"
+    assert to_briefing({})["origin"] is None
+
+
+def test_inputs_markup():
+    p = web.PAGE
+    for m in ("function inputsNode", "function syncInputs", "function inpSend", 'data-f', "/api/fields", "Reset to plan", "reset:ks", "setTimeout(inpSend,400)",
+              ".inp{display:flex", 'placeholder="LIMC/17R"'):
+        assert m in p, m
+    key = p[p.index("bk=JSON.stringify"):p.index("showLive,s.test_links")]
+    assert "i.inputs" in key and "fields" not in key  # i valori scritti non fanno ricostruire la lista
+    chips = p[p.index("function chips"):p.index("function cockpit")]
+    assert '"TA"' not in chips and '"V1"' not in chips and '"FLAP"' not in chips and '"RWY"' not in chips
 
 
 
@@ -522,6 +597,10 @@ if __name__ == "__main__":
     test_sim_finish_keeps_flying()
     test_api_flow()
     test_bad_values_use_defaults()
+    test_briefing_fields_and_inflight()
+    test_load_plan_dep_and_reset()
+    test_to_briefing_dep_runway()
+    test_inputs_markup()
     test_checklist_mode_endpoint()
     test_checklist_phase_endpoint()
     test_phase_bar_hides_empty_phase_endpoint()

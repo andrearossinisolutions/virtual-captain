@@ -506,7 +506,14 @@
        "id": "fmgs-performance-glareshield.t-o-rwy",
        "text": "T/O RWY",
        "response": "AS CLR",
-       "type": "action"
+       "type": "action",
+       "inputs": [
+        {
+         "k": "runway",
+         "label": "Runway",
+         "plan": true
+        }
+       ]
       },
       {
        "id": "fmgs-performance-glareshield.sid",
@@ -518,7 +525,14 @@
        "id": "fmgs-performance-glareshield.t-o-flaps-conf-ths",
        "text": "T/O FLAPS CONF / THS",
        "response": "INSERT",
-       "type": "action"
+       "type": "action",
+       "inputs": [
+        {
+         "k": "flap",
+         "label": "Flaps",
+         "plan": true
+        }
+       ]
       },
       {
        "id": "fmgs-performance-glareshield.flex-toga",
@@ -530,19 +544,53 @@
        "id": "fmgs-performance-glareshield.v1-vr-v2",
        "text": "V1, VR, V2",
        "response": "INSERT",
-       "type": "action"
+       "type": "action",
+       "inputs": [
+        {
+         "k": "v1",
+         "label": "V1",
+         "plan": true
+        },
+        {
+         "k": "vr",
+         "label": "VR",
+         "plan": true
+        },
+        {
+         "k": "v2",
+         "label": "V2",
+         "plan": true
+        }
+       ]
       },
       {
        "id": "fmgs-performance-glareshield.transition-altitude",
        "text": "Transition Altitude",
        "response": "AS CLR",
-       "type": "action"
+       "type": "action",
+       "inputs": [
+        {
+         "k": "ta",
+         "label": "TA (ft)",
+         "plan": true
+        }
+       ]
       },
       {
        "id": "fmgs-performance-glareshield.thrust-reduction-acc-altitude",
        "text": "Thrust Reduction / ACC Altitude",
        "response": "CHECK / SET",
-       "type": "action"
+       "type": "action",
+       "inputs": [
+        {
+         "k": "thr_red_agl",
+         "label": "Thrust red. (ft AGL)"
+        },
+        {
+         "k": "accel_agl",
+         "label": "Accel. (ft AGL)"
+        }
+       ]
       }
      ]
     },
