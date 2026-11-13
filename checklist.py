@@ -45,7 +45,7 @@ def live_values(check: dict | None, labels: dict) -> list:
 
 
 class Checklist:
-    def __init__(self, data: dict, links: dict):
+    def __init__(self, data: dict, links: dict, simplified: dict | None = None):
         self.data, self.links = data, links
         self.phases = data["phases"]
         ids, items = set(), {}
@@ -69,6 +69,15 @@ class Checklist:
                 raise ValueError(f"{iid}: 'verified' mancante")
             _check_keys(link.get("check") or {}, iid)
         self.ids = [p["id"] for p in self.phases]
+        excl = (simplified or {}).get("exclude", [])
+        if not isinstance(excl, list):
+            raise ValueError("simplified: 'exclude' deve essere una lista")
+        for iid in excl:
+            if iid not in items:
+                raise ValueError(f"simplified: voce inesistente: {iid}")
+        if len(excl) != len(set(excl)):
+            raise ValueError("simplified: id duplicati")
+        self.excluded = frozenset(excl)
 
     def has_phase(self, phase_id) -> bool:
         return isinstance(phase_id, str) and phase_id in self.ids
@@ -76,12 +85,15 @@ class Checklist:
     def phase(self, phase_id: str) -> dict:
         return self.phases[self.ids.index(phase_id)]
 
-    def evaluate_phase(self, phase_id: str, labels: dict, demo: bool = False) -> dict:
-        """Sottofasi e voci della fase con status/detail; "bad" = numero di voci rosse. demo=True tratta i link come verificati."""
+    def evaluate_phase(self, phase_id: str, labels: dict, demo: bool = False, simplified: bool = False) -> dict:
+        """Sottofasi e voci della fase con status/detail; "bad" = numero di voci rosse (solo quelle visibili). demo=True tratta i link come verificati.
+        simplified=True salta le voci escluse prima della valutazione e scarta le sottofasi rimaste vuote."""
         ph, bad, subs = self.phase(phase_id), 0, []
         for sp in ph["subphases"]:
             rows = []
             for it in sp["items"]:
+                if simplified and it["id"] in self.excluded:
+                    continue
                 link = self.links.get(it["id"])
                 res = evaluate(link["check"], labels, demo or link["verified"]) if link else evaluate(None, labels)
                 bad += res["status"] == "bad"
@@ -90,11 +102,13 @@ class Checklist:
                 if it.get("note"):
                     row["note"] = it["note"]
                 rows.append(row)
-            subs.append({"id": sp["id"], "name": sp["name"], "items": rows})
+            if rows:
+                subs.append({"id": sp["id"], "name": sp["name"], "items": rows})
         return {"phase": {"id": ph["id"], "name": ph["name"]}, "bad": bad, "subphases": subs}
 
 
 def load(base: pathlib.Path = HERE) -> Checklist:
     data = json.loads((base / "checklist.json").read_text(encoding="utf-8"))
     links = json.loads((base / "checklist_links.json").read_text(encoding="utf-8"))
-    return Checklist(data, links)
+    simplified = json.loads((base / "checklist_simplified.json").read_text(encoding="utf-8"))
+    return Checklist(data, links, simplified)

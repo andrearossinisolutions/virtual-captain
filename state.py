@@ -21,6 +21,7 @@ FIELDS = [("origin", "Departure"), ("destination", "Arrival"), ("dep_time", "Dep
 FROM_PLAN = ["origin", "destination", "dep_time", "runway", "ta", "v1", "vr", "v2", "flap"]  # accel_agl è solo manuale
 REMEMBERED = ["thr_red_agl", "accel_agl"]  # unico campo dei dati di volo che si ricorda
 MODES = ("normal", "training")
+CL_MODES = ("complete", "simplified")
 
 
 def _when(ts):
@@ -47,6 +48,7 @@ class State:
         self.fields = {k: (str(cfg.get(k, "")) if k in REMEMBERED else "") for k, _ in FIELDS}
         self.simbrief = str(cfg.get("simbrief", ""))
         self.mode = _mode(cfg.get("mode"))
+        self.checklist_mode = cfg.get("checklist_mode") if cfg.get("checklist_mode") in CL_MODES else "complete"
         self.aao_url = normalize_url(cfg.get("aao_url") or None)
         self.phase = "briefing"  # "briefing" | "flying"
         self.info = ""
@@ -73,6 +75,9 @@ class State:
                 self.simbrief = str(data["simbrief"]).strip()
             if data.get("mode") in MODES:
                 self.mode = data["mode"]
+            if "checklist_mode" in data:
+                m = data["checklist_mode"]
+                self.checklist_mode = m if m in CL_MODES else "complete"
             if data.get("aao_url") is not None:
                 self.aao_url = normalize_url(str(data["aao_url"]).strip() or None)
             self._save()
@@ -139,7 +144,8 @@ class State:
             self.cfg_path.write_text(json.dumps({"accel_agl": self.fields["accel_agl"],
                                                  "thr_red_agl": self.fields["thr_red_agl"],
                                                  "simbrief": self.simbrief, "mode": self.mode,
-                                                 "aao_url": self.aao_url, "checklist_phase": self.cl_phase}))
+                                                 "aao_url": self.aao_url, "checklist_phase": self.cl_phase,
+                                                 "checklist_mode": self.checklist_mode}))
         except OSError:
             pass
 
@@ -164,7 +170,7 @@ class State:
     def snapshot(self) -> dict:
         with self.lock:
             return {"phase": self.phase, "fields": dict(self.fields), "simbrief": self.simbrief,
-                    "mode": self.mode, "info": self.info, "plan": self.plan, "rev": self.rev,
+                    "mode": self.mode, "checklist_mode": self.checklist_mode, "cl_modes": list(CL_MODES), "info": self.info, "plan": self.plan, "rev": self.rev,
                     "aao_ok": self.aao_ok, "aao_url": self.aao_url, "log": list(self.log),
                     "now": time.time(), "spoke_n": self.spoke_n,
                     "spoke_ago": None if self.spoke_at is None else max(0.0, time.time() - self.spoke_at),
@@ -172,4 +178,5 @@ class State:
                     "monitor": [[g, [list(r) for r in rows]] for g, rows in self.monitor],
                     "cl_phases": [{"id": p["id"], "name": p["name"]} for p in self.cl.phases],
                     "cl_phase": self.cl_phase,
-                    "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo)}
+                    "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo,
+                                                       self.checklist_mode == "simplified")}

@@ -38,8 +38,32 @@ def test_api_flow():
         # si ricordano solo ID, modalità e accelerazione
         saved = json.loads(cfg.read_text())
         assert saved == {"accel_agl": "1000", "thr_red_agl": "800", "simbrief": "x", "mode": "training",
-                     "aao_url": "http://127.0.0.1:43380/webapi", "checklist_phase": "sim-preparation"}
+                     "aao_url": "http://127.0.0.1:43380/webapi", "checklist_phase": "sim-preparation",
+                     "checklist_mode": "complete"}
         assert State(cfg).fields["ta"] == "" and State(cfg).fields["accel_agl"] == "1000"
+    finally:
+        srv.shutdown()
+
+
+def test_checklist_mode_endpoint():
+    cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
+    st = State(cfg)
+    srv = web.serve(st, "127.0.0.1", 0)
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        s = call(base, "/api/state")
+        assert s["checklist_mode"] == "complete" and s["cl_modes"] == ["complete", "simplified"]
+        full = sum(len(sp["items"]) for sp in s["checklist"]["subphases"])
+        s = call(base, "/api/fields", {"checklist_mode": "simplified"})
+        assert s["checklist_mode"] == "simplified"
+        assert sum(len(sp["items"]) for sp in s["checklist"]["subphases"]) < full
+        assert json.loads(cfg.read_text())["checklist_mode"] == "simplified"
+        assert State(cfg).checklist_mode == "simplified"  # persistenza
+        assert call(base, "/api/fields", {"ta": "5000"})["checklist_mode"] == "simplified"  # assente: invariato
+        assert call(base, "/api/fields", {"checklist_mode": "boh"})["checklist_mode"] == "complete"
+        assert 'id="clmode"' in call(base, "/")
+        cfg.write_text(json.dumps({"checklist_mode": "x"}))
+        assert State(cfg).checklist_mode == "complete"
     finally:
         srv.shutdown()
 
@@ -239,6 +263,7 @@ if __name__ == "__main__":
     test_sim_finish_keeps_flying()
     test_api_flow()
     test_bad_values_use_defaults()
+    test_checklist_mode_endpoint()
     test_checklist_phase_endpoint()
     test_monitor_cleared_outside_flight()
     test_aao_parse_missing_variable()

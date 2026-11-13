@@ -96,6 +96,35 @@ def test_evaluate_phase():
     assert all(i["status"] == "none" for s in atc["subphases"] for i in s["items"] if i["type"] != "action")
 
 
+def test_simplified():
+    cl = C.load()
+    assert cl.excluded and all(i in {it["id"] for p in cl.phases for sp in p["subphases"] for it in sp["items"]} for i in cl.excluded)
+    # default complete: identico a oggi
+    assert cl.evaluate_phase("takeoff", {}) == cl.evaluate_phase("takeoff", {}, simplified=False)
+    ids = lambda r: [i["id"] for sp in r["subphases"] for i in sp["items"]]
+    full, simp = cl.evaluate_phase("takeoff", {}), cl.evaluate_phase("takeoff", {}, simplified=True)
+    assert set(ids(full)) - set(ids(simp)) == {i for i in cl.excluded if i.startswith("takeoff.")} and "takeoff.chrono" not in ids(simp)
+    assert "takeoff.landing-gear" in ids(simp) and "takeoff.takeoff-n1" in ids(full)
+    assert all(sp["items"] for sp in simp["subphases"]) and len(simp["subphases"]) < len(full["subphases"])  # sottofasi vuote scartate
+    fa, sa = cl.evaluate_phase("after-takeoff", {}), cl.evaluate_phase("after-takeoff", {}, simplified=True)
+    assert set(ids(fa)) - set(ids(sa)) == {i for i in cl.excluded if i.startswith("after-takeoff.")}  # Engine Mode Selector (NORM)
+    # bad conta solo le voci visibili; link su voce esclusa ignorato
+    data = json.loads(json.dumps(cl.data))
+    links = {"before-start.slides": {"check": {"key": "parking", "eq": "ON"}, "verified": True},
+             "before-start.packs-pb": {"check": {"key": "pack1", "eq": "ON"}, "verified": True}}
+    labels = {"parking": "OFF", "pack1": "OFF"}
+    c2 = C.Checklist(data, links, {"version": 1, "exclude": ["before-start.slides"]})
+    assert c2.evaluate_phase("before-start", labels)["bad"] == 2
+    r = c2.evaluate_phase("before-start", labels, simplified=True)
+    assert r["bad"] == 1 and "before-start.slides" not in ids(r)
+    for bad in ({"exclude": ["no.such"]}, {"exclude": ["takeoff.chrono", "takeoff.chrono"]}, {"exclude": "x"}):
+        try:
+            C.Checklist(data, {}, bad)
+            assert False, bad
+        except ValueError:
+            pass
+
+
 def test_cl_phase_state():
     cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
     st = State(cfg)
@@ -165,6 +194,7 @@ if __name__ == "__main__":
     test_validation_rejects_bad_data()
     test_source_in_sync()
     test_evaluate_phase()
+    test_simplified()
     test_cl_phase_state()
     test_snapshot_uses_live_labels_and_demo()
     test_live_values()
