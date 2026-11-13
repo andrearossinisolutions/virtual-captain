@@ -272,6 +272,8 @@ function inputsNode(it){const el=document.createElement("div");el.className="a i
   if(ks.length){const b=document.createElement("button");b.className="rs";b.textContent="\u21ba";b.title="Reset to plan";b.setAttribute("aria-label","Reset to plan");
     b.onclick=async ev=>{ev.stopPropagation();clearTimeout(inpTimer);inpTimer=null;ks.forEach(k=>delete inpDirty[k]);try{const s=await api("/api/fields",{reset:ks});lastRev=s.rev;last=s;syncInputs(s)}catch(e){}};el.appendChild(b)}
   return el}
+// iPhone: un tocco su un'area non interattiva non toglie il focus (e la tastiera numerica può non avere Invio): lo togliamo noi
+document.addEventListener("pointerdown",e=>{const a=document.activeElement;if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA")&&e.target!==a&&!(e.target.closest&&e.target.closest("input,textarea,select")))a.blur()},true);
 function syncInputs(s){document.querySelectorAll("#clbody .fld").forEach(fShow)}
 function clGo(body){api("/api/checklist-phase",body).then(apply).catch(()=>{})}
 function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!c)return;

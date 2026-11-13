@@ -278,6 +278,7 @@ def test_to_briefing_dep_runway():
 
 
 def test_inputs_markup():
+    assert 'addEventListener("pointerdown"' in web.PAGE and "a.blur()" in web.PAGE  # tocco fuori: il campo perde il focus (iPhone)
     assert "adv()" in web.PAGE and r"runway:/^\d{2}[LRC]$/" in web.PAGE and r"ta:/^\d{4}$/" in web.PAGE and r"flap:/^[1-3]$/" in web.PAGE  # valore completo: avanza o chiude
     p = web.PAGE
     for m in ("function inputsNode", "function syncInputs", "function inpSend", "function fStart", "function fShow", "dataset.f", "/api/fields", "reset:ks",
