@@ -29,6 +29,10 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
         if inner or set(check) != {"detent"} or not isinstance(names, list) or not names or any(n not in thrust.DETENTS for n in names):
             raise ValueError(f"{where}: 'detent' non valido")
         return
+    if "std" in check:
+        if inner or check != {"std": True}:
+            raise ValueError(f"{where}: 'std' non valido")
+        return
     if "qnh" in check:
         if inner or set(check) != {"qnh"} or check["qnh"] not in ("wx.qnh_dep", "wx.qnh_dest"):
             raise ValueError(f"{where}: 'qnh' non valido")
@@ -79,7 +83,7 @@ def check_keys(check: dict) -> list:
         return list(dict.fromkeys(check["show"]))
     if "detent" in check:
         return ["thr_det_l", "thr_det_r"]
-    if "qnh" in check:
+    if "qnh" in check or "std" in check:
         return ["baro_std", "baro_hpa", "baro_inch"]
     subs = check.get("all") or [check]
     return list(dict.fromkeys(c["key"] for c in subs if c.get("key")))
@@ -99,7 +103,7 @@ def raw_values(check: dict | None, raw: dict) -> list:
 
 def live_values(check: dict | None, labels: dict) -> list:
     """Valori reali letti per un check: [[nome, etichetta|"n/d"], ...] (sola lettura, vuoto se la voce non ha variabile)."""
-    if "qnh" in (check or {}):
+    if "qnh" in (check or {}) or "std" in (check or {}):
         a = qnh_actual(labels)
         return [["Baro", "STD" if a == "STD" else (f"{a:.0f}" if a is not None else mon.NA)]]
     if "detent" in (check or {}):

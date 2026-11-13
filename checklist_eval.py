@@ -184,6 +184,11 @@ def _evaluate(check: dict, labels: dict, verified: bool, expected: dict | None =
         return _res("na", UNVERIFIED, "unverified")
     if "detent" in check:
         check = detent_all(check)
+    if "std" in check:
+        if _num(labels.get("baro_std")) is None:
+            return _res("na", UNREADABLE, "unreadable")
+        act = qnh_actual(labels)
+        return _res("ok") if act == "STD" else _res("bad", "expected STD, actual " + ("n/d" if act is None else f"{act:.0f}"), "mismatch")
     if "qnh" in check:
         return _qnh_single(check["qnh"], labels, expected)
     if "all" not in check:

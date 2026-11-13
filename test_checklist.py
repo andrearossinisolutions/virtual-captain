@@ -54,6 +54,8 @@ def test_links_reference_real_things():
                 assert c["qnh"] in REFS
             elif "detent" in c:
                 assert c["detent"]
+            elif "std" in c:
+                assert c["std"] is True
             else:
                 assert all(k in keys for k in c["show"]) if "show" in c else c["key"] in keys
     for link in cl.links.values():
@@ -458,7 +460,12 @@ def test_qnh_links():
     cl = C.load()
     for iid, ref in (("fmgs-performance-glareshield.barometric-reference", "wx.qnh_dep"), ("descent-checklist.barometric-reference", "wx.qnh_dest")):
         assert cl.links[iid]["check"] == {"qnh": ref} and cl.links[iid]["verified"] is False
-    assert "climb.barometric-reference" not in cl.links
+    assert cl.links["climb.barometric-reference"] == {"check": {"std": True}, "verified": False}
+    assert cl.links["climb.engine-anti-ice"] == {"check": {"show": ["eng1_ai", "eng2_ai"]}, "verified": False}
+    assert C.check_keys({"std": True}) == ["baro_std", "baro_hpa", "baro_inch"]
+    from checklist_eval import evaluate as _ev
+    assert _ev({"std": True}, {"baro_std": "1", "baro_hpa": "1013", "baro_inch": None}, True)["status"] == "ok"
+    assert _ev({"std": True}, {"baro_std": "0", "baro_hpa": "1013", "baro_inch": None}, True)["status"] == "bad"
     assert C.check_keys({"qnh": "wx.qnh_dep"}) == ["baro_std", "baro_hpa", "baro_inch"]
     for bad in ({"qnh": "clr.a"}, {"qnh": "wx.qnh_dep", "key": "baro_hpa"}, {"all": [{"qnh": "wx.qnh_dep"}]}):
         try:

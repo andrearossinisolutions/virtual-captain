@@ -1053,5 +1053,20 @@
    ]
   },
   "verified": false
+ },
+ "climb.barometric-reference": {
+  "check": {
+   "std": true
+  },
+  "verified": false
+ },
+ "climb.engine-anti-ice": {
+  "check": {
+   "show": [
+    "eng1_ai",
+    "eng2_ai"
+   ]
+  },
+  "verified": false
  }
 }
