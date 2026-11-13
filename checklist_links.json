@@ -11,7 +11,7 @@
    "key": "wx_pws",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "before-start.atc-transponder": {
   "check": {
@@ -26,7 +26,7 @@
     "wx_gain"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.wx-mode-selector": {
   "check": {
@@ -34,7 +34,7 @@
     "wx_mode"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.parking-brake": {
   "check": {
@@ -85,7 +85,7 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.external-power-pb": {
   "check": {
@@ -93,14 +93,14 @@
     "ext_pwr"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.crew-supply-pb": {
   "check": {
    "key": "crew_oxy",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.master-pb": {
   "check": {
@@ -133,7 +133,7 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.nav-logo-sw": {
   "check": {
@@ -157,21 +157,21 @@
    "key": "seatbelt",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "before-start.beacon-light-sw": {
   "check": {
    "key": "beacon",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "before-start.parking-brake": {
   "check": {
    "key": "parking",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "before-start.packs-pb": {
   "check": {
@@ -186,28 +186,28 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "engine-startup.engine-mode-selector": {
   "check": {
    "key": "engmode",
    "eq": "START"
   },
-  "verified": false
+  "verified": true
  },
  "engine-startup.engine-master-sw-2": {
   "check": {
    "key": "eng2",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "engine-startup.engine-master-sw-1": {
   "check": {
    "key": "eng1",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "after-engine-startup.packs-pb": {
   "check": {
@@ -222,14 +222,14 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "after-engine-startup.engine-mode-selector": {
   "check": {
    "key": "engmode",
    "eq": "NORM"
   },
-  "verified": false
+  "verified": true
  },
  "after-engine-startup.apu-bleed-pb": {
   "check": {
@@ -243,7 +243,7 @@
    "key": "apu_master",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "after-engine-startup.ground-spoilers": {
   "check": {
@@ -264,14 +264,14 @@
    "key": "nose",
    "eq": "TAXI"
   },
-  "verified": false
+  "verified": true
  },
  "taxi-checklist.parking-brake": {
   "check": {
    "key": "parking",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "taxi-checklist.cleared-altitude-on-fcu": {
   "check": {
@@ -285,21 +285,21 @@
    "key": "rwy_turnoff",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "before-takeoff.nose-light-sw": {
   "check": {
    "key": "nose",
    "eq": "T/O"
   },
-  "verified": false
+  "verified": true
  },
  "before-takeoff.strobe-light-sw": {
   "check": {
    "key": "strobe",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "before-takeoff.landing-lights-sw": {
   "check": {
@@ -314,7 +314,7 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "before-takeoff.engine-mode-selector": {
   "check": {
@@ -324,7 +324,7 @@
     "START"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "before-takeoff.packs-pb": {
   "check": {
@@ -339,14 +339,14 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "takeoff.landing-gear": {
   "check": {
    "key": "gear",
    "eq": "UP"
   },
-  "verified": false
+  "verified": true
  },
  "takeoff.packs-pb": {
   "check": {
@@ -361,21 +361,21 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "takeoff.at-f-speed-flaps-1": {
   "check": {
    "key": "flap",
    "eq": "1"
   },
-  "verified": false
+  "verified": true
  },
  "takeoff.at-s-speed-flaps-0": {
   "check": {
    "key": "flap",
    "eq": "UP"
   },
-  "verified": false
+  "verified": true
  },
  "takeoff.ground-spoilers": {
   "check": {
@@ -389,14 +389,14 @@
    "key": "nose",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "takeoff.runway-turn-off-lights-sw": {
   "check": {
    "key": "rwy_turnoff",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "after-takeoff.apu-bleed-pb": {
   "check": {
@@ -410,14 +410,14 @@
    "key": "apu_master",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "after-takeoff.engine-mode-selector": {
   "check": {
    "key": "engmode",
    "eq": "NORM"
   },
-  "verified": false
+  "verified": true
  },
  "climb.landing-lights": {
   "check": {
@@ -438,7 +438,7 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "descent-checklist.landing-lights": {
   "check": {
@@ -453,14 +453,14 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "ils-approach.seatbelt-signs": {
   "check": {
    "key": "seatbelt",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "ils-approach.ground-spoilers": {
   "check": {
@@ -474,28 +474,28 @@
    "key": "flap",
    "eq": "1"
   },
-  "verified": false
+  "verified": true
  },
  "ils-approach.flaps-2": {
   "check": {
    "key": "flap",
    "eq": "2"
   },
-  "verified": false
+  "verified": true
  },
  "ils-approach.landing-gear": {
   "check": {
    "key": "gear",
    "eq": "DOWN"
   },
-  "verified": false
+  "verified": true
  },
  "ils-approach.flaps-3": {
   "check": {
    "key": "flap",
    "eq": "3"
   },
-  "verified": false
+  "verified": true
  },
  "non-precision-approach.engine-mode-selector": {
   "check": {
@@ -505,14 +505,14 @@
     "START"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "non-precision-approach.seatbelt-signs": {
   "check": {
    "key": "seatbelt",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "non-precision-approach.ground-spoilers": {
   "check": {
@@ -526,35 +526,35 @@
    "key": "flap",
    "eq": "1"
   },
-  "verified": false
+  "verified": true
  },
  "non-precision-approach.flaps-2-at-s-speed": {
   "check": {
    "key": "flap",
    "eq": "2"
   },
-  "verified": false
+  "verified": true
  },
  "non-precision-approach.landing-gear": {
   "check": {
    "key": "gear",
    "eq": "DOWN"
   },
-  "verified": false
+  "verified": true
  },
  "non-precision-approach.flaps-3": {
   "check": {
    "key": "flap",
    "eq": "3"
   },
-  "verified": false
+  "verified": true
  },
  "go-around.landing-gear": {
   "check": {
    "key": "gear",
    "eq": "UP"
   },
-  "verified": false
+  "verified": true
  },
  "after-landing.landing-lights": {
   "check": {
@@ -575,7 +575,7 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "after-landing.ground-spoilers": {
   "check": {
@@ -589,28 +589,28 @@
    "key": "flap",
    "eq": "UP"
   },
-  "verified": false
+  "verified": true
  },
  "after-landing.engine-mode-selector": {
   "check": {
    "key": "engmode",
    "eq": "NORM"
   },
-  "verified": false
+  "verified": true
  },
  "after-landing.apu-master-switch": {
   "check": {
    "key": "apu_master",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "parking.parking-brake": {
   "check": {
    "key": "parking",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "parking.apu-bleed": {
   "check": {
@@ -632,21 +632,21 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "parking.seatbelt-signs": {
   "check": {
    "key": "seatbelt",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "securing-the-aircraft.parking-brake": {
   "check": {
    "key": "parking",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "securing-the-aircraft.apu-bleed": {
   "check": {
@@ -660,7 +660,7 @@
    "key": "apu_master",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "ils-approach.flaps-full": {
   "check": {
@@ -683,14 +683,14 @@
    "key": "smoking",
    "eq": "AUTO"
   },
-  "verified": false
+  "verified": true
  },
  "cockpit-preparation.emergency-exit-lights-sw": {
   "check": {
    "key": "emer_lt",
    "eq": "ARM"
   },
-  "verified": false
+  "verified": true
  },
  "cockpit-preparation.fuel-pump-pb": {
   "check": {
@@ -721,7 +721,7 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "parking.fuel-pumps": {
   "check": {
@@ -752,21 +752,21 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "securing-the-aircraft.emergency-exit-lights": {
   "check": {
    "key": "emer_lt",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "securing-the-aircraft.no-smoking": {
   "check": {
    "key": "smoking",
    "eq": "OFF"
   },
-  "verified": false
+  "verified": true
  },
  "fmgs-performance-glareshield.squawk-code": {
   "check": {
@@ -786,19 +786,19 @@
   "check": {
    "show_ref": "fld.runway"
   },
-  "verified": false
+  "verified": true
  },
  "fmgs-performance-glareshield.sid": {
   "check": {
    "show_ref": "plan.sid"
   },
-  "verified": false
+  "verified": true
  },
  "fmgs-performance-glareshield.transition-altitude": {
   "check": {
    "show_ref": "fld.ta"
   },
-  "verified": false
+  "verified": true
  },
  "fmgs-performance-glareshield.v1-vr-v2": {
   "check": {
@@ -817,7 +817,7 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "fmgs-performance-glareshield.flex-toga": {
   "check": {
@@ -825,7 +825,7 @@
     "flex"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "fmgs-performance-glareshield.t-o-flaps-conf-ths": {
   "check": {
@@ -833,7 +833,7 @@
     "flap"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "fmgs-performance-glareshield.constraint-pb": {
   "check": {
@@ -848,7 +848,7 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "fmgs-performance-glareshield.flight-director-pb": {
   "check": {
@@ -863,25 +863,25 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "fmgs-performance-glareshield.barometric-reference": {
   "check": {
    "qnh": "wx.qnh_dep"
   },
-  "verified": false
+  "verified": true
  },
  "descent-checklist.barometric-reference": {
   "check": {
    "qnh": "wx.qnh_dest"
   },
-  "verified": false
+  "verified": true
  },
  "taxi-checklist.t-o-data-runway": {
   "check": {
    "show_ref": "fld.runway"
   },
-  "verified": false
+  "verified": true
  },
  "taxi-checklist.t-o-data-flaps-lever": {
   "check": {
@@ -907,7 +907,7 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "taxi-checklist.t-o-data-flx-to-temperature": {
   "check": {
@@ -915,7 +915,7 @@
     "flex"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "taxi-checklist.flight-director": {
   "check": {
@@ -930,14 +930,14 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "taxi-checklist.autobrake-pb": {
   "check": {
    "key": "autobrake_max",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "before-takeoff.tcas-mode-selector": {
   "check": {
@@ -998,7 +998,7 @@
     "thr_pos_2"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "takeoff.thrust-levers_2": {
   "check": {
@@ -1052,13 +1052,13 @@
     "ap2"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "climb.barometric-reference": {
   "check": {
    "std": true
   },
-  "verified": false
+  "verified": true
  },
  "climb.engine-anti-ice": {
   "check": {
@@ -1067,6 +1067,6 @@
     "eng2_ai"
    ]
   },
-  "verified": false
+  "verified": true
  }
 }
