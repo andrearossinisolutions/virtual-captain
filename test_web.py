@@ -246,6 +246,12 @@ def test_test_links_markup():
     assert "s.test_links" in web.PAGE and ".cli.wl" in web.PAGE
 
 
+def test_optional_markup():
+    p = web.PAGE
+    assert ".cli.st-opt{border-left-color:var(--opt)}" in p and ".cli.st-opt .ic{color:var(--opt)}" in p and "--opt:#5bc0eb" in p
+    assert 'it.status==="opt"?"\\u25cb"' in p
+
+
 def test_layout_markers():
     p = web.PAGE
     for m in ("--sp-h", "env(safe-area-inset-bottom)", "viewport-fit=cover", "min-width:900px", "ResizeObserver",
@@ -286,6 +292,7 @@ def test_sim_finish_keeps_flying():
 if __name__ == "__main__":
     test_layout_markers()
     test_test_links_markup()
+    test_optional_markup()
     test_spoke_counters()
     test_sim_finish_keeps_flying()
     test_api_flow()

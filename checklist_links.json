@@ -1,10 +1,40 @@
 {
+ "preliminary-cockpit-prep.wx-radar-sw": {
+  "check": {
+   "key": "wx_sys",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.windshear-pws-sw": {
+  "check": {
+   "key": "wx_pws",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.gain-knob": {
+  "check": {
+   "show": [
+    "wx_gain"
+   ]
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.wx-mode-selector": {
+  "check": {
+   "show": [
+    "wx_mode"
+   ]
+  },
+  "verified": false
+ },
  "preliminary-cockpit-prep.parking-brake": {
   "check": {
    "key": "parking",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.engine-master-sw": {
   "check": {
@@ -19,19 +49,49 @@
     }
    ]
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.engine-mode-selector": {
   "check": {
    "key": "engmode",
    "eq": "NORM"
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.landing-gear-lever": {
   "check": {
    "key": "gear",
    "eq": "DOWN"
+  },
+  "verified": true
+ },
+ "preliminary-cockpit-prep.battery-pb-1-2": {
+  "check": {
+   "all": [
+    {
+     "key": "bat1",
+     "eq": "ON"
+    },
+    {
+     "key": "bat2",
+     "eq": "ON"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.external-power-pb": {
+  "check": {
+   "show": [
+    "ext_pwr"
+   ]
+  },
+  "verified": false
+ },
+ "preliminary-cockpit-prep.crew-supply-pb": {
+  "check": {
+   "key": "crew_oxy",
+   "eq": "ON"
   },
   "verified": false
  },
@@ -40,7 +100,7 @@
    "key": "apu_master",
    "eq": "ON"
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.bleed": {
   "check": {
@@ -48,6 +108,25 @@
    "eq": "ON"
   },
   "verified": true
+ },
+ "preliminary-cockpit-prep.all-ir-modes": {
+  "check": {
+   "all": [
+    {
+     "key": "ir1",
+     "eq": "NAV"
+    },
+    {
+     "key": "ir2",
+     "eq": "NAV"
+    },
+    {
+     "key": "ir3",
+     "eq": "NAV"
+    }
+   ]
+  },
+  "verified": false
  },
  "preliminary-cockpit-prep.nav-logo-sw": {
   "check": {
@@ -57,14 +136,14 @@
     "LOGO"
    ]
   },
-  "verified": false
+  "verified": true
  },
  "preliminary-cockpit-prep.strobe-sw": {
   "check": {
    "key": "strobe",
    "eq": "AUTO"
   },
-  "verified": false
+  "verified": true
  },
  "cockpit-preparation.seatbelt-signs-sw": {
   "check": {
@@ -561,5 +640,21 @@
    "eq": "OFF"
   },
   "verified": false
+ },
+ "ils-approach.flaps-full": {
+  "check": {
+   "key": "flap",
+   "eq": "FULL"
+  },
+  "optional": true,
+  "verified": true
+ },
+ "non-precision-approach.flaps-full": {
+  "check": {
+   "key": "flap",
+   "eq": "FULL"
+  },
+  "optional": true,
+  "verified": true
  }
 }

@@ -12,6 +12,11 @@ TYPES = ("action", "announce", "atc", "note")
 
 
 def _check_keys(check: dict, where: str) -> None:
+    if "show" in check:
+        keys = check["show"]
+        if set(check) != {"show"} or not isinstance(keys, list) or not keys or any(k not in BY_KEY for k in keys):
+            raise ValueError(f"{where}: 'show' non valido")
+        return
     if "all" in check:
         if not isinstance(check["all"], list) or not check["all"] or set(check) != {"all"}:
             raise ValueError(f"{where}: 'all' non valido")
@@ -35,6 +40,8 @@ def _check_keys(check: dict, where: str) -> None:
 
 def check_keys(check: dict) -> list:
     """Chiavi del monitor usate da un check (singolo o composto), in ordine e senza doppioni."""
+    if "show" in check:
+        return list(dict.fromkeys(check["show"]))
     subs = check.get("all") or [check]
     return list(dict.fromkeys(c["key"] for c in subs if c.get("key")))
 
@@ -76,6 +83,8 @@ class Checklist:
                 raise ValueError(f"{iid}: solo le voci action possono avere un check")
             if not isinstance(link.get("verified"), bool):
                 raise ValueError(f"{iid}: 'verified' mancante")
+            if not isinstance(link.get("optional", False), bool):
+                raise ValueError(f"{iid}: 'optional' non valido")
             _check_keys(link.get("check") or {}, iid)
         self.ids = [p["id"] for p in self.phases]
         excl = (simplified or {}).get("exclude", [])
@@ -112,7 +121,7 @@ class Checklist:
                 if simplified and it["id"] in self.excluded:
                     continue
                 link = self.links.get(it["id"])
-                res = evaluate(link["check"], labels, demo or link["verified"]) if link else evaluate(None, labels)
+                res = evaluate(link["check"], labels, demo or link["verified"], link.get("optional", False)) if link else evaluate(None, labels)
                 bad += res["status"] == "bad"
                 row = {"id": it["id"], "text": it["text"], "response": it["response"], "type": it["type"],
                        "live": live_values(link["check"], labels) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}

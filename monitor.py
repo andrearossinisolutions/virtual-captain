@@ -20,8 +20,11 @@ MAPS = {
     "speedbrake": {0: "ARM", 1: "RETRACT", 2: "HALF", 3: "FULL"},
     "engmode": {0: "CRANK", 1: "NORM", 2: "START"},
     "gear": {0: "UP", 1: "DOWN"},
+    "wxsys": {0: "OFF", 1: "SYS 1", 2: "SYS 2"},  # provvisoria: da verificare dal vivo col grezzo
+    "irmode": {0: "OFF", 1: "NAV", 2: "ATT"},  # provvisoria: da verificare dal vivo col grezzo
+    "numeric": {},  # nessuna mappa: si mostra solo il valore (nessun esito)
 }
-AMBIGUOUS = {"landing", "nose", "flap", "speedbrake", "engmode"}  # lo 0 non e' "spento": mostra anche il grezzo
+AMBIGUOUS = {"landing", "nose", "flap", "speedbrake", "engmode", "wxsys", "irmode"}  # lo 0 non e' "spento": mostra anche il grezzo
 
 
 @dataclass(frozen=True)
@@ -67,13 +70,25 @@ ITEMS: list[Item] = [
     Item("spoilers", "Flight controls", "Ground spoilers", "speedbrake", {"After start": "ARM", "Climb": "RETRACT"},
          "(A:SPOILERS ARMED, Bool)", "A_FC_SPEEDBRAKE"),
     Item("gear", "Flight controls", "Gear", "gear", {"Takeoff": "DOWN", "Positive climb": "UP"},
-         "(A:GEAR HANDLE POSITION, Bool)", "S_MIP_GEAR", True),  # mappa 0/1 da verificare dal vivo
+         "(A:GEAR HANDLE POSITION, Bool)", "S_MIP_GEAR", True),  # mappa 0/1 verificata dal vivo
     Item("engmode", "Engines", "Engine mode", "engmode", {"Start": "START", "After start": "NORM"},
          None, "S_ENG_MODE"),
     Item("eng1", "Engines", "Engine master 1", "onoff", {"Start": "ON"}, None, "S_ENG_MASTER_1"),
     Item("eng2", "Engines", "Engine master 2", "onoff", {"Start": "ON"}, None, "S_ENG_MASTER_2"),
     Item("parking", "Brakes", "Parking brake", "onoff", {"Before start": "OFF", "Taxi": "OFF"},
          "(A:BRAKE PARKING POSITION, Bool)", "S_MIP_PARKING_BRAKE", True),
+    # Preliminary cockpit prep (valori ipotizzati: da verificare col grezzo di --test-links)
+    Item("wx_sys", "Weather radar", "WX Radar sw", "wxsys", {"Prep": "OFF"}, None, "S_WR_SYS"),
+    Item("wx_pws", "Weather radar", "Windshear PWS sw", "onoff", {"Prep": "OFF"}, None, "S_WR_PRED_WS"),
+    Item("wx_gain", "Weather radar", "WX Gain knob", "numeric", {"Prep": "AUTO/CAL"}, None, "A_WR_GAIN"),
+    Item("wx_mode", "Weather radar", "WX Mode", "numeric", {"Prep": "as required"}, None, "S_WR_MODE"),
+    Item("bat1", "Electrical", "Battery 1", "onoff", {"Prep": "ON"}, None, "S_OH_ELEC_BAT1"),
+    Item("bat2", "Electrical", "Battery 2", "onoff", {"Prep": "ON"}, None, "S_OH_ELEC_BAT2"),
+    Item("ext_pwr", "Electrical", "External power", "onoff", {"Prep": "ON if avail"}, None, "S_OH_ELEC_EXT_PWR"),
+    Item("crew_oxy", "Electrical", "Crew supply", "onoff", {"Prep": "ON"}, None, "S_OH_OXYGEN_CREW_OXYGEN"),
+    Item("ir1", "ADIRS", "IR 1 mode", "irmode", {"Prep": "NAV"}, None, "S_OH_NAV_IR1_MODE"),
+    Item("ir2", "ADIRS", "IR 2 mode", "irmode", {"Prep": "NAV"}, None, "S_OH_NAV_IR2_MODE"),
+    Item("ir3", "ADIRS", "IR 3 mode", "irmode", {"Prep": "NAV"}, None, "S_OH_NAV_IR3_MODE"),
 ]
 
 
@@ -99,6 +114,8 @@ def label(item: Item, raw) -> str:
     v = to_number(raw)
     if v is None:
         return NA
+    if item.kind == "numeric":
+        return raw_text(v)
     text = MAPS[item.kind].get(int(v)) if v == int(v) else None
     if text is None:
         return f"{NA} ({raw_text(v)})"  # valore inatteso: "n/d" ma con il grezzo, distinto da OFF
@@ -108,6 +125,8 @@ def label(item: Item, raw) -> str:
 def clean_label(item: Item, raw) -> str | None:
     """Etichetta pulita (senza il grezzo) per il confronto della checklist, oppure None se assente o fuori mappa."""
     v = to_number(raw)
+    if v is not None and item.kind == "numeric":
+        return raw_text(v)  # solo da mostrare, mai confrontato
     if v is None or v != int(v):
         return None
     return MAPS[item.kind].get(int(v))

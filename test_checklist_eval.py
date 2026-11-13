@@ -43,6 +43,31 @@ def test_all_priority():
     assert evaluate(c, {"landing_l": "ON", "landing_r": "ON"}, verified=False)["status"] == "na"
 
 
+def test_show_and_optional():
+    s = {"show": ["wx_gain"]}
+    assert evaluate(s, {"wx_gain": "0.5"}) == {"status": "none", "kind": "none", "detail": ""}
+    assert evaluate(s, {}, verified=False)["status"] == "none"
+    c = {"key": "flap", "eq": "FULL"}
+    assert evaluate(c, {"flap": "FULL"}, optional=True)["status"] == "ok"
+    r = evaluate(c, {"flap": "3"}, optional=True)
+    assert r == {"status": "opt", "kind": "optional", "detail": "expected FULL, actual 3"}
+    r = evaluate(c, {"flap": "UP"}, optional=True)
+    assert r == {"status": "opt", "kind": "optional", "detail": "expected FULL, actual UP"}
+    assert evaluate(c, {"flap": "UP"})["status"] == "bad"
+    assert evaluate(c, {"flap": None}, optional=True)["status"] == "na"
+    assert evaluate(c, {"flap": "UP"}, verified=False, optional=True)["status"] == "na"
+
+
+def test_numeric():
+    from monitor import ITEMS, clean_label, label, MAPS
+    by = {i.key: i for i in ITEMS}
+    assert MAPS["numeric"] == {}
+    assert label(by["wx_gain"], 0.5) == "0.5" and label(by["wx_gain"], 12) == "12" and label(by["wx_gain"], None) == "n/d"
+    assert clean_label(by["wx_gain"], 0.5) == "0.5" and clean_label(by["wx_mode"], None) is None
+    assert label(by["wx_sys"], 2) == "SYS 2 (2)" and label(by["ir1"], 1) == "NAV (1)"
+    assert clean_label(by["ir1"], 1) == "NAV" and clean_label(by["bat1"], 1) == "ON"
+
+
 def test_clean_label():
     from monitor import ITEMS, clean_label
     by = {i.key: i for i in ITEMS}
@@ -57,5 +82,7 @@ if __name__ == "__main__":
     test_na_cases()
     test_eq_list()
     test_all_priority()
+    test_show_and_optional()
+    test_numeric()
     test_clean_label()
     print("ok")

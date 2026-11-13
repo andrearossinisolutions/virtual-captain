@@ -7,6 +7,7 @@ Comandante virtuale per MSFS 2024: tu sei il First Officer, lui ti ricorda cosa 
 - `python main.py --sim` — decollo simulato, senza AAO (prova voce e soglie)
 - `--port 8080`, `--host <IP>`, `--no-firewall` — al primo avvio su Windows il programma chiede il permesso (UAC) di creare la regola del firewall per la porta, solo per la rete Tailscale (100.64.0.0/10, quindi non dipende dall'IP); — la pagina si lega solo all'IP di Tailscale (mai a tutte le reti); senza Tailscale resta su localhost
 - Dal briefing si sceglie **Checklists: Complete / Simplified**: la modalità Simplified nasconde le voci elencate in `checklist_simplified.json` (id di `checklist.json`); il cockpit state e i valori reali restano completi.
+- Collegamenti della checklist (`checklist_links.json`): `{"show": [chiavi]}` mostra solo il valore letto senza esito; `"optional": true` rende azzurro (○, non conta come out of spec) ciò che non è conforme (es. Flaps FULL as required).
 - `python test_brain.py` e `python test_web.py` — test (logica e API della pagina)
 
 Scheda e decisioni nel second brain: `life/virtual-captain/progetto.md`.

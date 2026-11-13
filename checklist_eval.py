@@ -1,8 +1,9 @@
 """Confronto puro tra uno stato atteso della checklist e le etichette lette dal cockpit (sola lettura, nessun I/O).
 
-check: {"key": k, "eq": "ON" | ["ON", "OFF"]} oppure {"all": [check, ...]}.
+check: {"key": k, "eq": "ON" | ["ON", "OFF"]}, {"all": [check, ...]} oppure {"show": [chiavi]} (solo mostrare: nessun esito).
+optional (campo del link): se la voce non e' conforme l'esito e' "opt" (neutro, non conta come bad) invece di "bad".
 labels: {chiave: etichetta pulita | None}.
-Esito: {"status": "ok|bad|na|none", "kind": "ok|mismatch|unverified|unreadable|none", "detail": str}. Priorita' nelle composte: bad > na > ok.
+Esito: {"status": "ok|bad|na|opt|none", "kind": "ok|mismatch|unverified|unreadable|none", "detail": str}. Priorita' nelle composte: bad > na > ok.
 """
 from __future__ import annotations
 
@@ -37,10 +38,18 @@ def _single(check: dict, labels: dict) -> dict:
     return _res("bad", f"expected {' / '.join(want)}, actual {cur}", "mismatch")
 
 
-def evaluate(check: dict | None, labels: dict, verified: bool = True) -> dict:
-    """Valuta un collegamento. verified=False (link non ancora verificato) => sempre "na" (se c'e' un check)."""
-    if not check:
+def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: bool = False) -> dict:
+    """Valuta un collegamento. verified=False (link non ancora verificato) => sempre "na" (se c'e' un check).
+    {"show": [...]} => sempre "none" (si mostra solo il valore). optional=True: il "bad" diventa "opt"."""
+    if not check or "show" in check:
         return _res("none")
+    res = _evaluate(check, labels, verified)
+    if optional and res["status"] == "bad":
+        return _res("opt", res["detail"], "optional")
+    return res
+
+
+def _evaluate(check: dict, labels: dict, verified: bool) -> dict:
     if not verified:
         return _res("na", UNVERIFIED, "unverified")
     if "all" not in check:

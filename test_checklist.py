@@ -26,7 +26,14 @@ def test_files_valid():
     pre = cl.phase("preliminary-cockpit-prep")["subphases"]
     assert [s["name"][:1] for s in pre] == ["1", "2", "3", "4"]
     assert cl.phase("sim-preparation")["subphases"][0]["name"] == ""
-    assert all(l["verified"] is False for k, l in cl.links.items() if not any(x in json.dumps(l["check"]) for x in ("apu_bleed", "spoilers")))
+    verified = {"apu_bleed", "spoilers", "parking", "eng1", "eng2", "engmode", "gear", "apu_master", "navlogo", "strobe", "flap"}
+    for k, l in cl.links.items():
+        v = {c["key"] for c in l["check"].get("all", [l["check"]]) if "key" in c}
+        if k.startswith("preliminary-cockpit-prep."):
+            assert l["verified"] is bool(v & verified) and (v <= verified or not l["verified"]), k
+    assert [k for k, l in cl.links.items() if l["verified"] and not k.startswith("preliminary-cockpit-prep.")
+            and "apu_bleed" not in json.dumps(l["check"]) and "spoilers" not in json.dumps(l["check"])] == [
+        "ils-approach.flaps-full", "non-precision-approach.flaps-full"]
     assert any(i["id"] == "engine-startup.engine-idle-parameters_2" for i in items)
 
 
@@ -37,7 +44,7 @@ def test_links_reference_real_things():
 
     def walk(check):
         for c in check.get("all", [check]):
-            assert c["key"] in keys
+            assert all(k in keys for k in c["show"]) if "show" in c else c["key"] in keys
     for link in cl.links.values():
         walk(link["check"])
     assert not any("smok" in i for i in cl.links)  # No smoking non e' monitorato
@@ -230,6 +237,36 @@ def test_trust_links_and_raw():
     assert all("raw" not in i for i in rows.values() if i["live"] == [])  # solo voci con link
 
 
+def test_new_links_show_optional():
+    cl = C.load()
+    P = "preliminary-cockpit-prep."
+    for k in ("wx-radar-sw", "windshear-pws-sw", "gain-knob", "wx-mode-selector", "battery-pb-1-2", "external-power-pb",
+              "crew-supply-pb", "all-ir-modes"):
+        assert cl.links[P + k]["verified"] is False, k
+    assert C.check_keys(cl.links[P + "battery-pb-1-2"]["check"]) == ["bat1", "bat2"]
+    assert C.check_keys(cl.links[P + "all-ir-modes"]["check"]) == ["ir1", "ir2", "ir3"]
+    assert cl.links[P + "gain-knob"]["check"] == {"show": ["wx_gain"]}
+    labels = mon.clean_labels({"wx_gain": 0.5, "wx_mode": 2, "flap": 3})
+    res = cl.evaluate_phase("preliminary-cockpit-prep", labels, raw={"wx_gain": 0.5, "wx_mode": 2})
+    rows = {i["id"]: i for s in res["subphases"] for i in s["items"]}
+    assert rows[P + "gain-knob"]["status"] == "none" and rows[P + "gain-knob"]["live"] == [["WX Gain knob", "0.5"]]
+    assert rows[P + "gain-knob"]["raw"] == [["A_WR_GAIN", "0.5"]] and res["bad"] == 0
+    assert rows[P + "wx-mode-selector"]["live"] == [["WX Mode", "2"]]
+    for ph in ("ils-approach", "non-precision-approach"):
+        assert cl.links[ph + ".flaps-full"]["optional"] is True and cl.links[ph + ".flaps-full"]["verified"] is True
+        for raw, st in ((4, "ok"), (3, "opt")):
+            r = cl.evaluate_phase(ph, mon.clean_labels({"flap": raw}))
+            row = {i["id"]: i for s in r["subphases"] for i in s["items"]}[ph + ".flaps-full"]
+            assert row["status"] == st and r["bad"] == 0, (ph, raw)
+    for bad in ({"check": {"show": ["nope"]}, "verified": False}, {"check": {"show": []}, "verified": False},
+                {"check": {"key": "flap", "eq": "FULL"}, "optional": "yes", "verified": True}):
+        try:
+            C.Checklist(cl.data, {P + "gain-knob": bad})
+            assert False, bad
+        except ValueError:
+            pass
+
+
 def test_live_values():
     cl = C.load()
     labels = {"parking": "ON", "eng1": "OFF", "eng2": None}
@@ -249,6 +286,7 @@ def test_live_values():
 if __name__ == "__main__":
     test_files_valid()
     test_links_reference_real_things()
+    test_new_links_show_optional()
     test_validation_rejects_bad_data()
     test_source_in_sync()
     test_evaluate_phase()
