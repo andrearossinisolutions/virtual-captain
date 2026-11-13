@@ -73,7 +73,14 @@ def main():
     st = State(weather=Weather(fetch=(lambda icao: 1013.0 if icao == st.fields.get("origin") else 1009.0) if sim else online_fetch))
     st.cl_trust_links = "--test-links" in sys.argv  # solo prova: link valutati come verified + valori grezzi accanto alle voci
     st.cl_demo = sim  # solo in --sim: link della checklist trattati come verificati (resa dimostrativa)
-    srv = web.serve(st, host, port)
+    try:
+        srv = web.serve(st, host, port)
+    except OSError as e:
+        if arg("--host") or host == "127.0.0.1":
+            raise
+        print(f"⚠ Impossibile usare {host} ({e}): Tailscale è chiuso? Uso 127.0.0.1, pagina raggiungibile solo da questo PC.")
+        host = "127.0.0.1"
+        srv = web.serve(st, host, port)
     url = f"http://{host}:{port}"
     print(f"\nVirtual Captain — apri dal tablet:  {url}\n", flush=True)
     show_qr(url)
