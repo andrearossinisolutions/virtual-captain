@@ -289,7 +289,7 @@ def test_clearance_endpoint():
 
 def test_craft_markup():
     p = web.PAGE
-    for m in ("/api/clearance", "function craftNode", "function syncCraft", ".craft{grid-column:1/-1", 'inputMode="numeric"', "i.maxLength=4",
+    for m in ("/api/clearance", "function craftNode", "function syncCraft", ".craft{background", 'inputMode="numeric"', "i.maxLength=4",
               "Reset to plan", "setTimeout(clrSend,400)", "document.activeElement!==i", "Expected: ", ".cl .cli .exp", "scroll-margin-bottom"):
         assert m in p, m
     key = p[p.index("bk=JSON.stringify"):p.index("showLive,s.test_links")]

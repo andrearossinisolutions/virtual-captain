@@ -80,13 +80,13 @@ main.fv{max-width:none;padding:12px 16px}
 .cli.t-atc .e,.cli.t-announce .e,.cli.t-note .e{font-style:italic;color:var(--mut)}
 .badge{display:inline-block;font-size:11px;font-style:normal;font-weight:700;letter-spacing:.05em;border:1px solid var(--bd);border-radius:6px;padding:1px 6px;margin-right:6px;color:var(--warn)}
 .cli .exp{font-size:14px;color:var(--mut)}
-.craft{grid-column:1/-1;column-span:all;background:#0c131b;border:1px solid var(--bd);border-radius:12px;padding:12px;margin:12px 0;break-inside:avoid}
-.craft .ch{font-size:13px;font-weight:700;letter-spacing:.06em;color:var(--warn);margin-bottom:8px}
-.craft .cf{display:grid;grid-template-columns:1fr 1fr;gap:10px}.craft .cf .w{grid-column:1/-1}
-.craft input,.craft textarea{width:100%;padding:12px;font-size:18px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--fg);scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}
-.craft textarea{font:16px/1.4 ui-monospace,monospace;text-transform:uppercase;min-height:5.5em;resize:vertical}
-.craft .cb{margin-top:10px}.craft .cb button{padding:8px 14px;font-size:15px}
-@media (min-width:900px){.craft .cf{grid-template-columns:repeat(4,1fr)}.craft .cf .w{grid-column:1/-1}}
+.craft{background:#0c131b;border:1px solid var(--bd);border-radius:10px;padding:8px;margin:8px 0;break-inside:avoid}
+.craft .ch{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--warn);margin-bottom:4px}
+.craft .cf{display:grid;grid-template-columns:1fr 1fr;gap:4px 6px}.craft .cf .w{grid-column:1/-1;order:-1}
+.craft label{display:block;font-size:11px;color:var(--mut);line-height:1.2}
+.craft input,.craft textarea{width:100%;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--fg);scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}
+.craft textarea{font:16px/1.3 ui-monospace,monospace;text-transform:uppercase;min-height:3.6em;resize:vertical}
+.craft .cb{margin-top:6px}.craft .cb button{padding:4px 10px;font-size:13px}
 #clnextbtn{margin-top:14px}
 ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{padding:6px 0;border-bottom:1px solid var(--bd);color:var(--mut)}
 </style></head><body><main id="main">
