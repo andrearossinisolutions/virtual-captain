@@ -77,7 +77,33 @@ def test_clean_label():
     assert clean_label(by["apu_master"], "x") is None
 
 
+def test_expected_refs():
+    c = {"key": "wx_gain", "eq_ref": "clr.t"}  # numeric senza mappa
+    ev = lambda lab, exp, **kw: evaluate(c, {"wx_gain": lab}, expected=exp, **kw)
+    assert ev("2000", {"clr.t": "2000"}) == {"status": "ok", "kind": "ok", "detail": ""}
+    assert ev("2000", {"clr.t": "2100"}) == {"status": "bad", "kind": "mismatch", "detail": "expected 2100, actual 2000"}
+    assert ev("2000", {"clr.t": "02000"})["status"] == "ok" and ev("0.5", {"clr.t": "0.50"})["status"] == "ok"  # normalizzazione numerica
+    assert ev("2000", {"clr.t": " 2000 "})["status"] == "ok"
+    for empty in ({}, {"clr.t": ""}, {"clr.t": "  "}, {"clr.t": None}):
+        assert ev("2000", empty) == {"status": "none", "kind": "none", "detail": ""}  # atteso vuoto: solo NOW
+    assert ev(None, {"clr.t": "2000"})["status"] == "na" and ev(None, {"clr.t": "2000"})["kind"] == "unreadable"
+    assert ev("2000", {"clr.t": "2000"}, verified=False) == {"status": "na", "kind": "unverified", "detail": "unverified"}
+    assert ev("2100", {"clr.t": "2000"}, optional=True)["status"] == "opt"
+    # squawk: sorgente da provare dal vivo, mai verde ne' rosso
+    sq = {"key": "squawk", "eq_ref": "clr.t"}
+    for lab in ("2000", "7000", None):
+        r = evaluate(sq, {"squawk": lab}, expected={"clr.t": "2000"})
+        assert r["status"] == "na" and r["kind"] == "unverified"
+    assert evaluate(sq, {"squawk": "2000"}, expected={})["status"] == "none"
+    # solo-atteso: nessun esito, anche senza lettura
+    assert evaluate({"show_ref": "clr.a"}, {}, expected={"clr.a": "FL100"}) == {"status": "none", "kind": "none", "detail": ""}
+    assert evaluate({"show_ref": "clr.a"}, {}, verified=False)["status"] == "none"
+    # eq e show esistenti invariati con expected passato
+    assert evaluate({"key": "apu_master", "eq": "ON"}, {"apu_master": "OFF"}, expected={"clr.t": "1"})["status"] == "bad"
+
+
 if __name__ == "__main__":
+    test_expected_refs()
     test_none_and_single()
     test_na_cases()
     test_eq_list()

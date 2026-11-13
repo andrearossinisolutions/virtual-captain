@@ -5,13 +5,18 @@ import json
 import pathlib
 
 import monitor as mon
-from checklist_eval import BY_KEY, evaluate
+from checklist_eval import BY_KEY, REFS, evaluate
 
 HERE = pathlib.Path(__file__).resolve().parent
-TYPES = ("action", "announce", "atc", "note")
+TYPES = ("action", "announce", "atc", "note", "craft")
+CRAFT_KEYS = ("c", "r", "a", "f", "t")
 
 
-def _check_keys(check: dict, where: str) -> None:
+def _check_keys(check: dict, where: str, inner: bool = False) -> None:
+    if "show_ref" in check:
+        if inner or set(check) != {"show_ref"} or check["show_ref"] not in REFS:
+            raise ValueError(f"{where}: 'show_ref' non valido")
+        return
     if "show" in check:
         keys = check["show"]
         if set(check) != {"show"} or not isinstance(keys, list) or not keys or any(k not in BY_KEY for k in keys):
@@ -23,11 +28,17 @@ def _check_keys(check: dict, where: str) -> None:
         for sub in check["all"]:
             if "all" in sub:
                 raise ValueError(f"{where}: 'all' annidato non ammesso")
-            _check_keys(sub, where)
+            _check_keys(sub, where, True)
         return
     key = check.get("key")
     if key not in BY_KEY:
         raise ValueError(f"{where}: chiave sconosciuta {key!r}")
+    if "eq_ref" in check:
+        if inner or set(check) != {"key", "eq_ref"} or check["eq_ref"] not in REFS:
+            raise ValueError(f"{where}: 'eq_ref' non valido")
+        if mon.MAPS[BY_KEY[key].kind]:
+            raise ValueError(f"{where}: eq_ref non ammesso su {key} (ha una mappa di etichette)")
+        return
     eq = check.get("eq")
     wanted = [eq] if isinstance(eq, str) else eq
     if not isinstance(wanted, list) or not wanted:
@@ -36,6 +47,15 @@ def _check_keys(check: dict, where: str) -> None:
     for e in wanted:
         if e not in valid:
             raise ValueError(f"{where}: etichetta {e!r} non valida per {key}")
+
+
+def _check_craft(it: dict) -> None:
+    fields = it.get("fields")
+    if not isinstance(fields, list) or [f.get("k") for f in fields if isinstance(f, dict)] != list(CRAFT_KEYS):
+        raise ValueError(f"{it['id']}: 'fields' di craft non valido")
+    for f in fields:
+        if not isinstance(f.get("label"), str) or not f["label"] or f.get("src", "plan.destination") not in ("plan.destination", "plan.route"):
+            raise ValueError(f"{it['id']}: campo craft non valido")
 
 
 def check_keys(check: dict) -> list:
@@ -75,11 +95,13 @@ class Checklist:
                         raise ValueError(f"{it['id']}: tipo non valido {it['type']!r}")
                     if it["id"] in items or it["id"] in ids:
                         raise ValueError(f"id duplicato: {it['id']}")
+                    if it["type"] == "craft":
+                        _check_craft(it)
                     items[it["id"]] = it
         for iid, link in links.items():
             if iid not in items:
                 raise ValueError(f"link su voce inesistente: {iid}")
-            if items[iid]["type"] != "action":
+            if items[iid]["type"] != "action":  # su craft (e su ogni altro tipo) nessun link
                 raise ValueError(f"{iid}: solo le voci action possono avere un check")
             if not isinstance(link.get("verified"), bool):
                 raise ValueError(f"{iid}: 'verified' mancante")
@@ -110,9 +132,11 @@ class Checklist:
     def phase(self, phase_id: str) -> dict:
         return self.phases[self.ids.index(phase_id)]
 
-    def evaluate_phase(self, phase_id: str, labels: dict, demo: bool = False, simplified: bool = False, raw: dict | None = None) -> dict:
+    def evaluate_phase(self, phase_id: str, labels: dict, demo: bool = False, simplified: bool = False, raw: dict | None = None,
+                       expected: dict | None = None) -> dict:
         """Sottofasi e voci della fase con status/detail; "bad" = numero di voci rosse (solo quelle visibili). demo=True tratta i link come verificati.
         raw (solo --test-links): aggiunge a ogni voce con link "raw" = [[variabile, grezzo], ...].
+        expected: valori attesi {riferimento: testo} per i link eq_ref/show_ref (da state.snapshot).
         simplified=True salta le voci escluse prima della valutazione e scarta le sottofasi rimaste vuote."""
         ph, bad, subs = self.phase(phase_id), 0, []
         for sp in ph["subphases"]:
@@ -121,12 +145,17 @@ class Checklist:
                 if simplified and it["id"] in self.excluded:
                     continue
                 link = self.links.get(it["id"])
-                res = evaluate(link["check"], labels, demo or link["verified"], link.get("optional", False)) if link else evaluate(None, labels)
+                res = evaluate(link["check"], labels, demo or link["verified"], link.get("optional", False), expected) if link else evaluate(None, labels)
                 bad += res["status"] == "bad"
                 row = {"id": it["id"], "text": it["text"], "response": it["response"], "type": it["type"],
                        "live": live_values(link["check"], labels) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
                 if link and "show" in link["check"]:
                     row["show"] = True  # solo da mostrare: la pagina scrive sempre "NOW: <valore>"
+                ref = (link["check"].get("eq_ref") or link["check"].get("show_ref")) if link else None
+                if ref:
+                    row["expected"] = (expected or {}).get(ref, "")  # la pagina scrive "Expected: <valore>" se non vuoto
+                if it["type"] == "craft":
+                    row["fields"] = it["fields"]
                 if raw is not None and link:
                     row["raw"] = raw_values(link["check"], raw)
                 if it.get("note"):

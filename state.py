@@ -22,6 +22,19 @@ FROM_PLAN = ["origin", "destination", "dep_time", "runway", "ta", "v1", "vr", "v
 REMEMBERED = ["thr_red_agl", "accel_agl"]  # unico campo dei dati di volo che si ricorda
 MODES = ("normal", "training")
 CL_MODES = ("complete", "simplified")
+CLR_KEYS = ("c", "r", "a", "f", "t")  # CRAFT: cleared to, route, altitude, frequency, transponder (solo memoria, mai salvato)
+CLR_MAX = {"c": 40, "r": 400, "a": 20, "f": 20, "t": 4}
+
+
+def _empty_clearance() -> dict:
+    return {k: "" for k in CLR_KEYS}
+
+
+def _clean_clr(k: str, v) -> str:
+    v = str(v).strip()
+    if k == "t":
+        return v if len(v) <= CLR_MAX["t"] and all(ch in "01234567" for ch in v) else None
+    return v[:CLR_MAX[k]]
 
 
 def _when(ts):
@@ -53,6 +66,7 @@ class State:
         self.phase = "briefing"  # "briefing" | "flying"
         self.info = ""
         self.plan: dict = {}
+        self.clearance = _empty_clearance()  # NON persiste al riavvio
         self.rev = 0  # cambia quando il server modifica i campi (es. piano caricato)
         self.aao_ok: bool | None = None
         self.log: deque = deque(maxlen=30)
@@ -86,6 +100,29 @@ class State:
                 self.aao_url = normalize_url(str(data["aao_url"]).strip() or None)
             self._save()
 
+    def set_clearance(self, data: dict) -> None:
+        """Aggiorna i campi CRAFT presenti in data (chiavi sconosciute ignorate). Valore non valido => ValueError, nulla cambia."""
+        if not isinstance(data, dict):
+            raise ValueError("body must be an object")
+        new = {}
+        for k in CLR_KEYS:
+            if k in data:
+                if not isinstance(data[k], (str, int)) or isinstance(data[k], bool):
+                    raise ValueError(f"invalid {k}")
+                v = _clean_clr(k, data[k])
+                if v is None:
+                    raise ValueError("squawk must be up to 4 digits 0-7")
+                new[k] = v
+        with self.lock:
+            self.clearance.update(new)
+
+    def reset_clearance(self) -> None:
+        """CRAFT: c e r tornano al piano (se c'e'), a/f/t vuoti."""
+        with self.lock:
+            self.clearance = _empty_clearance()
+            self.clearance["c"] = _clean_clr("c", self.fields.get("destination", ""))
+            self.clearance["r"] = _clean_clr("r", (self.plan or {}).get("route") or "")
+
     def test_aao(self, url: str | None = None) -> dict:
         """Prova l'indirizzo indicato (o quello salvato); se risponde, lo adotta e lo salva."""
         res = AAO(url or self.aao_url).test()
@@ -99,6 +136,8 @@ class State:
         if phase in ("briefing", "flying"):
             with self.lock:
                 self.phase = phase
+                if phase == "briefing":
+                    self.reset_clearance()  # ritorno in briefing: CRAFT riparte dal piano
                 if phase != "flying":
                     self.monitor = []
                     self.labels = {}
@@ -150,6 +189,7 @@ class State:
                 if v is None:
                     missing.append(dict(FIELDS)[k])
             self.plan = data.get("plan") or {}
+            self.reset_clearance()
             self.info = (f"{data['origin']} → {data['destination']}  (generated: {_when(data['generated'])})"
                          + (f" — not in plan, enter manually: {', '.join(missing)}" if missing else ""))
             self.rev += 1
@@ -164,6 +204,13 @@ class State:
                                                  "checklist_mode": self.checklist_mode}))
         except OSError:
             pass
+
+    def _expected(self) -> dict:
+        """Valori attesi per i riferimenti dei link (clr.*, fld.*, plan.*); chiamare con il lock preso."""
+        e = {f"clr.{k}": v for k, v in self.clearance.items()}
+        e["fld.runway"], e["fld.ta"] = self.fields.get("runway", ""), self.fields.get("ta", "")
+        e["plan.sid"] = str((self.plan or {}).get("sid") or "")
+        return e
 
     # -- letture --
     def briefing(self) -> Briefing:
@@ -197,5 +244,5 @@ class State:
                     "cl_phase": self.cl_phase,
                     "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo or self.cl_trust_links,
                                                        self.checklist_mode == "simplified",
-                                                       self.raw if self.cl_trust_links else None),
-                    "test_links": self.cl_trust_links}
+                                                       self.raw if self.cl_trust_links else None, self._expected()),
+                    "test_links": self.cl_trust_links, "clearance": dict(self.clearance)}

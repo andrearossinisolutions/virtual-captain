@@ -260,6 +260,42 @@ def test_layout_markers():
     assert 'id="nowtxt"' not in p
 
 
+def test_clearance_endpoint():
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    srv = web.serve(st, "127.0.0.1", 0)
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        assert call(base, "/api/state")["clearance"] == {k: "" for k in ["c", "r", "a", "f", "t"]}
+        s = call(base, "/api/clearance", {"a": " FL100 ", "t": "2000", "r": "abc dct def", "bogus": "x"})
+        assert s["clearance"] == {"c": "", "r": "abc dct def", "a": "FL100", "f": "", "t": "2000"}
+        for bad in ({"t": "9"}, {"t": "12345"}, {"a": {"x": 1}}):
+            try:
+                call(base, "/api/clearance", bad)
+                assert False, bad
+            except urllib.error.HTTPError as e:
+                assert e.code == 400
+        try:
+            call(base, "/api/clearance", [1])
+            assert False
+        except urllib.error.HTTPError as e:
+            assert e.code == 400
+        assert call(base, "/api/state")["clearance"]["t"] == "2000"
+        st.fields["destination"], st.plan = "LIPZ", {"route": "A DCT B"}
+        s = call(base, "/api/clearance", {"reset": True})
+        assert s["clearance"] == {"c": "LIPZ", "r": "A DCT B", "a": "", "f": "", "t": ""}
+    finally:
+        srv.shutdown()
+
+
+def test_craft_markup():
+    p = web.PAGE
+    for m in ("/api/clearance", "function craftNode", "function syncCraft", ".craft{grid-column:1/-1", 'inputMode="numeric"', "i.maxLength=4",
+              "Reset to plan", "setTimeout(clrSend,400)", "document.activeElement!==i", "Expected: ", ".cl .cli .exp", "scroll-margin-bottom"):
+        assert m in p, m
+    key = p[p.index("bk=JSON.stringify"):p.index("showLive,s.test_links")]
+    assert "clearance" not in key and "i.expected" in key  # i valori scritti dall'utente non fanno ricostruire la pagina
+
+
 def test_spoke_counters():
     with tempfile.TemporaryDirectory() as d:
         st = State(pathlib.Path(d) / "c.json")
@@ -290,6 +326,8 @@ def test_sim_finish_keeps_flying():
 
 
 if __name__ == "__main__":
+    test_clearance_endpoint()
+    test_craft_markup()
     test_layout_markers()
     test_test_links_markup()
     test_optional_markup()

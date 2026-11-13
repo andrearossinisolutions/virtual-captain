@@ -754,5 +754,36 @@
    "eq": "OFF"
   },
   "verified": false
+ },
+ "fmgs-performance-glareshield.squawk-code": {
+  "check": {
+   "key": "squawk",
+   "eq_ref": "clr.t"
+  },
+  "verified": false
+ },
+ "fmgs-performance-glareshield.initial-climb": {
+  "check": {
+   "show_ref": "clr.a"
+  },
+  "verified": false
+ },
+ "fmgs-performance-glareshield.t-o-rwy": {
+  "check": {
+   "show_ref": "fld.runway"
+  },
+  "verified": false
+ },
+ "fmgs-performance-glareshield.sid": {
+  "check": {
+   "show_ref": "plan.sid"
+  },
+  "verified": false
+ },
+ "fmgs-performance-glareshield.transition-altitude": {
+  "check": {
+   "show_ref": "fld.ta"
+  },
+  "verified": false
  }
 }

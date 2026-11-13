@@ -50,6 +50,7 @@ button:disabled{opacity:.5}#info{color:var(--mut);font-size:15px;margin:10px 0 0
 @media (min-width:900px){
 main.fv{max-width:none;padding:12px 16px}
 .cl .cli{display:grid;grid-template-columns:1.8em minmax(0,1fr) auto;column-gap:10px;break-inside:avoid}.cl .cli.wl{grid-template-columns:5.2em minmax(0,1fr) auto}.cl .cli .rw{grid-column:2}.cl .cli .now.nv{color:var(--mut)}.cl .cli .now{grid-column:3;text-align:right;font-size:14px;color:var(--bad);white-space:nowrap}
+.cl .cli .exp{grid-column:2/4}
 .cl .cli .tx{display:contents}.cl .cli .ic{grid-column:1}.cl .cli .e{grid-column:2}
 .cl .cli .a{grid-column:3;text-align:right;max-width:16em}.cl .cli .d{grid-column:2/4;margin-top:0;font-size:14px}
 #clbody{columns:420px 2;column-gap:24px}.cl h3{break-after:avoid;margin-top:12px}
@@ -78,6 +79,14 @@ main.fv{max-width:none;padding:12px 16px}
 .cli.st-na{border-left-color:#5d6d7d}.cli.st-na .ic{color:#6b7c8d;font-size:12px;font-weight:500}.cli .ic.w{flex:0 0 5.2em;min-width:5.2em;white-space:nowrap;text-align:left}.cli .rw{font:12px ui-monospace,monospace;color:var(--mut);word-break:break-all}
 .cli.t-atc .e,.cli.t-announce .e,.cli.t-note .e{font-style:italic;color:var(--mut)}
 .badge{display:inline-block;font-size:11px;font-style:normal;font-weight:700;letter-spacing:.05em;border:1px solid var(--bd);border-radius:6px;padding:1px 6px;margin-right:6px;color:var(--warn)}
+.cli .exp{font-size:14px;color:var(--mut)}
+.craft{grid-column:1/-1;column-span:all;background:#0c131b;border:1px solid var(--bd);border-radius:12px;padding:12px;margin:12px 0;break-inside:avoid}
+.craft .ch{font-size:13px;font-weight:700;letter-spacing:.06em;color:var(--warn);margin-bottom:8px}
+.craft .cf{display:grid;grid-template-columns:1fr 1fr;gap:10px}.craft .cf .w{grid-column:1/-1}
+.craft input,.craft textarea{width:100%;padding:12px;font-size:18px;border-radius:10px;border:1px solid var(--bd);background:var(--card);color:var(--fg);scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}
+.craft textarea{font:16px/1.4 ui-monospace,monospace;text-transform:uppercase;min-height:5.5em;resize:vertical}
+.craft .cb{margin-top:10px}.craft .cb button{padding:8px 14px;font-size:15px}
+@media (min-width:900px){.craft .cf{grid-template-columns:repeat(4,1fr)}.craft .cf .w{grid-column:1/-1}}
 #clnextbtn{margin-top:14px}
 ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{padding:6px 0;border-bottom:1px solid var(--bd);color:var(--mut)}
 </style></head><body><main id="main">
@@ -173,6 +182,24 @@ function cockpit(s){const k=JSON.stringify(s.monitor);if(k===csKey)return;csKey=
     b.appendChild(grid)}}
 let clKey="",showLive=localStorage.getItem("showLive")==="1";
 $("livesw").checked=showLive;$("livesw").onchange=()=>{showLive=$("livesw").checked;localStorage.setItem("showLive",showLive?"1":"0");if(last)checklist(last)};
+let craftEl=null,clrTimer=null;
+function clrCollect(){const o={};craftEl.querySelectorAll("[data-c]").forEach(i=>o[i.dataset.c]=i.value);return o}
+function clrSend(){clearTimeout(clrTimer);clrTimer=null;if(craftEl)api("/api/clearance",clrCollect()).catch(()=>{})}
+function craftNode(it){if(craftEl)return craftEl;
+  const el=document.createElement("div");el.className="craft";const h=document.createElement("div");h.className="ch";h.textContent=it.text;el.appendChild(h);
+  const g=document.createElement("div");g.className="cf";
+  for(const f of it.fields){const d=document.createElement("div");const w=f.k==="r";if(w)d.className="w";
+    const lb=document.createElement("label");lb.textContent=f.label;const i=document.createElement(w?"textarea":"input");i.dataset.c=f.k;
+    i.setAttribute("autocomplete","off");i.setAttribute("autocapitalize",f.k==="t"?"off":"characters");i.setAttribute("autocorrect","off");i.spellcheck=false;
+    if(f.k==="t"){i.inputMode="numeric";i.maxLength=4;i.pattern="[0-7]*"}
+    i.oninput=()=>{if(f.k==="t"){const v=i.value.replace(/[^0-7]/g,"");if(v!==i.value)i.value=v}clearTimeout(clrTimer);clrTimer=setTimeout(clrSend,400)};
+    i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();i.blur()}};
+    d.appendChild(lb);d.appendChild(i);g.appendChild(d)}
+  el.appendChild(g);const b=document.createElement("div");b.className="cb";const rb=document.createElement("button");rb.className="ghost";rb.textContent="Reset to plan";
+  rb.onclick=async()=>{clearTimeout(clrTimer);clrTimer=null;try{const s=await api("/api/clearance",{reset:true});syncCraft(s.clearance,true)}catch(e){}};
+  b.appendChild(rb);el.appendChild(b);craftEl=el;return el}
+function syncCraft(c,force){if(!craftEl||!c||(clrTimer&&!force))return;
+  craftEl.querySelectorAll("[data-c]").forEach(i=>{const v=c[i.dataset.c]||"";if(i.value!==v&&(force||document.activeElement!==i))i.value=v})}
 function clGo(body){api("/api/checklist-phase",body).then(apply).catch(()=>{})}
 function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!c)return;
   const idx=ph.findIndex(p=>p.id===cur),strip=$("clstrip"),key=ph.length+"|"+cur;
@@ -182,11 +209,13 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
   $("clprev").onclick=()=>clGo({step:-1});$("clnext").onclick=()=>clGo({step:1});
   $("clprev").disabled=idx<=0;$("clnext").disabled=idx>=ph.length-1;
   $("clname").textContent=c.phase.name;const sm=$("clsum");sm.textContent=c.bad+" out of spec";sm.className="clsum"+(c.bad?" bad":"");
-  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live,i.raw,i.show])]),showLive,s.test_links]);
-  if(bk!==clBodyKey){clBodyKey=bk;const y=window.scrollY,x=window.scrollX;body.textContent="";
+  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live,i.raw,i.show,i.expected])]),showLive,s.test_links]);
+  if(bk!==clBodyKey){clBodyKey=bk;const y=window.scrollY,x=window.scrollX;
+  const ae=document.activeElement,keep=craftEl&&ae&&craftEl.contains(ae)?[ae.dataset.c,ae.selectionStart,ae.selectionEnd]:null;body.textContent="";
   const mk=(t,cls,txt)=>{const e=document.createElement(t);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e};
   for(const sp of c.subphases){if(sp.name)body.appendChild(mk("h3","",sp.name));
-    for(const it of sp.items){const r=mk("div","cli st-"+it.status+" t-"+it.type);
+    for(const it of sp.items){if(it.type==="craft"){body.appendChild(craftNode(it));continue}
+      const r=mk("div","cli st-"+it.status+" t-"+it.type);
       const ic=it.status==="ok"?"\u2713":it.status==="bad"?"\u2717":it.status==="opt"?"\u25cb":it.status==="na"?(it.kind==="unverified"?"unverified":"n/d"):"\u00b7";
       if(ic.length>2)r.classList.add("wl");
       r.appendChild(mk("div","ic"+(ic.length>2?" w":""),ic));const tx=mk("div","tx");const e=mk("div","e");
@@ -195,11 +224,14 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(it.response&&it.type!=="announce")tx.appendChild(mk("div","a",it.response));
       if(showLive&&it.live&&it.live.length)tx.appendChild(mk("div","lv","Actual: "+it.live.map(l=>(it.live.length>1?l[0]+" ":"")+l[1]).join(" \u00b7 ")));
       if(s.test_links&&it.raw&&it.raw.length)tx.appendChild(mk("div","rw",it.raw.map(l=>l[0]+"="+l[1]).join(" \u00b7 ")));
+      if(it.expected)tx.appendChild(mk("div","exp","Expected: "+it.expected));
       if(it.show&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","NOW: "+it.live.map(l=>l[1]).join(", ")));
       if(it.kind==="mismatch"){const mm=[...it.detail.matchAll(/actual ([^;,]+)/g)].map(m=>m[1].trim());
         tx.appendChild(mm.length?mk("div","now","NOW: "+mm.join(", ")):mk("div","d",it.detail))}
       r.appendChild(tx);body.appendChild(r)}}
+  if(keep){const i=craftEl.querySelector('[data-c="'+keep[0]+'"]');if(i){i.focus({preventScroll:true});try{i.setSelectionRange(keep[1],keep[2])}catch(e){}}}
   window.scrollTo(x,y)}
+  syncCraft(s.clearance);
   const nb=$("clnextbtn"),nx=ph[idx+1];nb.hidden=!nx;if(nx){nb.textContent="Next phase: "+nx.name;nb.onclick=()=>{clGo({step:1});$("clcard").scrollIntoView({block:"start"})}}}
 function speech(s){const sp=$("speech"),tx=$("sptxt"),l=s.log,ago=s.spoke_ago==null?1e9:s.spoke_ago;
   if(s.spoke_n!==spN){if(spN!==null)spExp=false;spN=s.spoke_n;spUntil=Date.now()+Math.max(0,10-ago)*1000}
@@ -300,6 +332,14 @@ def make_handler(st: State):
                         else:
                             st.set_cl_phase(data.get("step"))
                     except ValueError as e:
+                        return self._send(400, str(e).encode(), "text/plain")
+                elif self.path == "/api/clearance":
+                    try:
+                        if data.get("reset") is True:
+                            st.reset_clearance()
+                        else:
+                            st.set_clearance(data)
+                    except (ValueError, AttributeError) as e:
                         return self._send(400, str(e).encode(), "text/plain")
                 elif self.path == "/api/phase":
                     st.set_phase(data.get("phase", ""))

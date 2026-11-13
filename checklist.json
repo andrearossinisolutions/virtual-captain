@@ -291,15 +291,15 @@
    ]
   },
   {
-   "id": "fmgs-initialization-d-i-f-s-r-i-p",
-   "name": "FMGS INITIALIZATION - D.I.F.S.R.I.P.",
+   "id": "fmgs-initialization",
+   "name": "FMGS INITIALIZATION",
    "subphases": [
     {
-     "id": "fmgs-initialization-d-i-f-s-r-i-p.main",
+     "id": "fmgs-initialization.main",
      "name": "",
      "items": [
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.flt-init",
+       "id": "fmgs-initialization.flt-init",
        "text": "FLT INIT",
        "response": "INIT DATA REQ",
        "type": "action"
@@ -307,11 +307,11 @@
      ]
     },
     {
-     "id": "fmgs-initialization-d-i-f-s-r-i-p.data",
+     "id": "fmgs-initialization.data",
      "name": "DATA",
      "items": [
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.nav-database-date",
+       "id": "fmgs-initialization.nav-database-date",
        "text": "Nav Database Date",
        "response": "CHECK",
        "type": "action"
@@ -319,11 +319,11 @@
      ]
     },
     {
-     "id": "fmgs-initialization-d-i-f-s-r-i-p.init-a",
+     "id": "fmgs-initialization.init-a",
      "name": "INIT A",
      "items": [
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.init-a-page",
+       "id": "fmgs-initialization.init-a-page",
        "text": "Init A page",
        "response": "FILL",
        "type": "action"
@@ -331,29 +331,29 @@
      ]
     },
     {
-     "id": "fmgs-initialization-d-i-f-s-r-i-p.f-pln",
+     "id": "fmgs-initialization.f-pln",
      "name": "F-PLN",
      "items": [
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.flight-plan",
+       "id": "fmgs-initialization.flight-plan",
        "text": "Flight plan",
        "response": "FILL",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.distance",
+       "id": "fmgs-initialization.distance",
        "text": "Distance",
        "response": "CROSS CHECK",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.sid-filed",
+       "id": "fmgs-initialization.sid-filed",
        "text": "SID (FILED)",
        "response": "CROSS CHECK",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.discontinuity",
+       "id": "fmgs-initialization.discontinuity",
        "text": "Discontinuity",
        "response": "CHECK",
        "type": "action"
@@ -361,11 +361,11 @@
      ]
     },
     {
-     "id": "fmgs-initialization-d-i-f-s-r-i-p.secondary-f-pln",
+     "id": "fmgs-initialization.secondary-f-pln",
      "name": "SECONDARY F-PLN",
      "items": [
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.sec-f-pln",
+       "id": "fmgs-initialization.sec-f-pln",
        "text": "SEC F-PLN",
        "response": "COPY ACTIVE",
        "type": "action"
@@ -373,17 +373,17 @@
      ]
     },
     {
-     "id": "fmgs-initialization-d-i-f-s-r-i-p.rad-nav",
+     "id": "fmgs-initialization.rad-nav",
      "name": "RAD NAV",
      "items": [
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.radio-nav",
+       "id": "fmgs-initialization.radio-nav",
        "text": "Radio Nav",
        "response": "CHECK FREQUENCIES",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.check-departure-atis",
+       "id": "fmgs-initialization.check-departure-atis",
        "text": "Check Departure ATIS",
        "response": "ANNOTATE LETTER",
        "type": "action"
@@ -391,113 +391,155 @@
      ]
     },
     {
-     "id": "fmgs-initialization-d-i-f-s-r-i-p.init-b",
+     "id": "fmgs-initialization.init-b",
      "name": "INIT B",
      "items": [
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.init-b-page",
+       "id": "fmgs-initialization.init-b-page",
        "text": "Init B page",
        "response": "FILL",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.fob",
+       "id": "fmgs-initialization.fob",
        "text": "FOB",
        "response": "CHECK",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.estimated-tow-lw",
+       "id": "fmgs-initialization.estimated-tow-lw",
        "text": "Estimated TOW / LW",
        "response": "CHECK",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.extra-time-fuel-at-destination",
+       "id": "fmgs-initialization.extra-time-fuel-at-destination",
        "text": "Extra Time / Fuel at Destination",
        "response": "CHECK",
        "type": "action"
       }
      ]
-    },
+    }
+   ]
+  },
+  {
+   "id": "departure-clearance",
+   "name": "Departure Clearance",
+   "subphases": [
     {
-     "id": "fmgs-initialization-d-i-f-s-r-i-p.clearance",
+     "id": "departure-clearance.clearance",
      "name": "CLEARANCE",
      "items": [
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.expected-rwy",
+       "id": "departure-clearance.expected-rwy",
        "text": "Expected RWY",
        "response": "NOTE",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.mcdu-departure-page",
+       "id": "departure-clearance.mcdu-departure-page",
        "text": "MCDU DEPARTURE page",
        "response": "OPEN (EXPECTED RWY)",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.available-sids",
+       "id": "departure-clearance.available-sids",
        "text": "Available SIDs",
        "response": "CHECK (PREPARE TO SELECT)",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.obtain-departure-clearance",
+       "id": "departure-clearance.obtain-departure-clearance",
        "text": "Obtain Departure Clearance",
        "response": "Eg. \"Malpensa Delivery, ASX415, Airbus a320, Stand 123, Information B, Request clearance to Venezia Tessera\"",
        "type": "atc"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.check-cleared-sid",
+       "id": "departure-clearance.craft",
+       "text": "CRAFT",
+       "response": "",
+       "type": "craft",
+       "fields": [
+        {
+         "k": "c",
+         "label": "Cleared to",
+         "src": "plan.destination"
+        },
+        {
+         "k": "r",
+         "label": "Route",
+         "src": "plan.route"
+        },
+        {
+         "k": "a",
+         "label": "Altitude"
+        },
+        {
+         "k": "f",
+         "label": "Frequency (departure)"
+        },
+        {
+         "k": "t",
+         "label": "Transponder (squawk)"
+        }
+       ]
+      },
+      {
+       "id": "departure-clearance.check-cleared-sid",
        "text": "Check cleared SID",
        "response": "Found: read back clearance. Not found: \"Stand-By, ASX415\". If still not found: \"Unable <SID name>, not in database, request radar vectors / direct <FIX>, ASX415\"",
        "type": "action"
       }
      ]
-    },
+    }
+   ]
+  },
+  {
+   "id": "fmgs-performance-glareshield",
+   "name": "FMGS PERFORMANCE & GLARESHIELD",
+   "subphases": [
     {
-     "id": "fmgs-initialization-d-i-f-s-r-i-p.performance",
+     "id": "fmgs-performance-glareshield.performance",
      "name": "PERFORMANCE",
      "items": [
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.t-o-rwy",
+       "id": "fmgs-performance-glareshield.t-o-rwy",
        "text": "T/O RWY",
        "response": "AS CLR",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.sid",
+       "id": "fmgs-performance-glareshield.sid",
        "text": "SID",
        "response": "AS CLR",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.t-o-flaps-conf-ths",
+       "id": "fmgs-performance-glareshield.t-o-flaps-conf-ths",
        "text": "T/O FLAPS CONF / THS",
        "response": "INSERT",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.flex-toga",
+       "id": "fmgs-performance-glareshield.flex-toga",
        "text": "Flex / Toga",
        "response": "INSERT",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.v1-vr-v2",
+       "id": "fmgs-performance-glareshield.v1-vr-v2",
        "text": "V1, VR, V2",
        "response": "INSERT",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.transition-altitude",
+       "id": "fmgs-performance-glareshield.transition-altitude",
        "text": "Transition Altitude",
        "response": "AS CLR",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.thrust-reduction-acc-altitude",
+       "id": "fmgs-performance-glareshield.thrust-reduction-acc-altitude",
        "text": "Thrust Reduction / ACC Altitude",
        "response": "CHECK / SET",
        "type": "action"
@@ -505,41 +547,41 @@
      ]
     },
     {
-     "id": "fmgs-initialization-d-i-f-s-r-i-p.glareshield-pedestal",
+     "id": "fmgs-performance-glareshield.glareshield-pedestal",
      "name": "GLARESHIELD / PEDESTAL",
      "items": [
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.constraint-pb",
+       "id": "fmgs-performance-glareshield.constraint-pb",
        "text": "Constraint pb",
        "response": "BOTH ON",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.barometric-reference",
+       "id": "fmgs-performance-glareshield.barometric-reference",
        "text": "Barometric Reference",
        "response": "SET 3 TIMES",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.flight-director-pb",
+       "id": "fmgs-performance-glareshield.flight-director-pb",
        "text": "Flight Director pb",
        "response": "BOTH ON",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.squawk-code",
+       "id": "fmgs-performance-glareshield.squawk-code",
        "text": "Squawk Code",
        "response": "AS CLR",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.initial-climb",
+       "id": "fmgs-performance-glareshield.initial-climb",
        "text": "Initial Climb",
        "response": "AS CLR",
        "type": "action"
       },
       {
-       "id": "fmgs-initialization-d-i-f-s-r-i-p.check-boarding-completed",
+       "id": "fmgs-performance-glareshield.check-boarding-completed",
        "text": "Check Boarding Completed",
        "response": "ANNOUNCE",
        "type": "announce"

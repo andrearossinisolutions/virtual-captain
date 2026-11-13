@@ -1,5 +1,9 @@
 """Genera checklist.json dalla sorgente testuale della checklist. Uso: python3 tools/build_checklist.py <sorgente.txt> [uscita.json]
 
+ATTENZIONE: dalla fase Departure Clearance la fonte di verita' e' `checklist.json` (si modifica a mano). Questo script e' solo lo
+strumento della prima generazione: non conosce le tre fasi FMGS/Departure Clearance (id rinominati) ne' il tipo voce `craft`, quindi
+rigenerare il file dalla vecchia sorgente lo riporterebbe indietro. Non usarlo per sovrascrivere `checklist.json`.
+
 Formato della sorgente (descritto anche in testa al file):
   - le righe fino alla prima riga vuota sono un'intestazione di commento e si ignorano;
   - "# FASE" apre una fase, "## SOTTO-FASE" una sotto-fase (le voci prima del primo ## vanno in una sotto-fase senza nome);

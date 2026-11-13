@@ -4,13 +4,14 @@ import sys
 import tempfile
 
 import checklist as C
+from checklist_eval import REFS
 import monitor as mon
 from state import State
 
 HERE = pathlib.Path(__file__).resolve().parent
 SOURCE = pathlib.Path.home() / "Outbox-Alma/Sviluppo/captain/checklist-fasi/checklist-sorgente.txt"
-PHASES = ["sim-preparation", "preliminary-cockpit-prep", "cockpit-preparation", "fmgs-initialization-d-i-f-s-r-i-p",
-          "before-start", "engine-startup", "after-engine-startup", "taxi-checklist", "before-takeoff", "takeoff",
+PHASES = ["sim-preparation", "preliminary-cockpit-prep", "cockpit-preparation", "fmgs-initialization", "departure-clearance",
+          "fmgs-performance-glareshield", "before-start", "engine-startup", "after-engine-startup", "taxi-checklist", "before-takeoff", "takeoff",
           "after-takeoff", "climb", "cruise", "descent-preparation", "descent-checklist", "ils-approach",
           "non-precision-approach", "go-around", "landing", "after-landing", "parking", "securing-the-aircraft"]
 
@@ -44,7 +45,10 @@ def test_links_reference_real_things():
 
     def walk(check):
         for c in check.get("all", [check]):
-            assert all(k in keys for k in c["show"]) if "show" in c else c["key"] in keys
+            if "show_ref" in c:
+                assert c["show_ref"] in REFS
+            else:
+                assert all(k in keys for k in c["show"]) if "show" in c else c["key"] in keys
     for link in cl.links.values():
         walk(link["check"])
 
@@ -76,14 +80,6 @@ def test_validation_rejects_bad_data():
         assert False
     except ValueError:
         pass
-
-
-def test_source_in_sync():
-    if not SOURCE.exists():
-        return
-    sys.path.insert(0, str(HERE / "tools"))
-    import build_checklist
-    assert build_checklist.parse(SOURCE.read_text(encoding="utf-8")) == C.load().data
 
 
 def test_evaluate_phase():
@@ -292,12 +288,150 @@ def test_live_values():
     assert gear.lvar == "S_MIP_GEAR" and gear.std_fallback and gear.std
 
 
+def _items(cl):
+    return {i["id"]: i for p in cl.phases for s in p["subphases"] for i in s["items"]}
+
+
+def test_departure_clearance():
+    cl = C.load()
+    assert cl.ids[3:6] == ["fmgs-initialization", "departure-clearance", "fmgs-performance-glareshield"]
+    names = {p["id"]: p["name"] for p in cl.phases}
+    assert names["fmgs-initialization"] == "FMGS INITIALIZATION" and names["departure-clearance"] == "Departure Clearance"
+    assert names["fmgs-performance-glareshield"] == "FMGS PERFORMANCE & GLARESHIELD"
+    clr = cl.phase("departure-clearance")["subphases"]
+    assert [s["name"] for s in clr] == ["CLEARANCE"]
+    ids = [i["id"] for i in clr[0]["items"]]
+    assert ids == ["departure-clearance." + k for k in ("expected-rwy", "mcdu-departure-page", "available-sids",
+                                                        "obtain-departure-clearance", "craft", "check-cleared-sid")]
+    craft = _items(cl)["departure-clearance.craft"]
+    assert craft["type"] == "craft" and [f["k"] for f in craft["fields"]] == ["c", "r", "a", "f", "t"]
+    assert [s["name"] for s in cl.phase("fmgs-performance-glareshield")["subphases"]] == ["PERFORMANCE", "GLARESHIELD / PEDESTAL"]
+    assert "fmgs-performance-glareshield.check-boarding-completed" in _items(cl)
+    assert not any("d-i-f-s-r-i-p" in i for i in _items(cl)) and not any("d-i-f-s-r-i-p" in k for k in cl.links)
+    # Simplified: craft e obtain-departure-clearance restano, la fase e' visibile
+    assert "departure-clearance.craft" not in cl.excluded and "departure-clearance.obtain-departure-clearance" not in cl.excluded
+    assert "departure-clearance" in cl.visible_ids(True)
+    simp = cl.evaluate_phase("departure-clearance", {}, simplified=True)
+    sids = [i["id"] for sp in simp["subphases"] for i in sp["items"]]
+    assert "departure-clearance.craft" in sids and "departure-clearance.expected-rwy" not in sids
+    row = cl.evaluate_phase("departure-clearance", {})["subphases"][0]["items"][4]
+    assert row["type"] == "craft" and row["status"] == "none" and row["fields"] == craft["fields"] and "expected" not in row
+
+
+def test_craft_validation():
+    cl = C.load()
+    first = cl.phases[0]["subphases"][0]["items"][0]["id"]
+    # nessun link su craft
+    try:
+        C.Checklist(cl.data, {"departure-clearance.craft": {"check": {"show_ref": "clr.a"}, "verified": False}})
+        assert False
+    except ValueError:
+        pass
+    bad = [{"check": {"key": "squawk", "eq_ref": "clr.x"}, "verified": False},  # riferimento non chiuso
+           {"check": {"key": "squawk", "eq_ref": "clr.t", "eq": "1"}, "verified": False},
+           {"check": {"key": "apu_master", "eq_ref": "clr.t"}, "verified": False},  # kind a mappa di etichette
+           {"check": {"all": [{"key": "squawk", "eq_ref": "clr.t"}]}, "verified": False},
+           {"check": {"show_ref": "nope"}, "verified": False},
+           {"check": {"show_ref": "clr.a", "show": ["squawk"]}, "verified": False}]
+    for link in bad:
+        try:
+            C.Checklist(cl.data, {first: link})
+            assert False, link
+        except ValueError:
+            pass
+    C.Checklist(cl.data, {first: {"check": {"key": "squawk", "eq_ref": "clr.t"}, "verified": False}})
+    data = json.loads(json.dumps(cl.data))
+    for it in [i for p in data["phases"] for s in p["subphases"] for i in s["items"] if i["type"] == "craft"]:
+        it["fields"] = it["fields"][:-1]
+    try:
+        C.Checklist(data, {})
+        assert False
+    except ValueError:
+        pass
+
+
+def test_expected_links():
+    cl = C.load()
+    P = "fmgs-performance-glareshield."
+    assert cl.links[P + "squawk-code"] == {"check": {"key": "squawk", "eq_ref": "clr.t"}, "verified": False}
+    for k, ref in (("initial-climb", "clr.a"), ("t-o-rwy", "fld.runway"), ("sid", "plan.sid"), ("transition-altitude", "fld.ta")):
+        assert cl.links[P + k] == {"check": {"show_ref": ref}, "verified": False}, k
+    exp = {"clr.a": "FL100", "fld.runway": "35R", "plan.sid": "TOSNU", "fld.ta": "5000", "clr.t": "2000"}
+    res = cl.evaluate_phase("fmgs-performance-glareshield", {"squawk": "2000"}, expected=exp)
+    rows = {i["id"]: i for s in res["subphases"] for i in s["items"]}
+    assert rows[P + "initial-climb"]["expected"] == "FL100" and rows[P + "initial-climb"]["status"] == "none"
+    assert rows[P + "t-o-rwy"]["expected"] == "35R" and rows[P + "sid"]["expected"] == "TOSNU" and rows[P + "transition-altitude"]["expected"] == "5000"
+    assert rows[P + "initial-climb"]["live"] == [] and rows[P + "squawk-code"]["expected"] == "2000"
+    assert rows[P + "squawk-code"]["status"] == "na" and rows[P + "squawk-code"]["kind"] == "unverified"  # verified:false e sorgente da provare
+    assert "expected" not in rows[P + "flight-director-pb"] and res["bad"] == 0
+    empty = {i["id"]: i for s in cl.evaluate_phase("fmgs-performance-glareshield", {})["subphases"] for i in s["items"]}
+    assert empty[P + "sid"]["expected"] == "" and empty[P + "sid"]["status"] == "none"
+    # con link verificato (come --test-links) l'esito esce dal confronto, ma la sorgente uncertain resta na
+    r = cl.evaluate_phase("fmgs-performance-glareshield", {"squawk": "7000"}, demo=True, expected=exp)
+    assert {i["id"]: i for s in r["subphases"] for i in s["items"]}[P + "squawk-code"]["status"] == "na"
+
+
+def test_clearance_state():
+    cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
+    st = State(cfg)
+    assert st.clearance == {k: "" for k in ["c", "r", "a", "f", "t"]} and st.snapshot()["clearance"] == st.clearance
+    st.set_clearance({"a": " FL100 ", "t": "2000", "zzz": "x", "f": "126.5"})
+    assert st.clearance["a"] == "FL100" and st.clearance["t"] == "2000" and "zzz" not in st.clearance
+    st.set_clearance({"r": "x" * 900})
+    assert len(st.clearance["r"]) == 400
+    for bad in ({"t": "20000"}, {"t": "2008"}, {"t": "ab"}, {"a": ["x"]}, {"c": None}, [1]):
+        try:
+            st.set_clearance(bad)
+            assert False, bad
+        except ValueError:
+            pass
+    assert st.clearance["t"] == "2000"  # un valore non valido non cambia nulla
+    st.set_clearance({"t": ""})
+    assert st.clearance["t"] == ""
+    assert not cfg.exists() or "clearance" not in cfg.read_text()  # mai salvato
+    # reset: c e r dal piano, a/f/t vuoti
+    st.fields["destination"], st.plan = "LIRF", {"route": "SID DCT ABC STAR"}
+    st.set_clearance({"a": "5000", "t": "1234"})
+    st.reset_clearance()
+    assert st.clearance == {"c": "LIRF", "r": "SID DCT ABC STAR", "a": "", "f": "", "t": ""}
+    st.set_clearance({"f": "121.7"})
+    st.set_phase("flying")
+    assert st.clearance["f"] == "121.7"
+    st.set_phase("briefing")  # ritorno in briefing: riparte dal piano
+    assert st.clearance == {"c": "LIRF", "r": "SID DCT ABC STAR", "a": "", "f": "", "t": ""}
+    # i valori attesi arrivano dallo snapshot
+    st.fields["runway"], st.fields["ta"], st.plan["sid"] = "35R", "5000", "TOSNU"
+    st.set_clearance({"a": "FL100", "t": "2000"})
+    st.set_cl_phase("fmgs-performance-glareshield")
+    rows = {i["id"]: i for s in st.snapshot()["checklist"]["subphases"] for i in s["items"]}
+    P = "fmgs-performance-glareshield."
+    assert (rows[P + "initial-climb"]["expected"], rows[P + "t-o-rwy"]["expected"], rows[P + "sid"]["expected"],
+            rows[P + "transition-altitude"]["expected"], rows[P + "squawk-code"]["expected"]) == ("FL100", "35R", "TOSNU", "5000", "2000")
+    # non persiste al riavvio
+    assert State(cfg).clearance == {k: "" for k in ["c", "r", "a", "f", "t"]}
+    # il caricamento del piano precompila c e r e svuota a/f/t
+    import state as S
+    orig = (S.fetch_latest, S.to_briefing)
+    S.fetch_latest = lambda uid: {}
+    S.to_briefing = lambda ofp: {"origin": "LIML", "destination": "LIPZ", "runway": "35R", "dep_time": "10:00", "ta": 6000, "generated": 1,
+                                 "v1": None, "vr": None, "v2": None, "flap": None, "plan": {"route": "AAA DCT BBB", "sid": "S1"}}
+    try:
+        st.set_clearance({"a": "FL100", "f": "121.7", "t": "7000"})
+        st.load_plan("x")
+    finally:
+        S.fetch_latest, S.to_briefing = orig
+    assert st.clearance == {"c": "LIPZ", "r": "AAA DCT BBB", "a": "", "f": "", "t": ""}
+
+
 if __name__ == "__main__":
     test_files_valid()
     test_links_reference_real_things()
     test_new_links_show_optional()
     test_validation_rejects_bad_data()
-    test_source_in_sync()
+    test_departure_clearance()
+    test_craft_validation()
+    test_expected_links()
+    test_clearance_state()
     test_evaluate_phase()
     test_simplified()
     test_cl_phase_state()
