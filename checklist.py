@@ -11,7 +11,7 @@ from checklist_eval import BY_KEY, REFS, _refs, evaluate, qnh_actual
 HERE = pathlib.Path(__file__).resolve().parent
 TYPES = ("action", "announce", "atc", "note", "craft")
 CRAFT_KEYS = ("c", "r", "a", "f", "t")
-INPUT_KEYS = ("runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap")  # campi di State.fields modificabili dalle voci
+INPUT_KEYS = ("runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg")  # campi di State.fields modificabili dalle voci
 
 
 def _check_keys(check: dict, where: str, inner: bool = False) -> None:
@@ -51,6 +51,12 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
     key = check.get("key")
     if key not in BY_KEY:
         raise ValueError(f"{where}: chiave sconosciuta {key!r}")
+    if "tol_ref" in check:  # numerico con tolleranza percentuale sull'atteso di un campo (solo fuori da 'all')
+        tol = check.get("tol_pct")
+        if inner or set(check) != {"key", "tol_ref", "tol_pct"} or check["tol_ref"] not in ("fld.fob", "fld.zfw") or BY_KEY[key].kind != "numeric" \
+                or isinstance(tol, bool) or not isinstance(tol, (int, float)) or not 0 < tol <= 50:
+            raise ValueError(f"{where}: 'tol_ref' non valido")
+        return
     if "eq_ref" in check:
         if set(check) != {"key", "eq_ref"} or check["eq_ref"] not in REFS:
             raise ValueError(f"{where}: 'eq_ref' non valido")

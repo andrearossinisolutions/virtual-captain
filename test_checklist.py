@@ -581,6 +581,48 @@ def test_inputs_items():
         pass
 
 
+def test_fob_zfw_items_and_tolerance():
+    cl = C.load()
+    fob = {"key": "fob_now", "tol_ref": "fld.fob", "tol_pct": 2}
+    for k in ("before-start.fob", "fmgs-initialization.fob"):
+        assert cl.links[k]["check"] == fob and cl.links[k]["verified"] is True
+    assert cl.links["before-start.zfw-zfwcg"]["check"] == {"show": ["zfw_calc"]}
+    rows = {i["id"]: i for s in cl.evaluate_phase("before-start", {})["subphases"] for i in s["items"]}
+    assert [f["k"] for f in rows["before-start.zfw-zfwcg"]["inputs"]] == ["zfw", "zfwcg"] and [f["k"] for f in rows["before-start.fob"]["inputs"]] == ["fob"]
+    from checklist_eval import evaluate
+    ev = lambda lab, exp: evaluate(fob, lab, True, False, exp)
+    # stessa unita' (piano kgs, Fenix kg), tolleranza 2%
+    assert ev({"fob_now": "6500", "cfg_lbs": "0"}, {"fld.fob": "6500", "fld.fob_unit": "kgs"})["status"] == "ok"
+    assert ev({"fob_now": "6620", "cfg_lbs": "0"}, {"fld.fob": "6500", "fld.fob_unit": "kgs"})["status"] == "ok"  # +1.8%
+    r = ev({"fob_now": "6700", "cfg_lbs": "0"}, {"fld.fob": "6500", "fld.fob_unit": "kgs"})  # +3%
+    assert r["status"] == "bad" and "actual 6700" in r["detail"]
+    # conversione: piano kg, Fenix in lbs
+    assert ev({"fob_now": "14330", "cfg_lbs": "1"}, {"fld.fob": "6500", "fld.fob_unit": "kgs"})["status"] == "ok"
+    assert ev({"fob_now": "6500", "cfg_lbs": "1"}, {"fld.fob": "6500", "fld.fob_unit": "kgs"})["status"] == "bad"
+    # piano lbs, Fenix in kg
+    assert ev({"fob_now": "6500", "cfg_lbs": "0"}, {"fld.fob": "14330", "fld.fob_unit": "lbs"})["status"] == "ok"
+    # unita' del piano ignota (campo a mano): nessuna conversione
+    assert ev({"fob_now": "6500", "cfg_lbs": "1"}, {"fld.fob": "6500", "fld.fob_unit": ""})["status"] == "ok"
+    # servirebbe la conversione ma il Fenix non dice l'unita': non leggibile; valore non letto: non leggibile
+    assert ev({"fob_now": "6500"}, {"fld.fob": "6500", "fld.fob_unit": "kgs"})["status"] == "na"
+    assert ev({"cfg_lbs": "0"}, {"fld.fob": "6500", "fld.fob_unit": "kgs"})["status"] == "na"
+    # atteso vuoto: solo NOW
+    assert ev({"fob_now": "6500"}, {"fld.fob": "", "fld.fob_unit": "kgs"})["status"] == "none"
+    r = {i["id"]: i for s in cl.evaluate_phase("before-start", {"fob_now": "6500", "cfg_lbs": "0"}, expected={"fld.fob": ""})["subphases"] for i in s["items"]}["before-start.fob"]
+    assert r["status"] == "none" and r["show"] is True and r["live"] == [["FOB (Fenix, display unit)", "6500"]]
+    # ZFW: solo NOW, nessun colore
+    r = {i["id"]: i for s in cl.evaluate_phase("before-start", {"zfw_calc": "120000"}, expected={})["subphases"] for i in s["items"]}["before-start.zfw-zfwcg"]
+    assert r["status"] == "none" and r["live"] == [["ZFW calc. (MSFS total - fuel, Fenix unit)", "120000"]]
+    for bad in ({"key": "fob_now", "tol_ref": "fld.fob", "tol_pct": 0}, {"key": "fob_now", "tol_ref": "fld.fob"},
+                {"key": "pack1", "tol_ref": "fld.fob", "tol_pct": 2}, {"key": "fob_now", "tol_ref": "clr.a", "tol_pct": 2},
+                {"all": [{"key": "fob_now", "tol_ref": "fld.fob", "tol_pct": 2}]}):
+        try:
+            C._check_keys(bad, "x")
+        except ValueError:
+            continue
+        raise AssertionError(bad)
+
+
 def test_briefing_complete_restarts_checklist():
     st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
     st.set_cl_phase("fmgs-performance-glareshield")
@@ -601,6 +643,7 @@ def test_briefing_complete_restarts_checklist():
 
 
 if __name__ == "__main__":
+    test_fob_zfw_items_and_tolerance()
     test_briefing_complete_restarts_checklist()
     test_inputs_items()
     test_flap_and_taxi_alt_links()

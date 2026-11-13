@@ -216,7 +216,7 @@ def test_bad_values_use_defaults():
 def test_briefing_fields_and_inflight():
     import state as S
     assert [k for k, _ in S.FIELDS] == ["origin", "destination", "dep_time"]
-    assert [k for k, _ in S.INFLIGHT] == ["runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap"]
+    assert [k for k, _ in S.INFLIGHT] == ["runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg"]
     st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
     s = st.snapshot()
     assert [k for k, _ in s["labels"]] == ["origin", "destination", "dep_time"] and set(s["fields"]) >= {"runway", "ta", "v1", "flap"}
@@ -277,6 +277,40 @@ def test_to_briefing_dep_runway():
     assert to_briefing({})["origin"] is None
 
 
+def test_to_briefing_fuel_and_zfw():
+    from simbrief import to_briefing
+    b = to_briefing({"fuel": {"plan_ramp": "6500"}, "weights": {"est_zfw": "60123"}, "params": {"units": "kgs"}})
+    assert (b["fob"], b["zfw"], b["wt_unit"]) == (6500, 60123, "kgs")
+    assert to_briefing({"params": {"units": "LBS"}, "fuel": {"plan_ramp": "14330.4"}})["wt_unit"] == "lbs"
+    b = to_briefing({"fuel": {"plan_ramp": "x"}, "params": {"units": "stone"}})  # difensivo
+    assert (b["fob"], b["zfw"], b["wt_unit"]) == (None, None, None)
+    assert to_briefing({})["fob"] is None
+
+
+def test_fob_zfw_state_and_plan():
+    import state as S
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    orig = (S.fetch_latest, S.to_briefing)
+    S.fetch_latest = lambda uid: {}
+    S.to_briefing = lambda ofp: {"origin": "LIMC", "destination": "EDDF", "runway": None, "dep_time": None, "ta": None, "generated": 1,
+                                 "v1": None, "vr": None, "v2": None, "flap": None, "fob": 6500, "zfw": 60123, "wt_unit": "kgs", "plan": {}}
+    try:
+        st.load_plan("x")
+        assert (st.fields["fob"], st.fields["zfw"], st.fields["zfwcg"], st.wt_unit) == ("6500", "60123", "", "kgs")
+        st.update({"fob": "6000", "zfwcg": "28.4"})
+        e = st._expected()
+        assert (e["fld.fob"], e["fld.zfwcg"], e["fld.fob_unit"]) == ("6000", "28.4", "kgs")
+        st.update({"reset": ["fob", "zfw"]})
+        assert st.fields["fob"] == "6500" and st.fields["zfwcg"] == "28.4"  # zfwcg solo manuale: il reset non lo tocca
+    finally:
+        S.fetch_latest, S.to_briefing = orig
+    # zfw_calc arriva alla checklist come NOW
+    st.set_phase("flying")
+    st.set_monitor({"total_weight": 150000, "fuel_weight": 30000, "fuel_total": 6.6})
+    assert st.labels["fob_now"] == "6600"
+    assert st.labels["zfw_calc"] == "120000"
+
+
 def test_inputs_markup():
     assert 'addEventListener("pointerdown"' in web.PAGE and "a.blur()" in web.PAGE  # tocco fuori: il campo perde il focus (iPhone)
     assert "adv()" in web.PAGE and r"runway:/^\d{2}[LRC]$/" in web.PAGE and r"ta:/^\d{4}$/" in web.PAGE and r"flap:/^[1-3]$/" in web.PAGE  # valore completo: avanza o chiude
@@ -290,6 +324,7 @@ def test_inputs_markup():
     assert 'querySelector(\'.fld[data-f="\'+keepF[0]' in p  # il campo in modifica sopravvive alla ricostruzione
     key = p[p.index("bk=JSON.stringify"):p.index("showLive,s.test_links")]
     assert "i.inputs" in key and "fields" not in key  # i valori scritti non fanno ricostruire la lista
+    assert '"decimal"' in p and 'replace(/\\D/g,"")' in p and "fob:" not in p[p.index("const full="):p.index("[k];")]  # fob/zfw/zfwcg: nessun avanzamento automatico
     chips = p[p.index("function chips"):p.index("function cockpit")]
     assert '"TA"' not in chips and '"V1"' not in chips and '"FLAP"' not in chips and '"RWY"' not in chips
 
@@ -607,6 +642,8 @@ if __name__ == "__main__":
     test_load_plan_dep_and_reset()
     test_to_briefing_dep_runway()
     test_inputs_markup()
+    test_to_briefing_fuel_and_zfw()
+    test_fob_zfw_state_and_plan()
     test_checklist_mode_endpoint()
     test_checklist_phase_endpoint()
     test_phase_bar_hides_empty_phase_endpoint()

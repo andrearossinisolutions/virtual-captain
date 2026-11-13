@@ -253,11 +253,13 @@ function fval(k){return k in inpDirty?inpDirty[k]:((last&&last.fields[k])||"")}
 function fShow(el){if(el.querySelector("input"))return;const v=fval(el.dataset.f);el.textContent="";el.className="fld"+(v?" set":" nv")+(el.dataset.w?" w":"");
   el.textContent=v||(el.dataset.r&&!el.dataset.pre?el.dataset.r:(el.dataset.pre?el.dataset.pre+" ":"")+"---")}
 function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f,i=document.createElement("input");i.value=fval(k);i.dataset.f=k;
-  const txt=k==="runway"||k==="flap";i.inputMode=txt?"text":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
+  const txt=k==="runway"||k==="flap";i.inputMode=txt?"text":k==="zfwcg"?"decimal":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
   let done=false;const end=()=>{if(done)return;done=true;inpSend();i.remove();fShow(el)};
   const nextF=()=>{let n=el.nextElementSibling;while(n&&!n.dataset.f)n=n.nextElementSibling;return n};
   const adv=()=>{const n=nextF();end();if(n)fStart(n)};
-  i.oninput=()=>{if(k==="runway")i.value=i.value.toUpperCase();inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400);
+  i.oninput=()=>{if(k==="runway")i.value=i.value.toUpperCase();
+    if(k==="fob"||k==="zfw")i.value=i.value.replace(/\D/g,"");if(k==="zfwcg")i.value=i.value.replace(/[^\d.]/g,"").replace(/^(\d*\.?\d?).*$/,"$1");  // fob/zfw cifre, zfwcg un decimale (28.4): nessun avanzamento automatico, solo Invio o tocco fuori
+    inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400);
     const full={v1:/^\d{3}$/,vr:/^\d{3}$/,v2:/^\d{3}$/,runway:/^\d{2}[LRC]$/,ta:/^\d{4}$/,thr_red_agl:/^\d{4}$/,accel_agl:/^\d{4}$/,flap:/^[1-3]$/}[k];
     if(full&&full.test(i.value))adv()};  // valore completo: passa al campo successivo, o chiude la modifica se è l'ultimo
   i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();adv()}};i.onblur=end;
@@ -265,7 +267,7 @@ function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f
   if(sel){try{i.setSelectionRange(sel[0],sel[1])}catch(e){}}else i.select()}
 function inputsNode(it){const el=document.createElement("div");el.className="a inpr";const one=it.inputs.length===1;
   it.inputs.forEach((f,n)=>{if(n){const sp=document.createElement("span");sp.className="sep";sp.textContent=" / ";el.appendChild(sp)}
-    const c=document.createElement("span");c.dataset.f=f.k;c.dataset.l=f.label;c.title=f.label;if(f.k==="runway"||f.k==="flap")c.dataset.w="1";
+    const c=document.createElement("span");c.dataset.f=f.k;c.dataset.l=f.label;c.title=f.label;if(["runway","flap","fob","zfw","zfwcg"].includes(f.k))c.dataset.w="1";
     if(one)c.dataset.r=it.response||"";else if(!f.plan)c.dataset.pre=f.label.split(" (")[0].toLowerCase();
     c.onclick=()=>fStart(c);fShow(c);el.appendChild(c)});
   const ks=it.inputs.filter(f=>f.plan).map(f=>f.k);

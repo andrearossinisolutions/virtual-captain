@@ -22,10 +22,11 @@ CFG = pathlib.Path.home() / ".virtual-captain.json"
 FIELDS = [("origin", "Departure"), ("destination", "Arrival"), ("dep_time", "Departure time (UTC)")]
 # Dati di decollo: si inseriscono nelle voci della checklist (FMGS PERFORMANCE); stesse chiavi in `fields`, non nel Briefing.
 INFLIGHT = [("runway", "T/O runway"), ("ta", "Transition altitude (ft)"), ("thr_red_agl", "Thrust reduction (ft AGL)"),
-            ("accel_agl", "Acceleration (ft AGL)"), ("v1", "V1"), ("vr", "VR"), ("v2", "V2"), ("flap", "Flap")]
+            ("accel_agl", "Acceleration (ft AGL)"), ("v1", "V1"), ("vr", "VR"), ("v2", "V2"), ("flap", "Flap"),
+            ("fob", "FOB"), ("zfw", "ZFW"), ("zfwcg", "ZFWCG")]
 ALL_FIELDS = FIELDS + INFLIGHT
-FROM_PLAN = ["origin", "destination", "dep_time", "ta", "v1", "vr", "v2", "flap"]  # runway deriva da origin; accel/thr_red solo manuali
-PLAN_RESET = ["runway", "ta", "v1", "vr", "v2", "flap"]  # tornano al piano con "Reset to plan"
+FROM_PLAN = ["origin", "destination", "dep_time", "ta", "v1", "vr", "v2", "flap", "fob", "zfw"]  # runway deriva da origin; accel/thr_red solo manuali
+PLAN_RESET = ["runway", "ta", "v1", "vr", "v2", "flap", "fob", "zfw"]  # tornano al piano con "Reset to plan"
 REMEMBERED = ["thr_red_agl", "accel_agl"]  # unico campo dei dati di volo che si ricorda
 MODES = ("normal", "training")
 CL_MODES = ("complete", "simplified")
@@ -69,6 +70,7 @@ class State:
             cfg = {}
         # All'apertura solo ID SimBrief, modalità e accelerazione: il resto viene dal piano o si inserisce.
         self.fields = {k: (str(cfg.get(k, "")) if k in REMEMBERED else "") for k, _ in ALL_FIELDS}
+        self.wt_unit = ""  # unita' dei pesi del piano SimBrief ("kgs"/"lbs"), vuota senza piano
         self.plan_fields: dict = {}  # valori del piano per i campi di PLAN_RESET (vuoto senza piano)
         self.simbrief = str(cfg.get("simbrief", ""))
         self.mode = _mode(cfg.get("mode"))
@@ -196,7 +198,7 @@ class State:
         with self.lock:
             live = raw is not None and self.phase == "flying"
             if live:
-                raw = {**raw, **thrust.annotate(raw, self.thrust_cal)}
+                raw = {**raw, **thrust.annotate(raw, self.thrust_cal), **mon.weight_annotate(raw)}
                 self.set_calib_raw(raw)
             self.monitor = mon.build(raw) if live else []
             self.labels = mon.clean_labels(raw) if live else {}
@@ -362,6 +364,7 @@ class State:
             self.fields["runway"] = rwy
             if not rwy:
                 missing.append(dict(ALL_FIELDS)["runway"])
+            self.wt_unit = data.get("wt_unit") or ""
             self.plan_fields = {k: self.fields[k] for k in PLAN_RESET}
             self.plan = data.get("plan") or {}
             self.weather.seed(icao, self.plan.get("orig_metar"))
@@ -390,6 +393,9 @@ class State:
         for k in ("v1", "vr", "v2"):
             v = self.fields.get(k)
             e[f"fld.{k}"] = "" if v in (None, "") else (str(int(v)) if isinstance(v, float) and v == int(v) else str(v))
+        for k in ("fob", "zfw", "zfwcg"):
+            e[f"fld.{k}"] = self.fields.get(k, "")
+        e["fld.fob_unit"] = self.wt_unit  # solo per la conversione kgs/lbs del confronto FOB (non e' un riferimento dei link)
         e["fld.flap"] = ceval.norm_label("flap", self.fields.get("flap") or "") or ""  # non riconosciuto -> vuoto (solo NOW)
         for ref, k in (("wx.qnh_dep", "origin"), ("wx.qnh_dest", "destination")):
             q = self.weather.get(parse_dep(self.fields.get(k, ""))[0])

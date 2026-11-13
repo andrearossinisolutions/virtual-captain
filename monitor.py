@@ -124,6 +124,14 @@ ITEMS: list[Item] = [
     Item("fuel_c2", "Fuel", "Fuel pump C2", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_CENTER_2"),
     Item("fuel_r1", "Fuel", "Fuel pump R1", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_RIGHT_1"),
     Item("fuel_r2", "Fuel", "Fuel pump R2", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_RIGHT_2"),
+    # Peso e carburante. N_FUEL_TOTAL_QTY: unita' NON nota (dipende da B_CONFIG_WEIGHT_LBS: 1 = lbs, 0 = kg, da provare dal vivo).
+    # Verificato da Andrea (13/11): N_FUEL_TOTAL_QTY e' in MIGLIAIA dell'unita' mostrata (1.17 = ECAM 1160 kg; 6.6 = 6600 kg).
+    Item("fuel_total", "Weight & fuel", "Fuel total (Fenix raw, thousands)", "numeric", {}, None, "N_FUEL_TOTAL_QTY"),
+    Item("fob_now", "Weight & fuel", "FOB (Fenix, display unit)", "numeric", {"Before start": "as plan FOB"}),  # virtuale: fuel_total x 1000
+    Item("cfg_lbs", "Weight & fuel", "Fenix weight unit lbs (raw)", "numeric", {}, None, "B_CONFIG_WEIGHT_LBS"),  # solo grezzo
+    Item("total_weight", "Weight & fuel", "Total weight (MSFS, lbs)", "numeric", {}, "(A:TOTAL WEIGHT, Pounds)"),
+    Item("fuel_weight", "Weight & fuel", "Fuel weight (MSFS, lbs)", "numeric", {}, "(A:FUEL TOTAL QUANTITY WEIGHT, Pounds)"),
+    Item("zfw_calc", "Weight & fuel", "ZFW calc. (MSFS total - fuel, Fenix unit)", "numeric"),  # virtuale, solo da mostrare
     # Thrust levers: solo valori correnti (soglie dei detent da ricavare dal vivo)
     Item("thr_gate_l", "Thrust", "Throttle gate L (raw)", "numeric", {}, None, "A_FC_THROTTLE_LEFT_GATE"),  # solo grezzo
     Item("thr_gate_r", "Thrust", "Throttle gate R (raw)", "numeric", {}, None, "A_FC_THROTTLE_RIGHT_GATE"),  # solo grezzo
@@ -149,6 +157,22 @@ def to_number(raw):
     except (TypeError, ValueError):
         return None
     return None if math.isnan(v) or math.isinf(v) else v
+
+
+LB_PER_KG = 2.20462
+
+
+def weight_annotate(raw: dict | None) -> dict:
+    """Valori virtuali fob_now = fuel_total x 1000 (nell'unita' del display) e zfw_calc = peso totale - carburante (MSFS, lbs), nell'unita' del Fenix (cfg_lbs 0 = kg, altrimenti lbs); None se manca un dato."""
+    ft = to_number((raw or {}).get("fuel_total"))
+    out = {"fob_now": None if ft is None else round(ft * 1000)}
+    total, fuel = to_number((raw or {}).get("total_weight")), to_number((raw or {}).get("fuel_weight"))
+    if total is None or fuel is None:
+        return {**out, "zfw_calc": None}
+    zfw = total - fuel
+    if to_number((raw or {}).get("cfg_lbs")) == 0:
+        zfw /= LB_PER_KG
+    return {**out, "zfw_calc": round(zfw)}
 
 
 def raw_text(raw) -> str:

@@ -404,7 +404,14 @@
        "id": "fmgs-initialization.fob",
        "text": "FOB",
        "response": "CHECK",
-       "type": "action"
+       "type": "action",
+       "inputs": [
+        {
+         "k": "fob",
+         "label": "FOB",
+         "plan": true
+        }
+       ]
       },
       {
        "id": "fmgs-initialization.estimated-tow-lw",
@@ -656,13 +663,31 @@
        "id": "before-start.zfw-zfwcg",
        "text": "ZFW / ZFWCG",
        "response": "CHECK/REVISE",
-       "type": "action"
+       "type": "action",
+       "inputs": [
+        {
+         "k": "zfw",
+         "label": "ZFW",
+         "plan": true
+        },
+        {
+         "k": "zfwcg",
+         "label": "ZFWCG"
+        }
+       ]
       },
       {
        "id": "before-start.fob",
        "text": "FOB",
        "response": "CHECK",
-       "type": "action"
+       "type": "action",
+       "inputs": [
+        {
+         "k": "fob",
+         "label": "FOB",
+         "plan": true
+        }
+       ]
       },
       {
        "id": "before-start.takeoff-data",

@@ -36,7 +36,7 @@ def test_items_are_valid():
     assert len(keys) == len(set(keys))
     for it in ITEMS:
         assert it.group and it.name and it.kind in MAPS, it.key
-        assert it.std or it.lvar or it.kind == "detent", it.key
+        assert it.std or it.lvar or it.kind == "detent" or it.key in ("zfw_calc", "fob_now"), it.key  # detent e zfw_calc: virtuali
         assert it.std_fallback is False or (it.std and it.lvar) or it.key == "gear"
         for v in it.expected.values():
             assert v
@@ -47,6 +47,23 @@ def test_items_are_valid():
     for k in ("apu_master", "apu_bleed", "pack1", "pack2", "landing_l", "landing_r", "nose", "strobe", "beacon",
               "navlogo", "rwy_turnoff", "seatbelt", "flap", "spoilers", "gear", "engmode", "eng1", "eng2", "parking"):
         assert k in keys, k
+
+
+def test_weight_items_and_zfw_calc():
+    from monitor import weight_annotate
+    assert BY["fuel_total"].lvar == "N_FUEL_TOTAL_QTY" and BY["cfg_lbs"].lvar == "B_CONFIG_WEIGHT_LBS"
+    assert BY["total_weight"].std == "(A:TOTAL WEIGHT, Pounds)" and BY["fuel_weight"].std == "(A:FUEL TOTAL QUANTITY WEIGHT, Pounds)"
+    import aao
+    assert aao.MONITOR["total_weight"] == {"std": "(A:TOTAL WEIGHT, Pounds)", "lvar": None}  # std chiesta perche' senza L-var
+    assert aao.MONITOR["fuel_total"] == {"std": None, "lvar": "(L:N_FUEL_TOTAL_QTY, Number)"} and aao.MONITOR["zfw_calc"] == {"std": None, "lvar": None}
+    N = {"fob_now": None}
+    assert weight_annotate({"total_weight": 150000, "fuel_weight": 30000}) == {**N, "zfw_calc": 120000}  # lbs (default)
+    assert weight_annotate({"total_weight": 150000, "fuel_weight": 30000, "cfg_lbs": 1}) == {**N, "zfw_calc": 120000}
+    assert weight_annotate({"total_weight": 150000, "fuel_weight": 30000, "cfg_lbs": 0}) == {**N, "zfw_calc": 54431}  # kg
+    assert weight_annotate({"total_weight": 150000}) == {**N, "zfw_calc": None} and weight_annotate(None) == {**N, "zfw_calc": None}
+    # dati reali del Fenix: N_FUEL_TOTAL_QTY in migliaia dell'unita' mostrata
+    assert weight_annotate({"fuel_total": 1.17})["fob_now"] == 1170 and weight_annotate({"fuel_total": 6.6})["fob_now"] == 6600
+    assert weight_annotate({"fuel_total": None})["fob_now"] is None
 
 
 def test_build_groups():
@@ -77,6 +94,7 @@ def test_detent_labels():
 
 
 if __name__ == "__main__":
+    test_weight_items_and_zfw_calc()
     test_detent_labels()
     test_maps_per_kind()
     test_missing_is_nd()

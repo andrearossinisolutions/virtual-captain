@@ -12,11 +12,12 @@ from __future__ import annotations
 import re
 
 import monitor as mon
+from monitor import LB_PER_KG
 
 BY_KEY = {it.key: it for it in mon.ITEMS}
 UNVERIFIED = "unverified"
 UNREADABLE = "unreadable"
-REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "fld.v1", "fld.vr", "fld.v2", "fld.flap", "plan.sid", "wx.qnh_dep", "wx.qnh_dest")
+REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "fld.v1", "fld.vr", "fld.v2", "fld.flap", "fld.fob", "fld.zfw", "fld.zfwcg", "plan.sid", "wx.qnh_dep", "wx.qnh_dest")
 QNH_TOL = 1.0  # hPa
 
 
@@ -71,13 +72,18 @@ def _res(status: str, detail: str = "", kind: str = "") -> dict:
     return {"status": status, "kind": kind or status, "detail": detail}
 
 
+def ref_of(c: dict):
+    """Riferimento dell'atteso di un check semplice: eq_ref (uguaglianza) o tol_ref (numerico con tolleranza %)."""
+    return c.get("eq_ref") or c.get("tol_ref")
+
+
 def _want(expected, ref) -> str:
     return str((expected or {}).get(ref) or "").strip()
 
 
 def _active(sub: dict, expected) -> bool:
     """Riferimento eq_ref con un atteso utilizzabile (non vuoto e, per i kind a mappa, un'etichetta valida)."""
-    want = _want(expected, sub["eq_ref"])
+    want = _want(expected, ref_of(sub))
     item = BY_KEY.get(sub.get("key"))
     if want and item is not None and mon.MAPS[item.kind]:
         return norm_label(item.kind, want) is not None
@@ -129,11 +135,33 @@ def _refs(check: dict) -> list:
     """Riferimenti eq_ref di un check (singolo o composto); {"qnh": ref} -> [ref]."""
     if "qnh" in check:
         return [check["qnh"]]
-    return [c["eq_ref"] for c in (check.get("all") or [check]) if "eq_ref" in c]
+    return [ref_of(c) for c in (check.get("all") or [check]) if ref_of(c)]
 
 
 def _eq_list(eq) -> list:
     return [eq] if isinstance(eq, str) else list(eq)
+
+
+def _tolerance(item, check: dict, cur, labels: dict, expected) -> dict:
+    """Numerico con tolleranza percentuale sull'atteso (campo fob). Se il piano e il Fenix hanno unita' diverse (kgs/lbs) converte l'atteso
+    nell'unita' del Fenix (B_CONFIG_WEIGHT_LBS: 1 = lbs, 0 = kg); unita' del Fenix non leggibile ma servirebbe la conversione -> non leggibile."""
+    want, act = _num(_want(expected, check["tol_ref"])), _num(cur)
+    if want is None:
+        return _res("none")
+    if act is None:
+        return _res("na", UNREADABLE, "unreadable")
+    plan_u = _want(expected, "fld.fob_unit")
+    cfg = _num(labels.get("cfg_lbs"))
+    if plan_u in ("kgs", "lbs"):
+        if cfg is None:
+            return _res("na", UNREADABLE, "unreadable")
+        cock_u = "lbs" if cfg >= 0.5 else "kgs"
+        if plan_u != cock_u:
+            want = want * LB_PER_KG if cock_u == "lbs" else want / LB_PER_KG
+    tol = float(check["tol_pct"])
+    if want == 0 or abs(act - want) <= abs(want) * tol / 100 + 1e-9:
+        return _res("ok")
+    return _res("bad", f"expected {want:.0f} (+/-{tol:g}%), actual {act:g}", "mismatch")
 
 
 def _single(check: dict, labels: dict, expected: dict | None = None) -> dict:
@@ -143,6 +171,8 @@ def _single(check: dict, labels: dict, expected: dict | None = None) -> dict:
     if item.uncertain:  # sorgente da provare dal vivo: mai un verde o un rosso
         return _res("na", UNVERIFIED, "unverified")
     cur = labels.get(item.key)
+    if "tol_ref" in check:
+        return _tolerance(item, check, cur, labels, expected)
     if "eq_ref" in check:
         want = str((expected or {}).get(check["eq_ref"]) or "").strip()
         if cur is None:
@@ -171,7 +201,7 @@ def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: 
     elif "qnh" in check:
         if not _want(expected, check["qnh"]):
             return _res("none")
-    elif _refs(check) and not any(_active(c, expected) for c in (check.get("all") or [check]) if "eq_ref" in c):
+    elif _refs(check) and not any(_active(c, expected) for c in (check.get("all") or [check]) if ref_of(c)):
         return _res("none")  # niente atteso: si mostra solo NOW
     res = _evaluate(check, labels, verified, expected)
     if optional and res["status"] == "bad":

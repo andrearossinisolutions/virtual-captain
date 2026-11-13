@@ -65,6 +65,9 @@ def to_briefing(ofp: dict) -> dict:
         "cruise_alt": _num(_g(ofp, "general", "initial_altitude")),
         "generated": _g(ofp, "params", "time_generated"),
         "v1": None, "vr": None, "v2": None, "flap": None,
+        # Carburante al blocco (FOB) e ZFW stimato, nell'unita' del piano ("kgs" o "lbs"); ZFWCG non e' nel JSON.
+        "fob": _num(_g(ofp, "fuel", "plan_ramp")), "zfw": _num(_g(ofp, "weights", "est_zfw")),
+        "wt_unit": _unit(_g(ofp, "params", "units")),
     }
     out["plan"] = extract_plan(ofp)
     # Dati di decollo (TLR): presenti solo per alcuni profili, parsing difensivo.
@@ -77,6 +80,12 @@ def to_briefing(ofp: dict) -> dict:
         for name in ("v1", "vr", "v2"):
             out[name] = _find_speed(pick, name)
     return out
+
+
+def _unit(v):
+    """Unita' dei pesi del piano: "kgs" o "lbs" (altro/assente -> None, valori senza unita' nota)."""
+    s = str(v or "").strip().lower()
+    return "kgs" if s.startswith("kg") else "lbs" if s.startswith("lb") else None
 
 
 def _utc_time(ts):

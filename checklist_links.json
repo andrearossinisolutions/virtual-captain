@@ -1068,5 +1068,29 @@
    ]
   },
   "verified": true
+ },
+ "before-start.fob": {
+  "check": {
+   "key": "fob_now",
+   "tol_ref": "fld.fob",
+   "tol_pct": 2
+  },
+  "verified": true
+ },
+ "fmgs-initialization.fob": {
+  "check": {
+   "key": "fob_now",
+   "tol_ref": "fld.fob",
+   "tol_pct": 2
+  },
+  "verified": true
+ },
+ "before-start.zfw-zfwcg": {
+  "check": {
+   "show": [
+    "zfw_calc"
+   ]
+  },
+  "verified": true
  }
 }
