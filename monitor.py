@@ -22,9 +22,11 @@ MAPS = {
     "gear": {0: "UP", 1: "DOWN"},
     "wxsys": {0: "SYS 1", 1: "OFF", 2: "SYS 2"},  # verificata dal vivo 13/11
     "irmode": {0: "OFF", 1: "NAV", 2: "ATT"},  # provvisoria: da verificare dal vivo col grezzo
+    "signs": {0: "OFF", 1: "AUTO", 2: "ON"},  # provvisoria: da verificare dal vivo col grezzo
+    "emerlt": {0: "OFF", 1: "ARM", 2: "ON"},  # provvisoria: da verificare dal vivo col grezzo
     "numeric": {},  # nessuna mappa: si mostra solo il valore (nessun esito)
 }
-AMBIGUOUS = {"landing", "nose", "flap", "speedbrake", "engmode", "wxsys", "irmode"}  # lo 0 non e' "spento": mostra anche il grezzo
+AMBIGUOUS = {"landing", "nose", "flap", "speedbrake", "engmode", "wxsys", "irmode", "signs", "emerlt"}  # lo 0 non e' "spento": mostra anche il grezzo
 
 
 @dataclass(frozen=True)
@@ -89,6 +91,14 @@ ITEMS: list[Item] = [
     Item("ir1", "ADIRS", "IR 1 mode", "irmode", {"Prep": "NAV"}, None, "S_OH_NAV_IR1_MODE"),
     Item("ir2", "ADIRS", "IR 2 mode", "irmode", {"Prep": "NAV"}, None, "S_OH_NAV_IR2_MODE"),
     Item("ir3", "ADIRS", "IR 3 mode", "irmode", {"Prep": "NAV"}, None, "S_OH_NAV_IR3_MODE"),
+    Item("smoking", "Cabin", "No Smoking/Elec.dev. Signs", "signs", {"Prep": "AUTO", "Securing": "OFF"}, None, "S_OH_SIGNS_SMOKING"),
+    Item("emer_lt", "Cabin", "Emergency Exit Lights", "emerlt", {"Prep": "ARM", "Securing": "OFF"}, None, "S_OH_INT_LT_EMER"),
+    Item("fuel_l1", "Fuel", "Fuel pump L1", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_LEFT_1"),
+    Item("fuel_l2", "Fuel", "Fuel pump L2", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_LEFT_2"),
+    Item("fuel_c1", "Fuel", "Fuel pump C1", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_CENTER_1"),
+    Item("fuel_c2", "Fuel", "Fuel pump C2", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_CENTER_2"),
+    Item("fuel_r1", "Fuel", "Fuel pump R1", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_RIGHT_1"),
+    Item("fuel_r2", "Fuel", "Fuel pump R2", "onoff", {"Prep": "ON", "Parking": "OFF"}, None, "S_OH_FUEL_RIGHT_2"),
 ]
 
 

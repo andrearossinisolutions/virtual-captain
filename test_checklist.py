@@ -47,7 +47,6 @@ def test_links_reference_real_things():
             assert all(k in keys for k in c["show"]) if "show" in c else c["key"] in keys
     for link in cl.links.values():
         walk(link["check"])
-    assert not any("smok" in i for i in cl.links)  # No smoking non e' monitorato
 
 
 def test_validation_rejects_bad_data():
@@ -297,3 +296,16 @@ if __name__ == "__main__":
     test_trust_links_and_raw()
     test_live_values()
     print("ok")
+
+
+def test_cabin_fuel_links():
+    cl = C.load()
+    for k, key, eq in (("cockpit-preparation.no-smoking-elec-dev-signs-sw", "smoking", "AUTO"),
+                       ("cockpit-preparation.emergency-exit-lights-sw", "emer_lt", "ARM"),
+                       ("securing-the-aircraft.no-smoking", "smoking", "OFF")):
+        assert cl.links[k]["check"] == {"key": key, "eq": eq} and cl.links[k]["verified"] is False, k
+    for k, eq in (("cockpit-preparation.fuel-pump-pb", "ON"), ("parking.fuel-pumps", "OFF")):
+        assert C.check_keys(cl.links[k]["check"]) == ["fuel_l1", "fuel_l2", "fuel_c1", "fuel_c2", "fuel_r1", "fuel_r2"]
+        assert {c["eq"] for c in cl.links[k]["check"]["all"]} == {eq} and cl.links[k]["verified"] is False
+    by = {i.key: i for i in mon.ITEMS}
+    assert mon.label(by["smoking"], 1) == "AUTO (1)" and mon.clean_label(by["emer_lt"], 1) == "ARM"

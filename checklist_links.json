@@ -656,5 +656,95 @@
   },
   "optional": true,
   "verified": true
+ },
+ "cockpit-preparation.no-smoking-elec-dev-signs-sw": {
+  "check": {
+   "key": "smoking",
+   "eq": "AUTO"
+  },
+  "verified": false
+ },
+ "cockpit-preparation.emergency-exit-lights-sw": {
+  "check": {
+   "key": "emer_lt",
+   "eq": "ARM"
+  },
+  "verified": false
+ },
+ "cockpit-preparation.fuel-pump-pb": {
+  "check": {
+   "all": [
+    {
+     "key": "fuel_l1",
+     "eq": "ON"
+    },
+    {
+     "key": "fuel_l2",
+     "eq": "ON"
+    },
+    {
+     "key": "fuel_c1",
+     "eq": "ON"
+    },
+    {
+     "key": "fuel_c2",
+     "eq": "ON"
+    },
+    {
+     "key": "fuel_r1",
+     "eq": "ON"
+    },
+    {
+     "key": "fuel_r2",
+     "eq": "ON"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "parking.fuel-pumps": {
+  "check": {
+   "all": [
+    {
+     "key": "fuel_l1",
+     "eq": "OFF"
+    },
+    {
+     "key": "fuel_l2",
+     "eq": "OFF"
+    },
+    {
+     "key": "fuel_c1",
+     "eq": "OFF"
+    },
+    {
+     "key": "fuel_c2",
+     "eq": "OFF"
+    },
+    {
+     "key": "fuel_r1",
+     "eq": "OFF"
+    },
+    {
+     "key": "fuel_r2",
+     "eq": "OFF"
+    }
+   ]
+  },
+  "verified": false
+ },
+ "securing-the-aircraft.emergency-exit-lights": {
+  "check": {
+   "key": "emer_lt",
+   "eq": "OFF"
+  },
+  "verified": false
+ },
+ "securing-the-aircraft.no-smoking": {
+  "check": {
+   "key": "smoking",
+   "eq": "OFF"
+  },
+  "verified": false
  }
 }

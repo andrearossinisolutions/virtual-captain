@@ -40,7 +40,7 @@ def test_items_are_valid():
         assert it.std_fallback is False or (it.std and it.lvar) or it.key == "gear"
         for v in it.expected.values():
             assert v
-    assert "autobrake" not in keys and not any("smok" in k for k in keys)
+    assert "autobrake" not in keys
     for k in ("apu_master", "apu_bleed", "pack1", "pack2", "landing_l", "landing_r", "nose", "strobe", "beacon",
               "navlogo", "rwy_turnoff", "seatbelt", "flap", "spoilers", "gear", "engmode", "eng1", "eng2", "parking"):
         assert k in keys, k
