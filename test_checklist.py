@@ -46,6 +46,8 @@ def test_links_reference_real_things():
                 assert c["detent"]
             elif "std" in c:
                 assert c["std"] is True
+            elif "gsx" in c:
+                assert all(k in keys for k in c["gsx"])
             else:
                 assert all(k in keys for k in c["show"]) if "show" in c else c["key"] in keys
     for link in cl.links.values():
@@ -847,7 +849,32 @@ def test_cabin_fuel_links():
 
 
 
+def test_gsx_links():
+    cl = C.load()
+    fc, bd = "cockpit-preparation.start-fueling-catering", "cockpit-preparation.start-boarding-passengers"
+    assert cl.links[fc]["check"] == {"gsx": ["gsx_refuel", "gsx_cater"]} and cl.links[bd]["check"] == {"gsx": ["gsx_board"]}
+    assert "cockpit-preparation.check-boarding-completed" not in cl.links and "fmgs-performance-glareshield.check-boarding-completed" not in cl.links
+    assert C.check_keys(cl.links[fc]["check"]) == ["gsx_refuel", "gsx_cater"]
+    ph = [p["id"] for p in cl.phases if any(i["id"] == fc for sp in p["subphases"] for i in sp["items"])][0]
+    labels = mon.clean_labels({"gsx_refuel": 6, "gsx_cater": 7, "gsx_board": 5})
+    rows = {i["id"]: i for s in cl.evaluate_phase(ph, labels, raw={"gsx_refuel": 6, "gsx_cater": 7, "gsx_board": 5})["subphases"] for i in s["items"]}
+    assert rows[fc]["status"] == "ok" and rows[fc]["raw"] == [["FSDT_GSX_REFUELING_STATE", "6"], ["FSDT_GSX_CATERING_STATE", "7"]]
+    assert rows[bd]["status"] == "bad" and rows[bd]["type"] == "announce"
+    muto = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({}))["subphases"] for i in s["items"]}
+    assert muto[fc]["status"] == "na"
+    # check gsx ammesso solo su announce e solo con chiavi gsx; gli altri tipi restano senza link
+    atc = next(i["id"] for p in cl.phases for sp in p["subphases"] for i in sp["items"] if i["type"] == "atc")
+    act = next(i["id"] for p in cl.phases for sp in p["subphases"] for i in sp["items"] if i["type"] == "action")
+    for iid, chk in ((atc, {"gsx": ["gsx_board"]}), (act, {"gsx": ["gsx_board"]}), (fc, {"gsx": ["apu_master"]}), (fc, {"gsx": []}), (fc, {"gsx": ["gsx_board"], "x": 1}),
+                     (fc, {"key": "apu_master", "eq": "ON"}), (fc, {"all": [{"gsx": ["gsx_board"]}]})):
+        try:
+            C.Checklist(cl.data, {iid: {"check": chk, "verified": True}})
+            assert False, (iid, chk)
+        except ValueError:
+            pass
+
 if __name__ == "__main__":
     test_tcas_links()
     test_cabin_fuel_links()
+    test_gsx_links()
     print("ok tcas/cabin")

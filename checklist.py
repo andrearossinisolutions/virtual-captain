@@ -25,6 +25,11 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
         if set(check) != {"show"} or not isinstance(keys, list) or not keys or any(k not in BY_KEY for k in keys):
             raise ValueError(f"{where}: 'show' non valido")
         return
+    if "gsx" in check:  # solo voci announce, solo chiavi con mappa gsx
+        keys = check["gsx"]
+        if inner or set(check) != {"gsx"} or not isinstance(keys, list) or not keys or any(k not in BY_KEY or BY_KEY[k].kind != "gsx" for k in keys):
+            raise ValueError(f"{where}: 'gsx' non valido")
+        return
     if "detent" in check:
         d = check["detent"]
         names = [d] if isinstance(d, str) else d
@@ -107,6 +112,8 @@ def check_keys(check: dict) -> list:
     """Chiavi del monitor usate da un check (singolo o composto), in ordine e senza doppioni."""
     if "show" in check:
         return list(dict.fromkeys(check["show"]))
+    if "gsx" in check:
+        return list(dict.fromkeys(check["gsx"]))
     if "detent" in check:
         return ["thr_det_l", "thr_det_r"]
     if "qnh" in check or "std" in check:
@@ -171,8 +178,9 @@ class Checklist:
         for iid, link in links.items():
             if iid not in items:
                 raise ValueError(f"link su voce inesistente: {iid}")
-            if items[iid]["type"] != "action":  # su craft (e su ogni altro tipo) nessun link
-                raise ValueError(f"{iid}: solo le voci action possono avere un check")
+            is_gsx = "gsx" in (link.get("check") or {})  # unica eccezione: check GSX su voci announce
+            if items[iid]["type"] != ("announce" if is_gsx else "action"):  # su craft (e su ogni altro tipo) nessun link
+                raise ValueError(f"{iid}: solo le voci action (o announce con check gsx) possono avere un check")
             if not isinstance(link.get("verified"), bool):
                 raise ValueError(f"{iid}: 'verified' mancante")
             if not isinstance(link.get("optional", False), bool):

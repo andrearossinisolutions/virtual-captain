@@ -134,6 +134,11 @@ def detent_all(check: dict) -> dict:
     return {"all": [{"key": "thr_det_l", "eq": check["detent"]}, {"key": "thr_det_r", "eq": check["detent"]}]}
 
 
+def gsx_all(check: dict) -> dict:
+    """{"gsx": [chiavi]} -> {"all": [chiave eq GSX_ACTIVE, ...]}: tutti i servizi GSX in corso o completati."""
+    return {"all": [{"key": k, "eq": list(mon.GSX_ACTIVE)} for k in check["gsx"]]}
+
+
 def _refs(check: dict) -> list:
     """Riferimenti eq_ref di un check (singolo o composto); {"qnh": ref} -> [ref]."""
     if "qnh" in check:
@@ -228,6 +233,8 @@ def _evaluate(check: dict, labels: dict, verified: bool, expected: dict | None =
         return _res("na", UNVERIFIED, "unverified")
     if "detent" in check:
         check = detent_all(check)
+    if "gsx" in check:
+        check = gsx_all(check)
     if "std" in check:
         if _num(labels.get("baro_std")) is None:
             return _res("na", UNREADABLE, "unreadable")

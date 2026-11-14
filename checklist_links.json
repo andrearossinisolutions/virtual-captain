@@ -1372,5 +1372,22 @@
    ]
   },
   "verified": true
+ },
+ "cockpit-preparation.start-fueling-catering": {
+  "check": {
+   "gsx": [
+    "gsx_refuel",
+    "gsx_cater"
+   ]
+  },
+  "verified": true
+ },
+ "cockpit-preparation.start-boarding-passengers": {
+  "check": {
+   "gsx": [
+    "gsx_board"
+   ]
+  },
+  "verified": true
  }
 }

@@ -223,6 +223,19 @@ def test_detent():
     assert evaluate(one, both("CLIMB", "CLIMB"), verified=False, expected=cal)["status"] == "na"
 
 
+def test_gsx():
+    import monitor as mon
+    c = {"gsx": ["gsx_refuel", "gsx_cater"]}
+    ok = {"gsx_refuel": "PERFORMING", "gsx_cater": "COMPLETED"}
+    assert all(evaluate(c, {"gsx_refuel": a, "gsx_cater": b})["status"] == "ok" for a in mon.GSX_ACTIVE for b in mon.GSX_ACTIVE)
+    assert evaluate(c, ok)["status"] == "ok"
+    r = evaluate(c, {"gsx_refuel": "PERFORMING", "gsx_cater": "REQUESTED"})
+    assert r["status"] == "bad" and "GSX catering state" in r["detail"]
+    assert evaluate(c, {"gsx_refuel": "AVAILABLE", "gsx_cater": None})["status"] == "bad"  # un rosso vale piu' di un n/d
+    assert evaluate(c, {"gsx_refuel": "COMPLETED", "gsx_cater": None})["status"] == "na"  # lvar muta: senza colore
+    assert evaluate(c, {})["status"] == "na" and evaluate({"gsx": ["gsx_board"]}, {"gsx_board": "COMPLETED"})["status"] == "ok"
+    assert evaluate(c, ok, verified=False)["status"] == "na"
+
 if __name__ == "__main__":
     test_qnh_gated_by_transition_level()
     test_qnh_source_in_detail()
@@ -239,5 +252,5 @@ if __name__ == "__main__":
     test_numeric()
     test_clean_label()
     test_qnh()
+    test_gsx()
     print("ok")
-

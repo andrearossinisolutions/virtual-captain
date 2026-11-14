@@ -157,6 +157,13 @@ def test_read_all_fallback_new_keys_none():
     assert values["alt"] == 1.0 and m["gs"] is None and m["bank"] is None
 
 
+def test_gsx_states():
+    assert [label(BY[k], 6) for k in ("gsx_refuel", "gsx_cater", "gsx_board")] == ["PERFORMING (6)"] * 3
+    assert label(BY["gsx_board"], 7) == "COMPLETED (7)" and label(BY["gsx_board"], 0) == "n/d (0)" and label(BY["gsx_board"], None) == "n/d"
+    assert BY["gsx_refuel"].lvar == "FSDT_GSX_REFUELING_STATE" and BY["gsx_cater"].lvar == "FSDT_GSX_CATERING_STATE" and BY["gsx_board"].lvar == "FSDT_GSX_BOARDING_STATE"
+    assert set(monitor.GSX_ACTIVE) <= set(monitor.GSX_STATES.values())
+    assert monitor.clean_label(BY["gsx_cater"], 7) == "COMPLETED" and monitor.clean_label(BY["gsx_cater"], 99) is None
+
 if __name__ == "__main__":
     test_flight_items_std_only()
     test_flight_panel_values_and_dashes()
@@ -168,4 +175,5 @@ if __name__ == "__main__":
     test_missing_is_nd()
     test_items_are_valid()
     test_build_groups()
+    test_gsx_states()
     print("ok")
