@@ -53,7 +53,7 @@ main.fv{max-width:none;padding:12px 16px}
 .cl .cli{display:grid;grid-template-columns:1.8em minmax(0,1fr) auto;column-gap:10px;break-inside:avoid}.cl .cli.wl{grid-template-columns:5.2em minmax(0,1fr) auto}.cl .cli .rw{grid-column:2}.cl .cli .now.nv{color:var(--mut)}.cl .cli .now{grid-column:3;text-align:right;font-size:14px;color:var(--bad);white-space:nowrap}
 .cl .cli .exp{grid-column:2/4}
 .cl .cli .tx{display:contents}.cl .cli .ic{grid-column:1}.cl .cli .e{grid-column:2}
-.cl .cli .a{grid-column:3;text-align:right;max-width:16em}.cl .cli .a.lg{grid-column:2/4;text-align:left;max-width:none}.cl .cli .d{grid-column:2/4;margin-top:0;font-size:14px}
+.cl .cli .a{grid-column:3;text-align:right;max-width:16em}.chip.bad{border-color:var(--bad);color:var(--bad)}.rb{color:var(--bad)!important}.cl .cli .ah .aw{color:var(--warn);font-weight:600;margin-left:8px}.cl .cli .a.ah{font-weight:600}.cl .cli .a.wh{font-weight:400}.cl .cli .wh .wr{font:12px ui-monospace,monospace;color:var(--mut);word-break:break-word}.cl .cli .wh.nd{color:var(--mut)}.cl .cli .a.lg{grid-column:2/4;text-align:left;max-width:none}.cl .cli .d{grid-column:2/4;margin-top:0;font-size:14px}
 #clbody{columns:420px 2;column-gap:24px}.cl h3{break-after:avoid;margin-top:12px}
 }
 .plan{background:#0c131b;border:1px solid var(--bd);border-radius:12px;padding:12px;margin-top:12px;font-size:16px}
@@ -206,9 +206,11 @@ function planHtml(p,open){if(!p||!(p.route||p.waypoints&&p.waypoints.length))ret
     for(const w of p.waypoints){const row=document.createElement("div");row.className="wp";for(const v of [w.ident,w.via||"",w.alt!=null?w.alt+" ft":""]){const c=document.createElement("span");c.textContent=v;row.appendChild(c)}dt.appendChild(row)}box.appendChild(dt)}
   return box}
 function plans(s){const k=JSON.stringify(s.plan);if(k===planKey)return;planKey=k;for(const [id,open] of [["plancfg",false],["planflt",false]]){const el=$(id);const keep=el.querySelector("details")?.open;const b=planHtml(s.plan,keep||open);el.innerHTML="";if(b)el.appendChild(b)}}
-function chips(s){const f=s.fields,c=$("chips"),k=JSON.stringify(f);if(k===chipsKey)return;chipsKey=k;c.innerHTML="";
-  const add=(k,v)=>{if(v){const d=document.createElement("span");d.className="chip";d.innerHTML=`<b>${k}</b>`;d.append(v);c.appendChild(d)}};
-  add("DEP",f.origin);add("ARR",f.destination)}
+function chips(s){const f=s.fields,c=$("chips"),rb=s.rwy_bad||{},k=JSON.stringify([f,rb]);if(k===chipsKey)return;chipsKey=k;c.innerHTML="";
+  const add=(k,v,w)=>{if(v){const d=document.createElement("span");d.className="chip"+(w?" bad":"");d.innerHTML=`<b>${k}</b>`;d.append(v);c.appendChild(d)}};
+  add("DEP",f.origin);const dr=(f.datis_rwy||"").replace(/\//g,"-");add("DEP ATIS",(f.datis_letter||"")+(f.datis_letter&&dr?" ":"")+(dr?"RWY "+dr:""),rb.datis);  // pista ATIS diversa da quella del piano: pill rossa (solo avviso)
+  const rw=(f.atis_rwy||"").replace(/\//g,"-");add("ARR",f.destination?f.destination+(rw?"/"+rw:""):rw,rb.atis);  // ARR EDDF/17R-17L; senza destinazione solo le piste
+  add("ARR ATIS",f.atis_letter)}
 function cockpit(s){const k=JSON.stringify(s.monitor);if(k===csKey)return;csKey=k;const b=$("csbody");b.textContent="";const m=s.monitor||[];
   if(!m.length){const p=document.createElement("div");p.className="meta";p.textContent="No data yet";b.appendChild(p);return}
   const mk=(c,t)=>{const e=document.createElement("div");e.className=c;e.textContent=t;return e};
@@ -260,17 +262,17 @@ function syncCraft(c,force){if(c&&!sqkEdit){sqkVal=c.t||"";sqkShow()}if(!craftEl
 let inpDirty={},inpTimer=null;
 function inpSend(){clearTimeout(inpTimer);inpTimer=null;const o=inpDirty;inpDirty={};if(last)Object.assign(last.fields,o);if(Object.keys(o).length)api("/api/fields",o).then(s=>{lastRev=s.rev}).catch(()=>{})}
 function fval(k){return k in inpDirty?inpDirty[k]:((last&&last.fields[k])||"")}
-function fShow(el){if(el.querySelector("input"))return;const v=fval(el.dataset.f);el.textContent="";el.className="fld"+(v?" set":" nv")+(el.dataset.w?" w":"");
+function fShow(el){if(el.querySelector("input"))return;const v=fval(el.dataset.f);el.textContent="";el.className="fld"+(v?" set":" nv")+(el.dataset.w?" w":"")+(/^d?atis_rwy$/.test(el.dataset.f)&&last&&last.rwy_bad&&last.rwy_bad[el.dataset.f.replace("_rwy","")]?" rb":"");
   el.textContent=el.dataset.pf?el.dataset.pf+" "+(v||"---"):v||(el.dataset.r&&!el.dataset.pre?el.dataset.r:(el.dataset.pre?el.dataset.pre+" ":"")+"---")}
 function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f,i=document.createElement("input");i.value=fval(k);i.dataset.f=k;
-  const txt=k==="runway"||k==="flap"||k==="taxiway";i.inputMode=txt?"text":k==="zfwcg"?"decimal":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
-  let done=false;const end=()=>{if(done)return;done=true;inpSend();i.remove();fShow(el)};
+  const sf=k.replace(/^d?atis_/,""),isA=sf!==k,txt=["runway","flap","taxiway"].includes(k)||isA&&["letter","rwy","wind"].includes(sf);i.inputMode=txt?"text":k==="zfwcg"?"decimal":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
+  let done=false;const end=()=>{if(done)return;done=true;if(isA&&sf==="rwy"&&/\/$/.test(i.value)){i.value=i.value.replace(/\/+$/,"");inpDirty[k]=i.value}inpSend();i.remove();fShow(el)};
   const nextF=()=>{let n=el.nextElementSibling;while(n&&!n.dataset.f)n=n.nextElementSibling;return n};
   const adv=()=>{const n=nextF();end();if(n)fStart(n)};
-  i.oninput=()=>{if(k==="runway")i.value=i.value.toUpperCase();if(k==="taxiway")i.value=i.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);
+  i.oninput=()=>{if(k==="runway")i.value=i.value.toUpperCase();if(isA&&sf==="letter")i.value=i.value.toUpperCase().replace(/[^A-Z]/g,"").slice(0,1);if(isA&&sf==="rwy")i.value=i.value.toUpperCase().replace(/[\s,]+/g,"/").replace(/[^0-9LRC\/]/g,"").replace(/\/+/g,"/").replace(/^\//,"").slice(0,12);if(isA&&sf==="wind")i.value=i.value.toUpperCase().replace(/[^0-9\/GVRBKT]/g,"").slice(0,12);if(isA&&sf==="qnh")i.value=i.value.replace(/[^\d.]/g,"").replace(/^([^.]*\.?)(.*)$/,(m,a,b)=>a+b.replace(/\./g,"")).slice(0,5);if(k==="taxiway")i.value=i.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);
     if(k==="fob"||k==="zfw")i.value=i.value.replace(/\D/g,"");if(k==="zfwcg")i.value=i.value.replace(/[^\d.]/g,"").replace(/^(\d*\.?\d?).*$/,"$1");  // fob/zfw cifre, zfwcg un decimale (28.4): nessun avanzamento automatico, solo Invio o tocco fuori
     inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400);
-    const full={v1:/^\d{3}$/,vr:/^\d{3}$/,v2:/^\d{3}$/,runway:/^\d{2}[LRC]$/,ta:/^\d{4}$/,thr_red_agl:/^\d{4}$/,accel_agl:/^\d{4}$/,flap:/^[1-3]$/}[k];
+    const full={v1:/^\d{3}$/,vr:/^\d{3}$/,v2:/^\d{3}$/,runway:/^\d{2}[LRC]$/,ta:/^\d{4}$/,thr_red_agl:/^\d{4}$/,accel_agl:/^\d{4}$/,flap:/^[1-3]$/}[k]||(isA&&sf==="letter"?/^[A-Z]$/:isA&&sf==="qnh"?/^\d{4}$/:null);
     if(full&&full.test(i.value))adv()};  // valore completo: passa al campo successivo, o chiude la modifica se è l'ultimo
   i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();adv()}};i.onblur=end;
   el.textContent="";i.placeholder=el.dataset.l;el.append(i);i.focus({preventScroll:true});
@@ -279,8 +281,8 @@ function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f
 function longAns(t){return t.length>40||t.includes("Eg.")}
 function inputsNode(it){const el=document.createElement("div");el.className="a inpr";const one=it.inputs.length===1;
   it.inputs.forEach((f,n)=>{if(n){const sp=document.createElement("span");sp.className="sep";sp.textContent=" / ";el.appendChild(sp)}
-    const c=document.createElement("span");c.dataset.f=f.k;c.dataset.l=f.label;c.title=f.label;if(["runway","flap","fob","zfw","zfwcg","taxiway"].includes(f.k))c.dataset.w="1";if(f.prefix)c.dataset.pf=f.prefix;
-    if(one)c.dataset.r=it.response||"";else if(!f.plan)c.dataset.pre=f.label.split(" (")[0].toLowerCase();
+    const c=document.createElement("span");c.dataset.f=f.k;c.dataset.l=f.label;c.title=f.label;if(["runway","flap","fob","zfw","zfwcg","taxiway"].includes(f.k)||/^d?atis_/.test(f.k))c.dataset.w="1";if(f.prefix)c.dataset.pf=f.prefix;
+    if(one)c.dataset.r=it.response||"";else if(!f.plan&&!/^d?atis_wind$/.test(f.k))c.dataset.pre=f.label.split(" (")[0].toLowerCase();
     c.onclick=()=>fStart(c);fShow(c);el.appendChild(c)});
   const ks=it.inputs.filter(f=>f.plan).map(f=>f.k);
   if(ks.length){const b=document.createElement("button");b.className="rs";b.textContent="\u21ba";b.title="Reset to plan";b.setAttribute("aria-label","Reset to plan");
@@ -288,7 +290,20 @@ function inputsNode(it){const el=document.createElement("div");el.className="a i
   return el}
 // iPhone: un tocco su un'area non interattiva non toglie il focus (e la tastiera numerica può non avere Invio): lo togliamo noi
 document.addEventListener("pointerdown",e=>{const a=document.activeElement;if(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA")&&e.target!==a&&!(e.target.closest&&e.target.closest("input,textarea,select")))a.blur()},true);
-function syncInputs(s){document.querySelectorAll("#clbody .fld").forEach(fShow)}
+const NATO={A:"Alpha",B:"Bravo",C:"Charlie",D:"Delta",E:"Echo",F:"Foxtrot",G:"Golf",H:"Hotel",I:"India",J:"Juliett",K:"Kilo",L:"Lima",M:"Mike",N:"November",O:"Oscar",P:"Papa",Q:"Quebec",R:"Romeo",S:"Sierra",T:"Tango",U:"Uniform",V:"Victor",W:"Whiskey",X:"X-ray",Y:"Yankee",Z:"Zulu"};
+// riga "ATIS: Information KILO (K) · RWY 35L · QNH 1013 · Wind 270/12" dai campi annotati (solo quelli presenti, ordine fisso); vuota se nessun dato
+function atisLine(keys,pre){const v=k=>fval(pre+"_"+k).trim(),p=[],l=v("letter");
+  if(keys.includes("letter")&&l)p.push("Information "+(NATO[l]||l)+" ("+l+")");
+  if(keys.includes("rwy")&&v("rwy"))p.push("RWY "+v("rwy"));if(keys.includes("qnh")&&v("qnh"))p.push("QNH "+v("qnh"));if(keys.includes("wind")&&v("wind"))p.push("Wind "+v("wind"));
+  return p}  // parti della riga ("Information Kilo (K)", "RWY 35L", ...); la pagina le unisce con " \u00b7 " dopo "ATIS: "
+// METAR della destinazione sotto la voce (snapshot wx_dest, testo gia' formattato dal server): riga dati + grezzo piccolo; senza dati "METAR not available" attenuato
+function wxFill(s){document.querySelectorAll("#clbody .wh").forEach(e=>{const w=s["wx_"+e.dataset.w];e.textContent="";e.classList.toggle("nd",!w);
+  if(!w){e.textContent="METAR not available";return}
+  const a=document.createElement("div");a.textContent=w.icao+" METAR"+(w.line?": "+w.line:"");e.appendChild(a);
+  if(w.raw){const r=document.createElement("div");r.className="wr";r.textContent=w.raw;e.appendChild(r)}})}
+function syncInputs(s){wxFill(s);document.querySelectorAll("#clbody .fld").forEach(fShow);document.querySelectorAll("#clbody .ah").forEach(e=>{const p=e.dataset.p,parts=atisLine(e.dataset.h.split(","),p),t=parts.length,wn=(s.atis_warn||{})[p]&&e.dataset.h.includes("qnh")?s.atis_warn[p]:"";e.textContent="";e.hidden=!t;
+    if(t){e.append("ATIS: ");parts.forEach((x,n)=>{if(n)e.append(" \u00b7 ");const sp=document.createElement("span");sp.textContent=x;if(x.startsWith("RWY ")&&(s.rwy_bad||{})[p])sp.className="rb";e.appendChild(sp)})}  // pista diversa dal piano: RWY in rosso
+    if(t&&wn){const a=document.createElement("span");a.className="aw";a.textContent="\u26a0 QNH differs: "+wn;e.appendChild(a)}})}  // ATIS/METAR oltre 3 hPa: avviso giallo, la voce non diventa rossa
 function clGo(body){api("/api/checklist-phase",body).then(apply).catch(()=>{})}
 function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!c)return;
   const idx=ph.findIndex(p=>p.id===cur),strip=$("clstrip"),key=ph.length+"|"+cur;
@@ -298,7 +313,7 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
   $("clprev").onclick=()=>clGo({step:-1});$("clnext").onclick=()=>clGo({step:1});
   $("clprev").disabled=idx<=0;$("clnext").disabled=idx>=ph.length-1;
   $("clname").textContent=c.phase.name;const sm=$("clsum");sm.textContent=c.bad+" out of spec";sm.className="clsum"+(c.bad?" bad":"");
-  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live,i.raw,i.show,i.expected,i.inputs])]),showLive,s.test_links]);
+  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live,i.raw,i.show,i.expected,i.inputs,i.atis_hint,i.datis_hint,i.wx_hint])]),showLive,s.test_links]);
   if(bk!==clBodyKey){clBodyKey=bk;const y=window.scrollY,x=window.scrollX;
   const ae=document.activeElement,keep=craftEl&&ae&&craftEl.contains(ae)?[ae.dataset.c,ae.selectionStart,ae.selectionEnd]:null,keepF=ae&&ae.dataset&&ae.dataset.f?[ae.dataset.f,ae.selectionStart,ae.selectionEnd]:null;body.textContent="";
   const mk=(t,cls,txt)=>{const e=document.createElement(t);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e};
@@ -311,6 +326,8 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(it.type==="atc")e.appendChild(mk("span","badge","ATC"));if(it.type==="announce")e.appendChild(mk("span","badge","ANNOUNCE"));
       e.append(it.text);tx.appendChild(e);
       const av=(it.expected||it.response);if(it.inputs)tx.appendChild(inputsNode(it));else if(av&&it.type!=="announce")tx.appendChild(mk("div","a"+(it.expected?" set":"")+(longAns(av)?" lg":""),av));
+      for(const [hk,pre] of [["datis_hint","datis"],["atis_hint","atis"]])if(it[hk]){const h=mk("div","a lg set ah");h.dataset.h=it[hk].join(",");h.dataset.p=pre;h.hidden=true;tx.appendChild(h)}
+      if(it.wx_hint){const h=mk("div","a lg set wh");h.dataset.w=it.wx_hint;tx.appendChild(h)}
       if(showLive&&it.live&&it.live.length)tx.appendChild(mk("div","lv","Actual: "+it.live.map(l=>(it.live.length>1?l[0]+" ":"")+l[1]).join(" \u00b7 ")));
       if(s.test_links&&it.raw&&it.raw.length)tx.appendChild(mk("div","rw",it.raw.map(l=>l[0]+"="+l[1]).join(" \u00b7 ")));
       if(it.show&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","NOW: "+it.live.map(l=>l[1]).join(", ")));

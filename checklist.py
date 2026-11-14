@@ -9,9 +9,10 @@ import thrust
 from checklist_eval import BY_KEY, REFS, _refs, evaluate, qnh_actual
 
 HERE = pathlib.Path(__file__).resolve().parent
+ATIS_HINT = ("letter", "rwy", "qnh", "wind")  # dati ATIS annotati mostrati sotto una voce (ordine canonico della riga)
 TYPES = ("action", "announce", "atc", "note", "craft")
 CRAFT_KEYS = ("c", "r", "a", "f", "t")
-INPUT_KEYS = ("runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg", "taxiway")  # campi di State.fields modificabili dalle voci
+INPUT_KEYS = ("runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg", "taxiway", "atis_letter", "atis_rwy", "atis_wind", "atis_qnh", "datis_letter", "datis_rwy", "datis_wind", "datis_qnh")  # campi di State.fields modificabili dalle voci
 
 
 def _check_keys(check: dict, where: str, inner: bool = False) -> None:
@@ -153,6 +154,13 @@ class Checklist:
                         _check_craft(it)
                     if "inputs" in it:
                         _check_inputs(it)
+                    if "wx_hint" in it and (it["type"] not in ("action", "atc") or it["wx_hint"] not in ("dest", "dep")):
+                        raise ValueError(f"{it['id']}: 'wx_hint' non valido")
+                    for hk in ("atis_hint", "datis_hint"):  # righe ATIS di arrivo / partenza
+                        if hk in it:
+                            h = it[hk]
+                            if it["type"] not in ("atc", "action") or not isinstance(h, list) or not h or len(set(h)) != len(h) or any(x not in ATIS_HINT for x in h):
+                                raise ValueError(f"{it['id']}: {hk!r} non valido")
                     items[it["id"]] = it
         for iid, link in links.items():
             if iid not in items:
@@ -212,6 +220,12 @@ class Checklist:
                     row["expected"] = " / ".join(str((expected or {}).get(r, "")) for r in refs) if len(refs) > 1 else (expected or {}).get(refs[0], "")  # la pagina scrive "Expected: <valore>" se non vuoto
                 if it["type"] == "craft":
                     row["fields"] = it["fields"]
+                if it.get("wx_hint"):
+                    row["wx_hint"] = it["wx_hint"]  # la pagina scrive il METAR della destinazione (snapshot wx_dest)
+                if it.get("datis_hint"):
+                    row["datis_hint"] = it["datis_hint"]
+                if it.get("atis_hint"):
+                    row["atis_hint"] = it["atis_hint"]  # la pagina scrive la riga "ATIS: ..." dai campi annotati
                 if it.get("inputs"):
                     row["inputs"] = it["inputs"]  # la pagina li scrive inline; i valori stanno in snapshot["fields"]
                 if raw is not None and link:

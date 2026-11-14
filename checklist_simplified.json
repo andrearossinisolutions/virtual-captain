@@ -21,7 +21,6 @@
   "fmgs-initialization.sec-f-pln",
   "fmgs-initialization.radio-nav",
   "fmgs-initialization.discontinuity",
-  "fmgs-initialization.check-departure-atis",
   "departure-clearance.expected-rwy",
   "departure-clearance.mcdu-departure-page",
   "fmgs-performance-glareshield.check-boarding-completed",

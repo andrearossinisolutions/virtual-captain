@@ -78,6 +78,143 @@ def test_taxiway_state():
     assert st.fields["taxiway"] == ""
 
 
+def test_wx_dest_snapshot_and_markup():
+    from weather import Weather, metar_from_raw
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json", weather=Weather())  # senza rete
+    assert st.snapshot()["wx_dest"] is None  # nessuna destinazione
+    st.update({"destination": "eddf"})
+    assert st.snapshot()["wx_dest"] is None  # nessun dato
+    st.weather.seed("EDDF", "EDDF 141050Z 27012G25KT 9999 12/08 Q1013")
+    w = st.snapshot()["wx_dest"]
+    assert w == {"icao": "EDDF", "line": "Wind 270/12G25 \u00b7 QNH 1013 \u00b7 Vis 9999 \u00b7 Temp 12/08", "raw": "EDDF 141050Z 27012G25KT 9999 12/08 Q1013"}
+    st.update({"destination": "LIRF"})
+    assert st.snapshot()["wx_dest"] is None  # altra destinazione: niente dati
+    p = web.PAGE
+    for m in ("function wxFill", 's["wx_"+e.dataset.w]', '"METAR not available"', 'w.icao+" METAR"', "r.textContent=w.raw", '"div","a lg set wh"', "i.wx_hint", "wxFill(s);"):
+        assert m in p, m
+    assert "innerHTML=w" not in p and "innerHTML=e" not in p.split("function wxFill")[1].split("function syncInputs")[0]
+
+
+def test_departure_atis_state_and_snapshot():
+    import state as S
+    cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
+    from weather import Weather
+    w = Weather()
+    st = State(cfg, weather=w)
+    chk = lambda k, v: (st.update({k: v}), st.fields[k])[1]
+    assert chk("datis_letter", " k ") == "K" and chk("datis_rwy", "35l, 35r") == "35L/35R" and chk("datis_rwy", " /35l// ") == "35L"
+    assert chk("datis_wind", "270/12g25kt") == "270/12G25KT" and chk("datis_qnh", "10.1.3") == "10.13" and chk("datis_qnh", "1013") == "1013"
+    assert S.clean_field("datis_letter", None) == "" and S.clean_field("datis_letter", "5") == ""
+    assert all(k not in cfg.read_text() for k in S.DATIS_KEYS)
+    assert not set(S.DATIS_KEYS) & set(S.REMEMBERED + S.PLAN_RESET + S.FROM_PLAN)
+    st.update({"reset": list(S.DATIS_KEYS)})
+    assert st.fields["datis_letter"] == "K"  # il reset non li tocca
+    st.update({"atis_letter": "B"})
+    st.set_phase("flying")
+    st.set_phase("briefing")
+    assert st.fields["atis_letter"] == "" and st.fields["datis_letter"] == "K" and st.fields["datis_qnh"] == "1013"  # briefing: solo arrivo azzerato
+    st.fields.update(atis_letter="B")
+    orig = (S.fetch_latest, S.to_briefing)
+    S.fetch_latest = lambda uid: {}
+    S.to_briefing = lambda ofp: {"origin": "LIMC", "destination": "EDDF", "runway": None, "dep_time": None, "ta": None, "generated": 1,
+                                 "v1": None, "vr": None, "v2": None, "flap": None, "fob": None, "zfw": None, "wt_unit": "", "plan": {"orig_metar": "LIMC 1Z 27008KT 9999 15/10 Q1009"}}
+    try:
+        st.load_plan("x")
+    finally:
+        S.fetch_latest, S.to_briefing = orig
+    assert [st.fields[k] for k in S.DATIS_KEYS + S.ATIS_KEYS] == [""] * 8  # nuovo piano: azzera partenza e arrivo
+    s = st.snapshot()
+    assert s["wx_dep"]["icao"] == "LIMC" and s["wx_dep"]["line"].startswith("Wind 270/08 \u00b7 QNH 1009") and s["wx_dest"] is None
+    # avviso QNH ATIS/METAR oltre 3 hPa (solo avviso)
+    st.update({"datis_qnh": "1013"})
+    assert st.snapshot()["atis_warn"] == {"atis": "", "datis": "METAR QNH 1009"}
+    st.update({"datis_qnh": "1011"})
+    assert st.snapshot()["atis_warn"]["datis"] == ""
+    # pill e riga nel markup della partenza (nessun controllo sul vento: solo dato annotato)
+    cl = st.cl
+    dep = {i["id"]: i for sp in cl.evaluate_phase("departure-clearance", {})["subphases"] for i in sp["items"]}["departure-clearance.obtain-departure-clearance"]
+    assert dep["datis_hint"] == ["letter", "rwy", "qnh", "wind"] and dep["wx_hint"] == "dep" and "atis_hint" not in dep
+
+
+def test_rwy_conflict_red():
+    import state as S
+    c = S.rwy_conflict
+    assert c("17R", "17R") is False and c("35L", "17R") is True  # stesso / diverso
+    assert c("17R/17L", "17R") is False and c("17L/17R", " 17r ") is False and c("17L/18", "17R") is True  # piu' piste, case/spazi
+    assert c("", "17R") is False and c("17R", "") is False and c(None, None) is False  # mancanti: niente rosso
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    st.update({"origin": "LIMC/35L"})
+    st.update({"datis_rwy": "17R"})
+    assert st.snapshot()["rwy_bad"] == {"atis": False, "datis": True}  # partenza: piano 35L, ATIS 17R
+    st.update({"datis_rwy": "35L/35R"})
+    assert st.snapshot()["rwy_bad"]["datis"] is False
+    st.update({"atis_rwy": "17R"})
+    st.update({"destination": "EDDF"})
+    assert st.snapshot()["rwy_bad"]["atis"] is False  # destinazione senza pista: niente rosso
+    st.update({"destination": "EDDF/25L"})
+    assert st.snapshot()["rwy_bad"]["atis"] is True
+    st.update({"atis_rwy": "25L/25R"})
+    assert st.snapshot()["rwy_bad"]["atis"] is False
+    st.update({"datis_rwy": ""})
+    assert st.snapshot()["rwy_bad"]["datis"] is False
+    p = web.PAGE
+    assert 'add("DEP ATIS",' in p and "RWY \"+dr" in p and "rb=s.rwy_bad||{}" in p
+
+
+def test_qnh_from_atis():
+    import state as S
+    from weather import Weather
+    f = lambda t: S.atis_qnh_hpa(t)
+    assert f("1013") == 1013 and abs(f("29.92") - 1013.2) < 0.1 and f("0990") == 990
+    assert f("") is None and f(None) is None and f("940") is None and f("1051") is None and f("27.9") is None and f("31.1") is None and f("x") is None
+    w = Weather()
+    w.seed("LIMC", "LIMC Q1009")
+    w.seed("EDDF", "EDDF Q1000")
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json", weather=w)
+    st.fields.update(origin="LIMC/35L", destination="EDDF")
+    assert st._expected()["wx.qnh_dep"] == "1009 hPa (METAR)"
+    st.update({"datis_qnh": "1013", "atis_qnh": "29.92"})
+    e = st._expected()
+    assert e["wx.qnh_dep"] == "1013 hPa (ATIS)" and e["wx.qnh_dest"] == "1013 hPa (ATIS)"
+    st.update({"datis_qnh": "5000"})  # non plausibile: ripiego sul METAR
+    assert st._expected()["wx.qnh_dep"] == "1009 hPa (METAR)"
+    st.fields.update(origin="", datis_qnh="")
+    assert st._expected()["wx.qnh_dep"] == ""
+
+
+def test_atis_state():
+    import state as S
+    cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
+    st = State(cfg)
+    chk = lambda k, v: (st.update({k: v}), st.fields[k])[1]
+    assert chk("atis_letter", " k ") == "K" and chk("atis_letter", "kx") == "K" and chk("atis_letter", "5") == ""
+    assert chk("atis_rwy", "35l, 35r") == "35L/35R" and chk("atis_rwy", "35l \t 35r") == "35L/35R" and chk("atis_rwy", " /35l// ") == "35L" and chk("atis_rwy", "35l,") == "35L"
+    assert chk("atis_letter", None) == "" and S.clean_field("atis_wind", None) == ""
+    assert chk("atis_rwy", "35l 35r") == "35L/35R" and chk("atis_rwy", "35l/x9") == "35L/9" and len(chk("atis_rwy", "12345678901234")) == 12
+    assert chk("atis_wind", "270/12g25kt") == "270/12G25KT" and chk("atis_wind", "27 0@/1!2") == "270/12" and len(chk("atis_wind", "1" * 15)) == 12
+    assert chk("atis_qnh", "1013") == "1013" and chk("atis_qnh", "10.1.3") == "10.13"
+    assert chk("atis_qnh", "1013.25") == "1013." and chk("atis_qnh", "abc29.92") == "29.92"
+    for k, v in (("atis_letter", "K"), ("atis_rwy", "35L"), ("atis_wind", "270/12"), ("atis_qnh", "1013")):
+        st.update({k: v})
+    assert all(k not in cfg.read_text() for k in S.ATIS_KEYS)
+    assert not set(S.ATIS_KEYS) & set(S.REMEMBERED + S.PLAN_RESET + S.FROM_PLAN)
+    st.update({"reset": list(S.ATIS_KEYS)})
+    assert [st.fields[k] for k in S.ATIS_KEYS] == ["K", "35L", "270/12", "1013"]  # il reset non li tocca
+    st.set_phase("flying")
+    st.set_phase("briefing")
+    assert [st.fields[k] for k in S.ATIS_KEYS] == ["", "", "", ""]
+    st.update({"atis_letter": "B"})
+    orig = (S.fetch_latest, S.to_briefing)
+    S.fetch_latest = lambda uid: {}
+    S.to_briefing = lambda ofp: {"origin": "LIMC", "destination": "EDDF", "runway": None, "dep_time": None, "ta": None, "generated": 1,
+                                 "v1": None, "vr": None, "v2": None, "flap": None, "fob": None, "zfw": None, "wt_unit": "", "plan": {}}
+    try:
+        st.load_plan("x")
+    finally:
+        S.fetch_latest, S.to_briefing = orig
+    assert st.fields["atis_letter"] == ""
+
+
 def test_checklist_mode_endpoint():
     cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
     st = State(cfg)
@@ -249,7 +386,8 @@ def test_bad_values_use_defaults():
 def test_briefing_fields_and_inflight():
     import state as S
     assert [k for k, _ in S.FIELDS] == ["origin", "destination", "dep_time"]
-    assert [k for k, _ in S.INFLIGHT] == ["runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg", "taxiway"]
+    assert [k for k, _ in S.INFLIGHT] == ["runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg", "taxiway", "atis_letter", "atis_rwy", "atis_wind", "atis_qnh",
+                                                    "datis_letter", "datis_rwy", "datis_wind", "datis_qnh"]
     st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
     s = st.snapshot()
     assert [k for k, _ in s["labels"]] == ["origin", "destination", "dep_time"] and set(s["fields"]) >= {"runway", "ta", "v1", "flap"}
@@ -274,7 +412,7 @@ def test_briefing_fields_and_inflight():
     st.update({"origin": "LIRF/16L"})
     got = []
     st.weather.get = lambda icao: got.append(icao) or 1013.0
-    assert st._expected()["wx.qnh_dep"] == "1013 hPa" and got[0] == "LIRF"
+    assert st._expected()["wx.qnh_dep"] == "1013 hPa (METAR)" and got[0] == "LIRF"
 
 
 def test_load_plan_dep_and_reset():
@@ -357,15 +495,25 @@ def test_inputs_markup():
     assert 'querySelector(\'.fld[data-f="\'+keepF[0]' in p  # il campo in modifica sopravvive alla ricostruzione
     key = p[p.index("bk=JSON.stringify"):p.index("showLive,s.test_links")]
     assert "i.inputs" in key and "fields" not in key  # i valori scritti non fanno ricostruire la lista
-    assert '"decimal"' in p and 'replace(/\\D/g,"")' in p and "fob:" not in p[p.index("const full="):p.index("[k];")]  # fob/zfw/zfwcg: nessun avanzamento automatico
+    assert '"decimal"' in p and 'replace(/\\D/g,"")' in p and "fob:" not in p[p.index("const full="):p.index("[k]||(isA")]  # fob/zfw/zfwcg: nessun avanzamento automatico
     for m in ("dataset.pf", 'el.dataset.pf+" "+(v||"---")', 'replace(/[^A-Z0-9]/g,"")', "slice(0,4)", '"taxiway"'):  # taxiway con prefisso: "VACATED VIA ---" / "VACATED VIA B5"
         assert m in p, m
-    assert "taxiway" not in p[p.index("const full="):p.index("[k];")]  # nessun avanzamento automatico
+    assert "taxiway" not in p[p.index("const full="):p.index("[k]||(isA")]  # nessun avanzamento automatico
     # risposta lunga (oltre 40 caratteri o con "Eg.") sotto il titolo a tutta larghezza, la breve resta a destra
     assert 'function longAns(t){return t.length>40||t.includes("Eg.")}' in p and '(longAns(av)?" lg":"")' in p
     assert ".cl .cli .a.lg{grid-column:2/4;text-align:left;max-width:none}" in p and ".cl .cli .a{grid-column:3;text-align:right" in p
+    for m in ('isA&&sf==="letter"?/^[A-Z]$/:isA&&sf==="qnh"?/^\\d{4}$/', 'isA&&sf==="rwy"', 'isA&&sf==="wind"', '/[^0-9LRC\\/]/g', '/[^0-9\\/GVRBKT]/g',
+              'add("ARR ATIS",f.atis_letter)', 'f.datis_letter||"")+(f.datis_letter&&dr',  'rb.datis);', 'rb.atis);', ".chip.bad{", ".rb{color:var(--bad)!important}", 'x.startsWith("RWY ")&&(s.rwy_bad||{})[p]', 'last.rwy_bad[el.dataset.f.replace("_rwy","")]','for(const [hk,pre] of [["datis_hint","datis"],["atis_hint","atis"]])',
+              'h.dataset.w=it.wx_hint', 's["wx_"+e.dataset.w]', 'a.textContent="\\u26a0 QNH differs: "+wn', "s.atis_warn"):
+        assert m in p, m
+    assert r'.replace(/[\s,]+/g,"/")' in p and r'.replace(/\/+/g,"/")' in p and r'/\/$/.test(i.value)' in p  # piste: separatori compressi, "/" finale tolto alla chiusura
+    for m in ("function atisLine", "NATO[l]||l", 'e.append("ATIS: ")', 'class="a lg set ah"'.replace('class="a lg set ah"', '"div","a lg set ah"'), "e.dataset.h.split", "i.atis_hint", "i.datis_hint"):
+        assert m in p, m
+    assert 'Z:"Zulu"' in p and 'K:"Kilo"' in p and 'A:"Alpha"' in p
+    assert "atis_rwy:" not in p[p.index("const full="):p.index("[k]||(isA")]  # solo lettera e QNH avanzano da soli
     chips = p[p.index("function chips"):p.index("function cockpit")]
-    assert 'add("DEP",f.origin);add("ARR",f.destination)' in chips and "JSON.stringify(f)" in chips  # ARR come DEP, in cache
+    assert 'add("DEP",f.origin);' in chips and 'add("ARR ATIS",f.atis_letter)' in chips and "JSON.stringify([f,rb])" in chips  # ARR come DEP, in cache (anche il rosso della pista)
+    assert 'f.destination?f.destination+(rw?"/"+rw:""):rw' in chips and 'replace(/\\//g,"-")' in chips and "innerHTML=`<b>${k}</b>`;d.append(v)" in chips  # EDDF/17R, EDDF/17R-17L, EDDF; v come testo
     assert '"TA"' not in chips and '"V1"' not in chips and '"FLAP"' not in chips and '"RWY"' not in chips
 
 
@@ -683,6 +831,11 @@ if __name__ == "__main__":
     test_to_briefing_dep_runway()
     test_inputs_markup()
     test_taxiway_state()
+    test_atis_state()
+    test_departure_atis_state_and_snapshot()
+    test_qnh_from_atis()
+    test_rwy_conflict_red()
+    test_wx_dest_snapshot_and_markup()
     test_to_briefing_fuel_and_zfw()
     test_fob_zfw_state_and_plan()
     test_checklist_mode_endpoint()

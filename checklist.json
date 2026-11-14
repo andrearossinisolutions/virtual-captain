@@ -385,8 +385,29 @@
       {
        "id": "fmgs-initialization.check-departure-atis",
        "text": "Check Departure ATIS",
-       "response": "ANNOTATE LETTER",
-       "type": "action"
+       "response": "ANNOTATE INFOS & LETTER",
+       "type": "action",
+       "inputs": [
+        {
+         "k": "datis_letter",
+         "label": "ATIS letter",
+         "prefix": "INFO"
+        },
+        {
+         "k": "datis_rwy",
+         "label": "Departure runway(s)",
+         "prefix": "RWY"
+        },
+        {
+         "k": "datis_wind",
+         "label": "Wind"
+        },
+        {
+         "k": "datis_qnh",
+         "label": "QNH",
+         "prefix": "QNH"
+        }
+       ]
       }
      ]
     },
@@ -459,7 +480,9 @@
        "id": "departure-clearance.obtain-departure-clearance",
        "text": "Obtain Departure Clearance",
        "response": "Eg. \"Malpensa Delivery, ASX415, Airbus a320, Stand 123, Information B, Request clearance to Venezia Tessera\"",
-       "type": "atc"
+       "type": "atc",
+       "datis_hint": ["letter", "rwy", "qnh", "wind"],
+       "wx_hint": "dep"
       },
       {
        "id": "departure-clearance.craft",
@@ -1641,13 +1664,35 @@
        "id": "descent-preparation.check-arrival-atis",
        "text": "Check Arrival ATIS",
        "response": "ANNOTATE INFOS & LETTER",
-       "type": "action"
+       "type": "action",
+       "inputs": [
+        {
+         "k": "atis_letter",
+         "label": "ATIS letter",
+         "prefix": "INFO"
+        },
+        {
+         "k": "atis_rwy",
+         "label": "Landing runway(s)",
+         "prefix": "RWY"
+        },
+        {
+         "k": "atis_wind",
+         "label": "Wind"
+        },
+        {
+         "k": "atis_qnh",
+         "label": "QNH",
+         "prefix": "QNH"
+        }
+       ]
       },
       {
        "id": "descent-preparation.weather-landing-information",
        "text": "Weather & Landing Information",
        "response": "OBTAIN",
-       "type": "action"
+       "type": "action",
+       "wx_hint": "dest"
       },
       {
        "id": "descent-preparation.nav-charts",
@@ -1845,7 +1890,8 @@
        "id": "descent-checklist.contact-approach",
        "text": "Contact Approach",
        "response": "Eg. \"Malpensa Approach, ASX415, FL100, Information Charlie\" / Eg. RB: \"Expect ILS Z 35L, Descend 6000 ft, QNH 1016, ASX415\"",
-       "type": "atc"
+       "type": "atc",
+       "atis_hint": ["letter", "rwy", "qnh", "wind"]
       }
      ]
     },
@@ -2079,7 +2125,8 @@
        "id": "ils-approach.obtain-landing-clearance",
        "text": "Obtain Landing Clearance",
        "response": "Eg. \"Malpensa Tower, ASX415, Established ILS Z 35L\" / Eg. RB: \"Cleared to land, Runway 35L, ASX415\"",
-       "type": "atc"
+       "type": "atc",
+       "atis_hint": ["rwy", "wind"]
       },
       {
        "id": "ils-approach.flight-parameters",
@@ -2295,7 +2342,8 @@
        "id": "non-precision-approach.obtain-landing-clearance",
        "text": "Obtain Landing Clearance",
        "response": "Eg. \"Malpensa Tower, ASX415, Established on RNAV Z, Runway 35L\" / Eg. RB: \"Cleared to land, Runway 35L, ASX415\"",
-       "type": "atc"
+       "type": "atc",
+       "atis_hint": ["rwy", "wind"]
       },
       {
        "id": "non-precision-approach.flight-parameters",

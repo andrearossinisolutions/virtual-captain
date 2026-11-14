@@ -167,6 +167,19 @@ def test_qnh():
     assert ev(base, ver=False)["kind"] == "unverified"
 
 
+def test_qnh_source_in_detail():
+    c = {"qnh": "wx.qnh_dep"}
+    base = {"baro_std": "0", "baro_hpa": "1013", "baro_inch": None}
+    ev = lambda lab, want: evaluate(c, lab, expected={"wx.qnh_dep": want})
+    assert ev(base, "1013 hPa (ATIS)")["status"] == "ok" and ev(base, "1012 hPa (METAR)")["status"] == "ok"  # tolleranza 1 hPa invariata
+    r = ev({**base, "baro_hpa": "1016"}, "1013 hPa (ATIS)")
+    assert r["status"] == "bad" and r["detail"] == "expected 1013 (ATIS), actual 1016"
+    assert ev({**base, "baro_std": "1"}, "1009 hPa (METAR)")["detail"] == "expected 1009 (METAR), actual STD"
+    assert ev({**base, "baro_hpa": "1016"}, "1013 hPa")["detail"] == "expected 1013, actual 1016"  # senza fonte: come prima
+    assert ev({"baro_std": "0", "baro_hpa": None, "baro_inch": "29.92"}, "1013 hPa (ATIS)")["status"] == "ok"  # QNH letto in inHg
+    assert ev(base, "")["status"] == "none"
+
+
 def test_detent():
     one, two = {"detent": "IDLE"}, {"detent": ["FLX", "TOGA"]}
     cal, none = {"cal.thrust": "1"}, {"cal.thrust": ""}
@@ -186,6 +199,7 @@ def test_detent():
 
 
 if __name__ == "__main__":
+    test_qnh_source_in_detail()
     test_detent()
     test_expected_refs()
     test_fcu_alt()

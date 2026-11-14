@@ -112,18 +112,21 @@ def qnh_actual(labels: dict):
 
 
 def _qnh_single(ref: str, labels: dict, expected) -> dict:
-    m = re.search(r"\d+(?:\.\d+)?", _want(expected, ref))
+    text = _want(expected, ref)
+    m = re.search(r"\d+(?:\.\d+)?", text)
     want = float(m.group(0))
+    src = re.search(r"\((\w+)\)", text)  # fonte dell'atteso: "1013 hPa (ATIS)"
+    sfx = f" ({src.group(1)})" if src else ""
     if _num(labels.get("baro_std")) is None:
         return _res("na", UNREADABLE, "unreadable")
     act = qnh_actual(labels)
     if act == "STD":
-        return _res("bad", f"expected {want:g}, actual STD", "mismatch")
+        return _res("bad", f"expected {want:g}{sfx}, actual STD", "mismatch")
     if act is None:
         return _res("na", UNREADABLE, "unreadable")
     if abs(act - want) <= QNH_TOL + 1e-6:
         return _res("ok")
-    return _res("bad", f"expected {want:g}, actual {act:.0f}", "mismatch")
+    return _res("bad", f"expected {want:g}{sfx}, actual {act:.0f}", "mismatch")
 
 
 def detent_all(check: dict) -> dict:

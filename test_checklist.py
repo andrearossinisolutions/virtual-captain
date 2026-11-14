@@ -476,10 +476,10 @@ def test_qnh_links():
     s = st.snapshot()
     assert s["checklist"]["phase"]["id"] == st.cl_phase
     exp = st._expected()
-    assert exp["wx.qnh_dep"] == "1013 hPa" and exp["wx.qnh_dest"] == "1009 hPa"
+    assert exp["wx.qnh_dep"] == "1013 hPa (METAR)" and exp["wx.qnh_dest"] == "1009 hPa (METAR)"
     r = cl.evaluate_phase("fmgs-performance-glareshield", st.labels, demo=True, expected=exp)
     row = {i["id"]: i for sp in r["subphases"] for i in sp["items"]}["fmgs-performance-glareshield.barometric-reference"]
-    assert row["status"] == "ok" and row["expected"] == "1013 hPa" and row["live"] == [["Baro", "1013"]]
+    assert row["status"] == "ok" and row["expected"] == "1013 hPa (METAR)" and row["live"] == [["Baro", "1013"]]
     assert State(pathlib.Path(tempfile.mkdtemp()) / "d.json")._expected()["wx.qnh_dep"] == ""
 
 
@@ -565,6 +565,59 @@ def test_inputs_items():
     rwy = {i["id"]: i for s in cl.evaluate_phase("after-landing", {})["subphases"] for i in s["items"]}["after-landing.rwy"]
     assert [f["k"] for f in rwy["inputs"]] == ["taxiway"] and rwy["inputs"][0]["prefix"] == "VACATED VIA" and rwy["response"] == "VACATED"
     assert rwy["status"] == "none"  # nessun link: stato invariato
+    atis = {i["id"]: i for s in cl.evaluate_phase("descent-preparation", {})["subphases"] for i in s["items"]}["descent-preparation.check-arrival-atis"]
+    assert [f["k"] for f in atis["inputs"]] == ["atis_letter", "atis_rwy", "atis_wind", "atis_qnh"]
+    assert [f.get("prefix") for f in atis["inputs"]] == ["INFO", "RWY", None, "QNH"] and atis["status"] == "none" and atis["response"] == "ANNOTATE INFOS & LETTER"
+    assert "descent-preparation.check-arrival-atis" not in cl.links and "descent-preparation.check-arrival-atis" not in cl.excluded
+    rows = {i["id"]: i for ph in cl.ids for s in cl.evaluate_phase(ph, {})["subphases"] for i in s["items"]}
+    hints = {k: r["atis_hint"] for k, r in rows.items() if "atis_hint" in r}
+    assert hints == {"descent-checklist.contact-approach": ["letter", "rwy", "qnh", "wind"],
+                     "ils-approach.obtain-landing-clearance": ["rwy", "wind"], "non-precision-approach.obtain-landing-clearance": ["rwy", "wind"]}
+    assert {k: r["wx_hint"] for k, r in rows.items() if "wx_hint" in r} == {"descent-preparation.weather-landing-information": "dest", "departure-clearance.obtain-departure-clearance": "dep"}
+    dep = rows["fmgs-initialization.check-departure-atis"]
+    assert [f["k"] for f in dep["inputs"]] == ["datis_letter", "datis_rwy", "datis_wind", "datis_qnh"] and [f.get("prefix") for f in dep["inputs"]] == ["INFO", "RWY", None, "QNH"]
+    assert dep["inputs"][1]["label"] == "Departure runway(s)" and dep["response"] == "ANNOTATE INFOS & LETTER" and "wx_hint" not in dep and dep["status"] == "none"
+    assert "fmgs-initialization.check-departure-atis" not in cl.excluded  # visibile anche in Simplified
+    sp = {i["id"] for sp_ in cl.evaluate_phase("fmgs-initialization", {}, simplified=True)["subphases"] for i in sp_["items"]}
+    assert "fmgs-initialization.check-departure-atis" in sp
+    for b in ({"x": 1}, "rwy", []):  # datis_hint non valido
+        data = json.loads(json.dumps(cl.data))
+        next(i for p in data["phases"] for s in p["subphases"] for i in s["items"] if i["type"] == "atc")["datis_hint"] = b
+        try:
+            C.Checklist(data, {})
+            assert False, b
+        except ValueError:
+            pass
+    for b in ("src", "", None, ["dest"]):  # wx_hint non valido (solo "dest")
+        data = json.loads(json.dumps(cl.data))
+        next(i for p in data["phases"] for s in p["subphases"] for i in s["items"] if i["type"] == "action")["wx_hint"] = b
+        try:
+            C.Checklist(data, {})
+            assert False, b
+        except ValueError:
+            pass
+    data = json.loads(json.dumps(cl.data))
+    next(i for p in data["phases"] for s in p["subphases"] for i in s["items"] if i["type"] == "note")["wx_hint"] = "dest"
+    try:
+        C.Checklist(data, {})
+        assert False
+    except ValueError:
+        pass
+    for b in ("rwy", [], ["bogus"], ["rwy", "rwy"], [1]):  # atis_hint non valido
+        data = json.loads(json.dumps(cl.data))
+        next(i for p in data["phases"] for s in p["subphases"] for i in s["items"] if i["type"] == "atc")["atis_hint"] = b
+        try:
+            C.Checklist(data, {})
+            assert False, b
+        except ValueError:
+            pass
+    data = json.loads(json.dumps(cl.data))
+    next(i for p in data["phases"] for s in p["subphases"] for i in s["items"] if i["type"] == "note")["atis_hint"] = ["rwy"]
+    try:
+        C.Checklist(data, {})
+        assert False
+    except ValueError:
+        pass
     bad = [{"k": "ta", "label": "a", "prefix": 5}], [{"k": "ta", "label": "a", "prefix": ""}], [{"k": "ta", "label": "a", "prefix": "  "}], \
         [{"k": "bogus", "label": "x"}], [], [{"k": "ta", "label": ""}], [{"k": "ta", "label": "a"}, {"k": "ta", "label": "b"}], "x", [{"k": "ta", "label": "a", "plan": "y"}]
     for b in bad:

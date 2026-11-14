@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import threading
 import time
 from collections import deque
@@ -15,7 +16,7 @@ import thrust
 from brain import Briefing, join_dep, parse_dep
 from aao import AAO, normalize_url
 from simbrief import fetch_latest, to_briefing
-from weather import Weather
+from weather import Weather, format_metar
 
 CFG = pathlib.Path.home() / ".virtual-captain.json"
 # Campi del Briefing (pagina di configurazione). origin contiene "ICAO/RWY" (es. LIMC/17R): la pista si ricava da li'.
@@ -23,7 +24,9 @@ FIELDS = [("origin", "Departure"), ("destination", "Arrival"), ("dep_time", "Dep
 # Dati di decollo: si inseriscono nelle voci della checklist (FMGS PERFORMANCE); stesse chiavi in `fields`, non nel Briefing.
 INFLIGHT = [("runway", "T/O runway"), ("ta", "Transition altitude (ft)"), ("thr_red_agl", "Thrust reduction (ft AGL)"),
             ("accel_agl", "Acceleration (ft AGL)"), ("v1", "V1"), ("vr", "VR"), ("v2", "V2"), ("flap", "Flap"),
-            ("fob", "FOB"), ("zfw", "ZFW"), ("zfwcg", "ZFWCG"), ("taxiway", "Taxiway")]
+            ("fob", "FOB"), ("zfw", "ZFW"), ("zfwcg", "ZFWCG"), ("taxiway", "Taxiway"),
+            ("atis_letter", "ATIS letter"), ("atis_rwy", "Landing runway(s)"), ("atis_wind", "Wind"), ("atis_qnh", "QNH"),
+            ("datis_letter", "ATIS letter"), ("datis_rwy", "Departure runway(s)"), ("datis_wind", "Wind"), ("datis_qnh", "QNH")]
 ALL_FIELDS = FIELDS + INFLIGHT
 FROM_PLAN = ["origin", "destination", "dep_time", "ta", "v1", "vr", "v2", "flap", "fob", "zfw"]  # runway deriva da origin; accel/thr_red solo manuali
 PLAN_RESET = ["runway", "ta", "v1", "vr", "v2", "flap", "fob", "zfw"]  # tornano al piano con "Reset to plan"
@@ -45,6 +48,58 @@ def _clean_clr(k: str, v) -> str:
     if k == "t":
         return v if len(v) <= CLR_MAX["t"] and all(ch in "01234567" for ch in v) else None
     return v[:CLR_MAX[k]]
+
+
+ATIS_PARTS = ("letter", "rwy", "wind", "qnh")
+ATIS_KEYS = tuple("atis_" + p for p in ATIS_PARTS)  # annotazioni dell'ATIS di arrivo: solo memoria, azzerate col nuovo piano e al ritorno in briefing
+DATIS_KEYS = tuple("datis_" + p for p in ATIS_PARTS)  # ATIS di partenza: solo memoria, azzerate solo col nuovo piano
+QNH_OK = ((950.0, 1050.0), (28.0, 31.0))  # QNH da ATIS plausibile: hPa (4 cifre) o inHg (con punto)
+QNH_WARN = 3.0  # hPa: oltre questa differenza tra QNH dell'ATIS e del METAR si avvisa (solo avviso)
+
+
+def rwy_conflict(annotated, plan) -> bool:
+    """True se la pista del piano NON e' tra quelle annotate nell'ATIS ("17R/17L"); confronto senza maiuscole/spazi; manca una delle due -> False."""
+    ann = {r for r in re.split(r"[/\s,]+", str(annotated or "").upper()) if r}
+    p = re.sub(r"\s+", "", str(plan or "")).upper()
+    return bool(ann and p and p not in ann)
+
+
+def atis_qnh_hpa(text) -> float | None:
+    """QNH annotato dall'ATIS in hPa: 4 cifre (950-1050) oppure inHg con punto (28.0-31.0, x33.8639); non plausibile -> None."""
+    s = str(text or "").strip()
+    try:
+        v = float(s)
+    except ValueError:
+        return None
+    if "." in s:
+        return v * 33.8639 if QNH_OK[1][0] <= v <= QNH_OK[1][1] else None
+    return v if len(s) == 4 and QNH_OK[0][0] <= v <= QNH_OK[0][1] else None
+
+
+def clean_field(k: str, v) -> str:
+    """Sanifica i campi con regole proprie (valore non valido: scartato, resta vuoto); gli altri solo strip."""
+    s = "" if v is None else str(v).strip()
+    if k == "taxiway":
+        return clean_taxiway(s)
+    u = s.upper()
+    if k.startswith(("atis_", "datis_")):
+        k = "atis_" + k.split("_", 1)[1]  # stesse regole per arrivo (atis_) e partenza (datis_)
+    if k == "atis_letter":
+        return u[:1] if u[:1].isascii() and u[:1].isalpha() else ""
+    if k == "atis_rwy":
+        u = re.sub(r"[\s,]+", "/", u)  # spazi (anche tab), virgole -> "/"
+        return re.sub(r"/+", "/", "".join(c for c in u if c in "0123456789LRC/"))[:12].strip("/")
+    if k == "atis_wind":
+        return "".join(c for c in u if c in "0123456789/GVRBKT")[:12]
+    if k == "atis_qnh":
+        out, dot = "", False
+        for c in s:
+            if c.isascii() and c.isdigit():
+                out += c
+            elif c == "." and not dot:
+                out, dot = out + c, True
+        return out[:5]
+    return s
 
 
 def clean_taxiway(text) -> str:
@@ -112,7 +167,7 @@ class State:
         with self.lock:
             for k, _ in ALL_FIELDS:
                 if k in data and k not in ("origin", "runway"):
-                    self.fields[k] = clean_taxiway(data[k]) if k == "taxiway" else str(data[k]).strip()
+                    self.fields[k] = clean_field(k, data[k])
             if "origin" in data:
                 self._set_origin(str(data["origin"]))
             if "runway" in data and "origin" not in data:
@@ -171,6 +226,11 @@ class State:
         with self.lock:
             self.clearance.update(new)
 
+    def clear_atis(self, keys=ATIS_KEYS) -> None:
+        """Annotazioni ATIS vuote (default arrivo; chiamare con il lock preso)."""
+        for k in keys:
+            self.fields[k] = ""
+
     def reset_clearance(self) -> None:
         """CRAFT: c e r tornano al piano (se c'e'), a/f/t vuoti."""
         with self.lock:
@@ -196,6 +256,7 @@ class State:
                 self.phase = phase
                 if phase == "briefing":
                     self.reset_clearance()  # ritorno in briefing: CRAFT riparte dal piano
+                    self.clear_atis()
                 if phase != "flying":
                     self.monitor = []
                     self.flight, self.pills = [], {}
@@ -378,6 +439,8 @@ class State:
                 if v is None:
                     missing.append(dict(ALL_FIELDS)[k])
             self.fields["runway"] = rwy
+            self.clear_atis()
+            self.clear_atis(DATIS_KEYS)  # l'ATIS di partenza si azzera solo col nuovo piano
             self.fields["taxiway"] = ""  # nuovo volo: il taxiway di uscita dell'atterraggio precedente non vale piu'
             if not rwy:
                 missing.append(dict(ALL_FIELDS)["runway"])
@@ -414,9 +477,10 @@ class State:
             e[f"fld.{k}"] = self.fields.get(k, "")
         e["fld.fob_unit"] = self.wt_unit  # solo per la conversione kgs/lbs del confronto FOB (non e' un riferimento dei link)
         e["fld.flap"] = ceval.norm_label("flap", self.fields.get("flap") or "") or ""  # non riconosciuto -> vuoto (solo NOW)
-        for ref, k in (("wx.qnh_dep", "origin"), ("wx.qnh_dest", "destination")):
+        for ref, k, pre in (("wx.qnh_dep", "origin", "datis"), ("wx.qnh_dest", "destination", "atis")):
+            a = atis_qnh_hpa(self.fields.get(pre + "_qnh"))  # QNH annotato dall'ATIS (se plausibile) prima del METAR
             q = self.weather.get(parse_dep(self.fields.get(k, ""))[0])
-            e[ref] = f"{q:.0f} hPa" if q is not None else ""
+            e[ref] = f"{a:.0f} hPa (ATIS)" if a is not None else (f"{q:.0f} hPa (METAR)" if q is not None else "")
         e["cal.thrust"] = "1" if self.thrust_cal else ""  # vuoto: i link {"detent"} mostrano solo NOW
         e["plan.sid"] = str((self.plan or {}).get("sid") or "")
         return e
@@ -438,9 +502,28 @@ class State:
             self.spoke_at = time.time()
             self.spoke_n += 1
 
+    def _wx(self, field: str):
+        """METAR dell'aeroporto di un campo (origin/destination) gia' formattato ({"icao","line","raw"}) o None; non blocca (cache/ripiego); lock preso."""
+        icao = parse_dep(self.fields.get(field, ""))[0]
+        return format_metar(icao, self.weather.get_metar(icao)) if icao else None
+
+    def _rwy_bad(self) -> dict:
+        """{"atis": bool, "datis": bool}: pista annotata nell'ATIS diversa da quella del piano (partenza: runway/origin; arrivo: pista in destination, se c'e'); solo avviso."""
+        dep_rwy = self.fields.get("runway") or parse_dep(self.fields.get("origin", ""))[1]
+        arr_rwy = parse_dep(self.fields.get("destination", ""))[1]
+        return {"atis": rwy_conflict(self.fields.get("atis_rwy"), arr_rwy), "datis": rwy_conflict(self.fields.get("datis_rwy"), dep_rwy)}
+
+    def _qnh_warn(self) -> dict:
+        """{"atis": testo, "datis": testo}: avviso se il QNH annotato (arrivo/partenza) differisce dal METAR di piu' di QNH_WARN hPa (solo avviso)."""
+        out = {}
+        for pre, field in (("atis", "destination"), ("datis", "origin")):
+            a, q = atis_qnh_hpa(self.fields.get(pre + "_qnh")), self.weather.get(parse_dep(self.fields.get(field, ""))[0])
+            out[pre] = f"METAR QNH {q:.0f}" if a is not None and q is not None and abs(a - q) > QNH_WARN else ""
+        return out
+
     def snapshot(self) -> dict:
         with self.lock:
-            return {"phase": self.phase, "fields": dict(self.fields), "simbrief": self.simbrief,
+            return {"wx_dest": self._wx("destination"), "wx_dep": self._wx("origin"), "atis_warn": self._qnh_warn(), "rwy_bad": self._rwy_bad(), "phase": self.phase, "fields": dict(self.fields), "simbrief": self.simbrief,
                     "mode": self.mode, "checklist_mode": self.checklist_mode, "cl_modes": list(CL_MODES), "info": self.info, "plan": self.plan, "rev": self.rev,
                     "aao_ok": self.aao_ok, "aao_url": self.aao_url, "log": list(self.log),
                     "now": time.time(), "spoke_n": self.spoke_n,
