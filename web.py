@@ -84,7 +84,7 @@ main.fv{max-width:none;padding:12px 16px}
 .craft{background:#0c131b;border:1px solid var(--bd);border-radius:10px;padding:8px;margin:8px 0;break-inside:avoid}
 .craft .ch{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--warn);margin-bottom:4px}
 .craft .cf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 6px}.craft .cf .w{grid-column:1/-1}@media(max-width:420px){.craft input{padding:5px 6px}}  /* CRAFT: Cleared to e Route a tutta larghezza, poi A, F, T su tre colonne */
-.craft.tbl .cf{grid-template-columns:.6fr 1.5fr 1.5fr 1fr}.craft.tbl .tl{display:flex;justify-content:space-between;align-items:center}.craft.tbl .plus{min-width:34px;height:28px;margin:-4px 0 -2px;padding:0;font-size:20px;line-height:1;font-weight:600;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer;touch-action:manipulation}.craft.tbl .tc .fld{display:block;cursor:pointer;min-height:1.6em;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:var(--card);overflow:hidden;white-space:nowrap}.craft.tbl .tc .fld.nv{color:var(--mut)}.craft.tbl .tc .fld.set{color:var(--fg);font-weight:600}.craft.tbl .tc .fld input{padding:0;border:0;background:transparent}
+.craft.tbl .cf{grid-template-columns:.5fr 1.7fr 1.2fr 1.7fr;gap:4px}@media(max-width:420px){.craft.tbl .tc .fld{padding:5px 4px;font-size:15px}.craft.tbl .tr{gap:2px}.craft.tbl .plus{min-width:30px}.craft.tbl .plus.un{min-width:34px;font-size:11px}}.craft.tbl .tr{display:flex;align-items:center;gap:4px}.craft.tbl .tr .fld{flex:1 1 0;min-width:0}.craft.tbl .plus{flex:0 0 auto;min-width:34px;height:28px;margin:0;padding:0;font-size:20px;line-height:1;font-weight:600;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer;touch-action:manipulation}.craft.tbl .plus.un{font-size:12px;min-width:40px}.craft.tbl .tc .fld{display:block;cursor:pointer;min-height:1.6em;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:var(--card);overflow:hidden;white-space:nowrap}.craft.tbl .tc .fld.nv{color:var(--mut)}.craft.tbl .tc .fld.set{color:var(--fg);font-weight:600}.craft.tbl .tc .fld input{padding:0;border:0;background:transparent}
 .craft label{display:block;font-size:11px;color:var(--mut);line-height:1.2}
 .craft input,.craft textarea{width:100%;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--fg);scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}
 .craft textarea{font:16px/1.3 ui-monospace,monospace;text-transform:uppercase;min-height:3.6em;resize:vertical}
@@ -265,16 +265,32 @@ function inpSend(){clearTimeout(inpTimer);inpTimer=null;const o=inpDirty;inpDirt
 function fval(k){return k in inpDirty?inpDirty[k]:((last&&last.fields[k])||"")}
 function fShow(el){if(el.querySelector("input"))return;const v=fval(el.dataset.f);el.textContent="";el.className="fld"+(v?" set":" nv")+(el.dataset.w?" w":"")+(/^d?atis_rwy$/.test(el.dataset.f)&&last&&last.rwy_bad&&last.rwy_bad[el.dataset.f.replace("_rwy","")]?" rb":"");
   el.textContent=el.dataset.pf?el.dataset.pf+" "+(v||"---"):v||(el.dataset.r&&!el.dataset.pre?el.dataset.r:(el.dataset.pre?el.dataset.pre+" ":"")+"---")}
+// ATIS-PURE-BEGIN (regole pure: provate anche con node nei test)
+const ATIS_FULL={letter:/^[A-Z]$/,rwy:/(^|\/)\d{2}[LRC]$/,wind:/^(\d{3}|VRB)\/\d{2}$/,qnh:/^(\d{4}|\d{2}\.\d{2})$/};  // valore completo: passa al campo successivo (QNH: ultimo, chiude)
+// sanifica un campo ATIS mentre si scrive; typed: digitazione vera (non incolla); inMode: QNH in inHg (3 cifre -> "29.9")
+function atisClean(sf,v,typed,inMode){let u;
+  if(sf==="letter")return v.toUpperCase().replace(/[^A-Z]/g,"").slice(0,1);
+  if(sf==="rwy")return v.toUpperCase().replace(/[\s,]+/g,"/").replace(/[^0-9LRC\/]/g,"").replace(/\/+/g,"/").replace(/^\//,"").slice(0,12);
+  if(sf==="wind"){u=v.toUpperCase().replace(/[^0-9\/GVRBKT]/g,"").replace(/\/+/g,"/").slice(0,12);u=u.replace(/^(\d{3}|VRB)(\d)/,"$1/$2");  // direzione + cifre senza "/": lo rimette
+    if(typed&&/^(\d{3}|VRB)$/.test(u))u+="/";return u}  // direzione completa digitata: "/" automatico (non su incolla)
+  u=v.replace(/[^\d.]/g,"").replace(/^([^.]*\.?)(.*)$/,(m,a,b)=>a+b.replace(/\./g,""));
+  if(inMode&&/^\d{3,}$/.test(u))u=u.slice(0,2)+"."+u.slice(2);
+  return u.slice(0,5)}
+// QNH hPa <-> inHg: esatta, 33.8639 hPa per inHg in entrambi i versi (1013 hPa -> 29.91 inHg, come state.atis_qnh_hpa); valore non numerico: invariato
+function qnhConvert(v){const x=parseFloat(v);if(!isFinite(x))return v;return String(v).includes(".")?String(Math.round(x*33.8639)):(x/33.8639).toFixed(2)}
+const qu={};function qUnit(k,v){return v?(v.includes(".")?"In":"hPa"):(qu[k]||"hPa")}  // unita' del QNH: dal valore ("." = In); campo vuoto: ultima scelta (in memoria)
+function qnhInMode(k,v){return v.includes(".")||qu[k]==="In"}  // in digitazione: inHg se c'e' il punto o se l'unita' scelta e' In (campo vuoto: il "." scatta dopo 2 cifre)
+function qnhFull(v){return /^\d{4}$/.test(v)||/^\d{2}\.\d{2}$/.test(v)}  // solo valori completi si convertono
+// ATIS-PURE-END
 function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f,i=document.createElement("input");i.value=fval(k);i.dataset.f=k;
-  const sf=k.replace(/^d?atis_/,""),isA=sf!==k,txt=["runway","flap","taxiway"].includes(k)||isA&&["letter","rwy","wind"].includes(sf);i.inputMode=txt?"text":k==="zfwcg"?"decimal":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
+  const sf=k.replace(/^d?atis_/,""),isA=sf!==k,txt=["runway","flap","taxiway"].includes(k)||isA&&["letter","rwy","wind"].includes(sf);i.inputMode=txt?"text":k==="zfwcg"||isA&&sf==="qnh"?"decimal":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
   let done=false;const end=()=>{if(done)return;done=true;if(isA&&sf==="rwy"&&/\/$/.test(i.value)){i.value=i.value.replace(/\/+$/,"");inpDirty[k]=i.value}inpSend();i.remove();fShow(el)};
-  const nextF=()=>{const tc=el.parentElement.classList.contains("tc");if(tc){const c=el.parentElement.nextElementSibling;return c&&c.querySelector(".fld")}let n=el.nextElementSibling;while(n&&!n.dataset.f)n=n.nextElementSibling;return n};  // tabella ATIS: il campo successivo e' nella cella accanto
+  const nextF=()=>{const tc=el.closest(".tc");if(tc){const c=tc.nextElementSibling;return c&&c.querySelector(".fld")}let n=el.nextElementSibling;while(n&&!n.dataset.f)n=n.nextElementSibling;return n};  // tabella ATIS: il campo successivo e' nella cella accanto
   const adv=()=>{const n=nextF();end();if(n)fStart(n)};
-  i.oninput=ev=>{if(k==="runway")i.value=i.value.toUpperCase();if(isA&&sf==="letter")i.value=i.value.toUpperCase().replace(/[^A-Z]/g,"").slice(0,1);if(isA&&sf==="rwy")i.value=i.value.toUpperCase().replace(/[\s,]+/g,"/").replace(/[^0-9LRC\/]/g,"").replace(/\/+/g,"/").replace(/^\//,"").slice(0,12);if(isA&&sf==="wind"){i.value=i.value.toUpperCase().replace(/[^0-9\/GVRBKT]/g,"").replace(/\/+/g,"/").slice(0,12);if(/^(\d{3}|VRB)$/.test(i.value)&&ev&&/^insert/.test(ev.inputType||""))i.value+="/"}  // direzione completa: mette da solo "/"
-    if(isA&&sf==="qnh")i.value=i.value.replace(/[^\d.]/g,"").replace(/^([^.]*\.?)(.*)$/,(m,a,b)=>a+b.replace(/\./g,"")).slice(0,5);if(k==="taxiway")i.value=i.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);
+  i.oninput=ev=>{if(k==="runway")i.value=i.value.toUpperCase();if(isA){const nv=atisClean(sf,i.value,/^(insertText|insertCompositionText)$/.test(ev&&ev.inputType||""),sf==="qnh"&&qnhInMode(k,i.value));if(nv!==i.value){i.value=nv;if(sf==="wind"){const n=nv.length;try{i.setSelectionRange(n,n)}catch(e){}}}}  /* riassegna (e cursore in fondo dopo il "/" rimesso) solo se il valore pulito differisce: niente salti a meta' stringa ne' interferenza con l'IME */if(k==="taxiway")i.value=i.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);
     if(k==="fob"||k==="zfw")i.value=i.value.replace(/\D/g,"");if(k==="zfwcg")i.value=i.value.replace(/[^\d.]/g,"").replace(/^(\d*\.?\d?).*$/,"$1");  // fob/zfw cifre, zfwcg un decimale (28.4): nessun avanzamento automatico, solo Invio o tocco fuori
     inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400);
-    const full={v1:/^\d{3}$/,vr:/^\d{3}$/,v2:/^\d{3}$/,runway:/^\d{2}[LRC]$/,ta:/^\d{4}$/,thr_red_agl:/^\d{4}$/,accel_agl:/^\d{4}$/,flap:/^[1-3]$/}[k]||(isA?{letter:/^[A-Z]$/,rwy:/(^|\/)\d{2}[LRC]$/,wind:/^(\d{3}|VRB)\/\d{2}$/,qnh:/^(\d{4}|\d{2}\.\d{2})$/}[sf]:null);  // ATIS: lettera, prima pista (35L), vento (270/12), QNH (1013 o 29.92); l'ultimo campo chiude (blur)
+    const full={v1:/^\d{3}$/,vr:/^\d{3}$/,v2:/^\d{3}$/,runway:/^\d{2}[LRC]$/,ta:/^\d{4}$/,thr_red_agl:/^\d{4}$/,accel_agl:/^\d{4}$/,flap:/^[1-3]$/}[k]||(isA?ATIS_FULL[sf]:null);  // ATIS: regole in ATIS_FULL (lettera, pista, vento, QNH); l'ultimo campo chiude (blur)
     if(full&&full.test(i.value))adv()};  // valore completo: passa al campo successivo, o chiude la modifica se è l'ultimo
   i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();adv()}};i.onblur=end;
   el.textContent="";i.placeholder=el.dataset.l;el.append(i);i.focus({preventScroll:true});
@@ -287,14 +303,20 @@ const TL={letter:"INFO",rwy:"RWY",wind:"WIND",qnh:"QNH"};
 function addRwy(c){let i=c.querySelector("input");if(!i){fStart(c);i=c.querySelector("input")}if(!i)return;const k=c.dataset.f,v=i.value;
   if(v&&!v.endsWith("/")&&v.length+4<=12){i.value=v+"/";inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400)}
   i.focus({preventScroll:true});const n=i.value.length;try{i.setSelectionRange(n,n)}catch(e){}}
+function toggleQnh(c){const k=c.dataset.f,i=c.querySelector("input"),v=(i?i.value:fval(k)).trim(),to=qUnit(k,v)==="In"?"hPa":"In";qu[k]=to;
+  if(qnhFull(v)){const nv=qnhConvert(v);inpDirty[k]=nv;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400);if(i)i.value=nv;else fShow(c)}
+  qnhUnits();if(i){i.focus({preventScroll:true});const n=i.value.length;try{i.setSelectionRange(n,n)}catch(e){}}}
+function qnhUnits(){document.querySelectorAll("#clbody .un").forEach(b=>{b.textContent=qUnit(b.dataset.f,fval(b.dataset.f).trim())})}
 function tableNode(it){const el=document.createElement("div");el.className="a lg craft tbl";const h=document.createElement("div");h.className="ch";h.textContent=(/^datis_/.test(it.inputs[0].k)?"DEP":"ARR")+" ATIS";el.appendChild(h);
   const g=document.createElement("div");g.className="cf";
   for(const f of it.inputs){const d=document.createElement("div");d.className="tc";const lb=document.createElement("label");lb.textContent=TL[f.k.replace(/^d?atis_/,"")]||f.label;
     const c=document.createElement("span");c.dataset.f=f.k;c.dataset.l=f.label;c.title=f.label;c.onclick=()=>fStart(c);fShow(c);
-    const tl=document.createElement("div");tl.className="tl";tl.appendChild(lb);
+    const tr=document.createElement("div");tr.className="tr";tr.appendChild(c);  // riga del valore: campo flessibile + controllo piccolo a destra (le etichette restano tutte alla stessa altezza)
     if(/_rwy$/.test(f.k)){const b=document.createElement("button");b.type="button";b.className="plus";b.textContent="+";b.title="Add runway";b.setAttribute("aria-label","Add runway");
-      b.onpointerdown=ev=>{ev.preventDefault();addRwy(c)};b.onclick=ev=>ev.preventDefault();tl.appendChild(b)}  // pointerdown: il campo non perde il focus (niente chiusura e invio di dati sporchi)
-    d.appendChild(tl);d.appendChild(c);g.appendChild(d)}
+      b.onpointerdown=ev=>{ev.preventDefault();addRwy(c)};b.onclick=ev=>ev.preventDefault();tr.appendChild(b)}  // pointerdown: il campo non perde il focus (niente chiusura e invio di dati sporchi)
+    if(/_qnh$/.test(f.k)){const u=document.createElement("button");u.type="button";u.className="plus un";u.dataset.f=f.k;u.title="hPa / inHg";u.setAttribute("aria-label","QNH unit");u.textContent=qUnit(f.k,fval(f.k).trim());
+      u.onpointerdown=ev=>{ev.preventDefault();toggleQnh(c)};u.onclick=ev=>ev.preventDefault();tr.appendChild(u)}  // "hPa"/"In": converte il valore e cambia unita' senza chiudere il campo
+    d.appendChild(lb);d.appendChild(tr);g.appendChild(d)}
   el.appendChild(g);return el}
 function inputsNode(it){const el=document.createElement("div");el.className="a inpr";const one=it.inputs.length===1;
   it.inputs.forEach((f,n)=>{if(n){const sp=document.createElement("span");sp.className="sep";sp.textContent=" / ";el.appendChild(sp)}
@@ -318,7 +340,7 @@ function wxFill(s){document.querySelectorAll("#clbody .wh").forEach(e=>{const w=
   if(!w){e.textContent="METAR not available";return}
   const a=document.createElement("div");a.textContent=w.icao+" METAR"+(w.line?": "+w.line:"");e.appendChild(a);
   if(w.raw){const r=document.createElement("div");r.className="wr";r.textContent=w.raw;e.appendChild(r)}})}
-function syncInputs(s){wxFill(s);document.querySelectorAll("#clbody .fld").forEach(fShow);document.querySelectorAll("#clbody .ah").forEach(e=>{const p=e.dataset.p,parts=atisLine(e.dataset.h.split(","),p),t=parts.length,wn=(s.atis_warn||{})[p]&&e.dataset.h.includes("qnh")?s.atis_warn[p]:"";e.textContent="";e.hidden=!t;
+function syncInputs(s){wxFill(s);qnhUnits();document.querySelectorAll("#clbody .fld").forEach(fShow);document.querySelectorAll("#clbody .ah").forEach(e=>{const p=e.dataset.p,parts=atisLine(e.dataset.h.split(","),p),t=parts.length,wn=(s.atis_warn||{})[p]&&e.dataset.h.includes("qnh")?s.atis_warn[p]:"";e.textContent="";e.hidden=!t;
     if(t){e.append("ATIS: ");parts.forEach((x,n)=>{if(n)e.append(" \u00b7 ");const sp=document.createElement("span");sp.textContent=x;if(x.startsWith("RWY ")&&(s.rwy_bad||{})[p])sp.className="rb";e.appendChild(sp)})}  // pista diversa dal piano: RWY in rosso
     if(t&&wn){const a=document.createElement("span");a.className="aw";a.textContent="\u26a0 QNH differs: "+wn;e.appendChild(a)}})}  // ATIS/METAR oltre 3 hPa: avviso giallo, la voce non diventa rossa
 function clGo(body){api("/api/checklist-phase",body).then(apply).catch(()=>{})}

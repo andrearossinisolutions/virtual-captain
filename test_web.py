@@ -139,20 +139,79 @@ def test_departure_atis_state_and_snapshot():
 def test_atis_table_layout_and_advance_rules():
     p = web.PAGE
     for m in ("function tableNode", 'el.className="a lg craft tbl"', 'className="tc"', 'const TL={letter:"INFO",rwy:"RWY",wind:"WIND",qnh:"QNH"}', '"DEP":"ARR")+" ATIS"',
-              "c.onclick=()=>fStart(c);fShow(c)", ".craft.tbl .cf{", 'el.parentElement.classList.contains("tc")', "i.layout,i.atis_hint"):
+              "c.onclick=()=>fStart(c);fShow(c)", ".craft.tbl .cf{", 'el.closest(".tc")', "i.layout,i.atis_hint"):
         assert m in p, m
     assert "innerHTML" not in p[p.index("function tableNode"):p.index("function inputsNode")]  # solo textContent
     # avanzamento: INFO una lettera, RWY terzo carattere (35L), WIND "/" automatico dopo la direzione poi 2 cifre, QNH 4 cifre o 29.92 (ultimo campo: chiude)
-    assert r'/^(\d{3}|VRB)$/.test(i.value)&&ev&&/^insert/.test(ev.inputType||"")' in p and 'i.value+="/"' in p and "i.oninput=ev=>" in p
-    assert r'.replace(/\/+/g,"/").slice(0,12);if(/^(\d{3}|VRB)$/' in p  # "/" ripetuti compressi nel vento
+    assert r'/^(insertText|insertCompositionText)$/.test(ev&&ev.inputType||"")' in p and "i.oninput=ev=>" in p and "if(typed&&" in p and "insertFromPaste" not in p  # "/" automatico solo in digitazione, non su incolla
+    assert r'u=u.replace(/^(\d{3}|VRB)(\d)/,"$1/$2")' in p and r'.replace(/\/+/g,"/").slice(0,12);u=u.replace' in p  # "/" ripetuti compressi; "/" reinserito se manca
     assert "setSelectionRange(n,n)" in p  # piste e vento: cursore in fondo per aggiungere "/35R" o "G25"
+    # "+" e hPa/In sulla stessa riga dell'input (flex), a destra del valore: etichette e campi allineati tra le celle
+    for m in (".craft.tbl .tr{display:flex;align-items:center", ".craft.tbl .tr .fld{flex:1 1 0;min-width:0}", 'tr.className="tr"', "tr.appendChild(b)", "tr.appendChild(u)", "d.appendChild(lb);d.appendChild(tr)"):
+        assert m in p, m
+    assert ".tl{" not in p and "tl.appendChild" not in p  # niente piu' pulsante nella riga dell'etichetta
     # pulsante "+" accanto a RWY (partenza e arrivo: la card e' la stessa funzione): aggiunge "/" in coda, max 12 caratteri, senza far perdere il focus
     for m in ("function addRwy", 'if(/_rwy$/.test(f.k))', 'b.className="plus"', 'b.textContent="+"', 'b.onpointerdown=ev=>{ev.preventDefault();addRwy(c)}', "v.length+4<=12",
-              'i.value=v+"/"', '!v.endsWith("/")', ".craft.tbl .plus{min-width:34px;height:28px", 'e.target.closest(".plus")&&a.closest(".tc")&&a.closest(".tc")===e.target.closest(".tc")'):
+              'i.value=v+"/"', '!v.endsWith("/")', ".craft.tbl .plus{flex:0 0 auto;min-width:34px;height:28px", 'e.target.closest(".plus")&&a.closest(".tc")&&a.closest(".tc")===e.target.closest(".tc")'):
         assert m in p, m
     assert "innerHTML" not in p[p.index("function addRwy"):p.index("function inputsNode")] and p.count('b.className="plus"') == 1
     full = p[p.index("const full="):p.index("[k]||(isA")]
     assert "taxiway" not in full and "atis" not in full
+
+
+def test_atis_qnh_unit_button_markup():
+    p = web.PAGE
+    for m in ("function toggleQnh", "function qnhUnits", "function qnhConvert", "const qu={}", 'if(/_qnh$/.test(f.k))', 'u.className="plus un"', 'u.onpointerdown=ev=>{ev.preventDefault();toggleQnh(c)}',
+              'v.includes(".")?"In":"hPa"', 'k==="zfwcg"||isA&&sf==="qnh"?"decimal":"numeric"', ".craft.tbl .plus.un{", "qnhUnits();", 'sf==="qnh"&&qnhInMode(k,i.value)'):
+        assert m in p, m
+    assert "innerHTML" not in p[p.index("function toggleQnh"):p.index("function inputsNode")]
+    assert "innerHTML" not in p[p.index("// ATIS-PURE-BEGIN"):p.index("// ATIS-PURE-END")]
+    import re
+    assert re.findall(r'f\.k\)\)\{const u=', p) == ["f.k)){const u="]  # un solo pulsante unita', per qnh (partenza e arrivo: la card e' la stessa)
+    import checklist as C
+    qnh = [f["k"] for ph in C.load().phases for sp in ph["subphases"] for i in sp["items"] for f in i.get("inputs", []) if f["k"].endswith("qnh")]
+    assert qnh == ["datis_qnh", "atis_qnh"]  # tutti i campi QNH inseribili sono nella card (il pulsante vale per entrambi)
+
+
+def test_atis_rules_with_node():
+    """Prova comportamentale delle regole pure (ATIS_FULL, atisClean, qnhConvert) con node; senza node il test si salta."""
+    import json
+    import shutil
+    import subprocess
+    node = shutil.which("node") or next(iter(sorted(pathlib.Path.home().glob(".nvm/versions/node/*/bin/node"))), None)
+    if not node:
+        print("skip: node non disponibile")
+        return
+    p = web.PAGE
+    code = p[p.index("// ATIS-PURE-BEGIN"):p.index("// ATIS-PURE-END")] + """
+const R=[];const full=(sf,v)=>ATIS_FULL[sf].test(v);
+R.push(["letter", atisClean("letter","k",true,false), atisClean("letter","5",true,false), full("letter","K")]);
+R.push(["rwy", atisClean("rwy","35l, 35r",true,false), atisClean("rwy","/35l//",true,false), full("rwy","35L"), full("rwy","35L/"), full("rwy","35L/35R"), full("rwy","35"), atisClean("rwy","12345678901234",true,false).length]);
+R.push(["wind", atisClean("wind","270",true,false), atisClean("wind","270",false,false), atisClean("wind","VRB",true,false), atisClean("wind","27012",true,false),
+  atisClean("wind","270/1",true,false), atisClean("wind","VRB05",true,false), atisClean("wind","270/12g25kt",true,false), atisClean("wind","270//12",true,false), atisClean("wind","2701",true,false), atisClean("wind","VRB0",true,false), atisClean("wind","2701",false,false)]);
+R.push(["wind2", full("wind",atisClean("wind","270/12",true,false)), full("wind",atisClean("wind","2701",true,false))]);
+R.push(["windfull", full("wind","270/12"), full("wind","VRB/05"), full("wind","270/1"), full("wind","270/12G25")]);
+R.push(["qnh", atisClean("qnh","1013",true,false), atisClean("qnh","2992",true,true), atisClean("qnh","299",true,true), atisClean("qnh","29.92",true,false), atisClean("qnh","10.1.3",true,false), atisClean("qnh","1013.25",true,false)]);
+R.push(["qnhfull", full("qnh","1013"), full("qnh","29.92"), full("qnh","29.9"), full("qnh","101")]);
+R.push(["conv", qnhConvert("1013"), qnhConvert("29.92"), qnhConvert("1009"), qnhConvert("30.00"), qnhConvert("28.10"), qnhConvert("x")]);
+qu.q="In";let ty="";for(const ch of "2992"){ty=atisClean("qnh",ty+ch,true,qnhInMode("q",ty+ch))}
+const m1=ty;qu.q="hPa";let th="";for(const ch of "1013"){th=atisClean("qnh",th+ch,true,qnhInMode("q",th+ch))}
+R.push(["typing", m1, th, qnhFull("1013"), qnhFull("29.92"), qnhFull("29.9"), qnhFull("101"), qnhFull("29.")]);
+R.push(["rt", qnhConvert("1013"), qnhConvert(qnhConvert("1013")), qnhConvert(qnhConvert("29.91"))]);
+console.log(JSON.stringify(R));"""
+    out = json.loads(subprocess.run([node, "-e", code], capture_output=True, text=True, timeout=20, check=True).stdout)
+    r = {row[0]: row[1:] for row in out}
+    assert r["letter"] == ["K", "", True]
+    assert r["rwy"] == ["35L/35R", "35L/", True, False, True, False, 12]  # "35L/" non e' completa; "35L/35R" si': avanza alla terza cifra della nuova pista
+    assert r["wind"] == ["270/", "270", "VRB/", "270/12", "270/1", "VRB/05", "270/12G25KT", "270/12", "270/1", "VRB/0", "270/1"]  # cancellato il "/": la cifra dopo "270" rimette prima il "/"
+    assert r["wind2"] == [True, False]  # 270/12 avanza; 270/1 ancora no  # "/" solo digitando; reinserito se manca (anche da incolla di 27012)
+    assert r["windfull"] == [True, True, False, False]  # "270/12" avanza subito; la raffica si aggiunge tornando nel campo
+    assert r["qnh"] == ["1013", "29.92", "29.9", "29.92", "10.13", "1013."] and r["qnhfull"] == [True, True, False, False]
+    assert r["conv"] == ["29.91", "1013", "29.80", "1016", "952", "x"]  # 1013 hPa = 29.914 inHg -> 29.91 (33.8639 esatto); 1009 hPa = 29.796 -> 29.80
+    assert r["typing"] == ["29.92", "1013", True, True, False, False, False]  # M1: con unita' In in memoria e campo vuoto, 2,9,9,2 -> "29.92"; in hPa resta 1013; m1: solo valori completi
+    assert r["rt"] == ["29.91", "1013", "29.91"] and abs(int(r["rt"][1]) - 1013) <= 1  # round-trip hPa->inHg->hPa entro 1 hPa
+    pj = web.PAGE
+    assert "if(nv!==i.value){i.value=nv" in pj and "if(qnhFull(v)){const nv=qnhConvert(v)" in pj and "qnhInMode(k,i.value)" in pj  # m2, m1, M1: cablaggio in oninput/toggleQnh
 
 
 def test_craft_order_and_columns():
@@ -531,7 +590,7 @@ def test_inputs_markup():
     # risposta lunga (oltre 40 caratteri o con "Eg.") sotto il titolo a tutta larghezza, la breve resta a destra
     assert 'function longAns(t){return t.length>40||t.includes("Eg.")}' in p and '(longAns(av)?" lg":"")' in p
     assert ".cl .cli .a.lg{grid-column:2/4;text-align:left;max-width:none}" in p and ".cl .cli .a{grid-column:3;text-align:right" in p
-    for m in (r'letter:/^[A-Z]$/,rwy:/(^|\/)\d{2}[LRC]$/,wind:/^(\d{3}|VRB)\/\d{2}$/,qnh:/^(\d{4}|\d{2}\.\d{2})$/', 'isA&&sf==="rwy"', 'isA&&sf==="wind"', '/[^0-9LRC\\/]/g', '/[^0-9\\/GVRBKT]/g',
+    for m in (r'letter:/^[A-Z]$/,rwy:/(^|\/)\d{2}[LRC]$/,wind:/^(\d{3}|VRB)\/\d{2}$/,qnh:/^(\d{4}|\d{2}\.\d{2})$/', 'function atisClean', 'ATIS_FULL[sf]', '/[^0-9LRC\\/]/g', '/[^0-9\\/GVRBKT]/g',
               'add("ARR ATIS",f.atis_letter)', 'f.datis_letter||"")+(f.datis_letter&&dr',  'rb.datis);', 'rb.atis);', ".chip.bad{", ".rb{color:var(--bad)!important}", 'x.startsWith("RWY ")&&(s.rwy_bad||{})[p]', 'last.rwy_bad[el.dataset.f.replace("_rwy","")]','for(const [hk,pre] of [["datis_hint","datis"],["atis_hint","atis"]])',
               'h.dataset.w=it.wx_hint', 's["wx_"+e.dataset.w]', 'a.textContent="\\u26a0 QNH differs: "+wn', "s.atis_warn"):
         assert m in p, m
@@ -866,6 +925,8 @@ if __name__ == "__main__":
     test_rwy_conflict_red()
     test_atis_table_layout_and_advance_rules()
     test_craft_order_and_columns()
+    test_atis_qnh_unit_button_markup()
+    test_atis_rules_with_node()
     test_wx_dest_snapshot_and_markup()
     test_to_briefing_fuel_and_zfw()
     test_fob_zfw_state_and_plan()
