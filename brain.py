@@ -122,16 +122,19 @@ class Brain:
         return out
 
 
-def readout(fields: dict, plan: dict, mode: str) -> str:
-    """Frase di apertura: ciò che il capitano legge quando premi "Briefing complete" (solo ciò che c'è)."""
+def _readout(fields: dict, plan: dict, mode: str, spoken: bool) -> str:
+    """Frase di apertura. spoken=True: spelling per la voce; False: testo da mostrare (ICAO e pista grezzi, procedure senza spazi)."""
+    icao_t = spell_icao if spoken else (lambda c: str(c).strip().upper())
+    rwy_t = spell_runway if spoken else str
+    proc_t = spell_proc if spoken else (lambda p: str(p).strip().upper().replace(" ", ""))
     parts = ["Briefing received."]
     icao, rwy = parse_dep(fields.get("origin"))
     rwy = rwy or parse_dep("AAAA/" + str(fields.get("runway") or ""))[1]
-    dep = " ".join(x for x in (f"Departure {spell_icao(icao)}" if icao else "",
-                               f"{'runway' if icao else 'Runway'} {spell_runway(rwy)}" if rwy else "") if x)
+    dep = " ".join(x for x in (f"Departure {icao_t(icao)}" if icao else "",
+                               f"{'runway' if icao else 'Runway'} {rwy_t(rwy)}" if rwy else "") if x)
     sid = (plan or {}).get("sid")
     if dep or sid:
-        parts.append((dep + (" " if dep and sid else "") + (f"via {spell_proc(sid)}" if sid else "")).strip() + ".")
+        parts.append((dep + (" " if dep and sid else "") + (f"via {proc_t(sid)}" if sid else "")).strip() + ".")
     if fields.get("ta"):
         parts.append(f"Transition altitude {fields['ta']} feet.")
     speeds = [f"{lbl} {fields[k]}" for k, lbl in (("v1", "V1"), ("vr", "rotation"), ("v2", "V2")) if fields.get(k)]
@@ -139,8 +142,18 @@ def readout(fields: dict, plan: dict, mode: str) -> str:
         parts.append(", ".join(speeds) + ".")
     star = (plan or {}).get("star")
     if fields.get("destination") or star:
-        arr = f"Arrival {spell_icao(fields['destination'])}" if fields.get("destination") else ""
-        parts.append((arr + (" " if arr and star else "") + (f"via {spell_proc(star)}" if star else "")).strip() + ".")
+        arr = f"Arrival {icao_t(fields['destination'])}" if fields.get("destination") else ""
+        parts.append((arr + (" " if arr and star else "") + (f"via {proc_t(star)}" if star else "")).strip() + ".")
     if mode == "training" and sid:
         parts.append("Check the SID in the FMC before the clearance call.")
     return " ".join(parts)
+
+
+def readout(fields: dict, plan: dict, mode: str) -> str:
+    """Frase di apertura: ciò che il capitano legge quando premi "Briefing complete" (solo ciò che c'è)."""
+    return _readout(fields, plan, mode, True)
+
+
+def readout_pair(fields: dict, plan: dict, mode: str) -> tuple:
+    """(testo mostrato, testo parlato): la voce resta quella di readout(), la pagina mostra ICAO e pista grezzi."""
+    return _readout(fields, plan, mode, False), _readout(fields, plan, mode, True)

@@ -28,12 +28,22 @@ def test_api_flow():
         assert s["fields"]["ta"] == "6000" and s["mode"] == "training"
         b = st.briefing()
         assert (b.ta, b.thr_red_agl, b.accel_agl, b.mode) == (6000, 800, 1000, "training")
-        assert s["monitor"] == []  # vuoto in briefing
+        assert s["monitor"] == [] and s["flight"] == [] and s["pills"] == {}  # vuoto in briefing
         assert call(base, "/api/phase", {"phase": "flying"})["phase"] == "flying"
         st.set_monitor({"apu_master": 1, "landing_l": 2, "pack1": None})
         mon = dict(call(base, "/api/state")["monitor"])
         assert mon["APU / Air"][0] == ["APU master", "ON", "Prep: ON · After start: OFF", "1"]
         assert [r for r in mon["APU / Air"] if r[0] == "Pack 1"][0][1] == "n/d"
+        assert dict(call(base, "/api/state"))["flight"] != [] and call(base, "/api/state")["pills"]["gs"] == "\u2014"
+        st.set_core({"alt": 3000, "vs": 500}); st.set_monitor({"gs": 120})
+        s2 = call(base, "/api/state")
+        assert s2["pills"] == {"gs": "120 kt", "alt": "3000 ft", "vs": "+500 fpm"} and ["Ground speed", "120 kt"] in s2["flight"]
+        page = call(base, "/")
+        assert "Flight data" in page and 'add("MODE"' not in page and "function fdata" in page and "innerHTML" not in page[page.index("function fdata"):page.index("function fpills")]
+        assert s2["pill_defs"] == [["gs", "GS"], ["alt", "ALT"], ["vs", "VS"]] and list(s2["pills"]) == ["gs", "alt", "vs"]
+        assert 'id="fpills"' in page and '"pill-"+key' in page and 'e.append(" ")' not in page
+        assert 'if(view==="flight"&&shownView!=="flight")window.scrollTo(0,0);shownView=view' in page  # scroll in alto solo al cambio vista
+        assert 'id="phase"' not in page and "Reading the simulator" not in page and "reading the simulator" not in page
         assert "Cockpit state" in call(base, "/") and "textContent" in call(base, "/")
         # si ricordano solo ID, modalità e accelerazione
         saved = json.loads(cfg.read_text())
@@ -326,6 +336,7 @@ def test_inputs_markup():
     assert "i.inputs" in key and "fields" not in key  # i valori scritti non fanno ricostruire la lista
     assert '"decimal"' in p and 'replace(/\\D/g,"")' in p and "fob:" not in p[p.index("const full="):p.index("[k];")]  # fob/zfw/zfwcg: nessun avanzamento automatico
     chips = p[p.index("function chips"):p.index("function cockpit")]
+    assert 'add("DEP",f.origin);add("ARR",f.destination)' in chips and "JSON.stringify(f)" in chips  # ARR come DEP, in cache
     assert '"TA"' not in chips and '"V1"' not in chips and '"FLAP"' not in chips and '"RWY"' not in chips
 
 

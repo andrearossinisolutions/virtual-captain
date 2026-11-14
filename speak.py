@@ -45,11 +45,11 @@ def _worker():
     except Exception:  # noqa: BLE001
         pass
     while True:
-        text, on_start = _q.get()
+        text, on_start, shown = _q.get()
         try:
             print(f"[CAPITANO] {text}", flush=True)
             if on_start:
-                on_start(text)  # la pagina mostra la frase quando inizia a essere letta, non quando è in coda
+                on_start(shown or text)  # la pagina mostra la frase quando inizia a essere letta, non quando è in coda
             if not pyttsx3:
                 time.sleep(max(1.0, len(text) * 0.06))  # senza voce: simula il tempo di lettura
             else:
@@ -68,9 +68,9 @@ def _worker():
 threading.Thread(target=_worker, daemon=True).start()
 
 
-def say(text: str, on_start=None):
-    """Mette in coda la frase (non blocca il ciclo di lettura). on_start(text) parte quando inizia a essere letta."""
-    _q.put((text, on_start))
+def say(text: str, on_start=None, shown: str | None = None):
+    """Mette in coda la frase (non blocca il ciclo di lettura). on_start(shown or text) parte quando inizia a essere letta; la voce dice sempre text."""
+    _q.put((text, on_start, shown))
 
 
 def wait():

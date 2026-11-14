@@ -97,6 +97,9 @@ class State:
         self.cl_trust_links = False  # SOLO --test-links: valuta i link come verified:true, senza altri effetti demo
         self.raw: dict = {}  # {chiave: grezzo|None} per mostrare i valori letti in --test-links
         self.labels: dict = {}  # {chiave: etichetta pulita|None} per la checklist (vuoto fuori dal volo)
+        self.core: dict = {}  # ultimo campione del core (alt, ias, vs, ...), per i dati di volo
+        self.flight: list = []  # righe [etichetta, testo] dei dati di volo (vuoto fuori da "flying")
+        self.pills: dict = {}  # GS, quota, VS per l'header
         self.monitor: list = []  # gruppi gia' etichettati: [[gruppo, [[nome, etichetta, atteso, grezzo], ...]], ...]
 
     # -- modifiche dalla pagina --
@@ -190,8 +193,14 @@ class State:
                     self.reset_clearance()  # ritorno in briefing: CRAFT riparte dal piano
                 if phase != "flying":
                     self.monitor = []
+                    self.flight, self.pills = [], {}
                     self.labels = {}
                     self.raw = {}
+
+    def set_core(self, values: dict | None) -> None:
+        """Ultimo campione del core (da chiamare prima di set_monitor)."""
+        with self.lock:
+            self.core = dict(values) if values else {}
 
     def set_monitor(self, raw: dict | None):
         """Riceve i grezzi {chiave: valore|None}, li etichetta e li tiene per la pagina (vuoto in briefing)."""
@@ -203,6 +212,8 @@ class State:
             self.monitor = mon.build(raw) if live else []
             self.labels = mon.clean_labels(raw) if live else {}
             self.raw = dict(raw) if live and raw else {}
+            self.flight = mon.flight_panel(raw, self.core) if live else []
+            self.pills = mon.flight_pills(raw, self.core) if live else {}
 
     # -- calibrazione thrust --
     def set_calib_raw(self, raw: dict | None, now: float | None = None) -> None:
@@ -429,6 +440,7 @@ class State:
                     "now": time.time(), "spoke_n": self.spoke_n,
                     "spoke_ago": None if self.spoke_at is None else max(0.0, time.time() - self.spoke_at),
                     "labels": [[k, l] for k, l in FIELDS], "modes": list(MODES),
+                    "flight": [list(r) for r in self.flight], "pills": dict(self.pills), "pill_defs": mon.active_pill_defs(),
                     "monitor": [[g, [list(r) for r in rows]] for g, rows in self.monitor],
                     "cl_phases": [{"id": p["id"], "name": p["name"]} for p in self.cl.phases
                                   if p["id"] in self.cl_visible()],

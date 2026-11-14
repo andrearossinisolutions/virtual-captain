@@ -9,7 +9,7 @@ import time
 import firewall
 import web
 from aao import AAO
-from brain import Brain, parse_dep, readout
+from brain import Brain, parse_dep, readout_pair
 from speak import say, wait
 from state import State
 from weather import Weather, online_fetch
@@ -42,7 +42,10 @@ def sim_monitor(t, roll):
             "landing_l": 2, "landing_r": 2, "nose": 2 if roll else 0, "strobe": 2, "beacon": 1, "navlogo": 1,
             "rwy_turnoff": 1 if roll else 0, "seatbelt": 1, "flap": 1, "spoilers": 0, "gear": 1.0 if t < 45 else 0.0,
             "engmode": 1, "eng1": 1, "eng2": 1, "parking": None,
-            "baro_std": 0 if t < 20 else 1, "baro_hpa": 1013, "baro_inch": 29.92}
+            "baro_std": 0 if t < 20 else 1, "baro_hpa": 1013, "baro_inch": 29.92,
+            "lat": 45.63 + t * 0.001, "lon": 8.72 + t * 0.001, "gs": t * 20 if roll else 165,
+            "hdg_mag": 168.0, "trk_mag": 170.0, "pitch": 0.0 if roll else -12.0, "bank": 1.5 if t % 4 else -1.5,
+            "n1_1": 88.5, "n1_2": None, "total_weight": 150000, "fuel_weight": 40000, "cfg_lbs": 0, "fuel_total": 18.1}
 
 
 def show_qr(url):
@@ -85,8 +88,8 @@ def main():
     print(f"\nVirtual Captain — apri dal tablet:  {url}\n", flush=True)
     show_qr(url)
 
-    def speak(text):
-        say(text, on_start=st.add_log)  # nel log (e in grande nella pagina) solo quando inizia la lettura
+    def speak(text, shown=None):
+        say(text, on_start=st.add_log, shown=shown)  # nel log (e in grande nella pagina) solo quando inizia la lettura
 
     if arg("--aao"):
         st.update({"aao_url": arg("--aao")})
@@ -115,8 +118,8 @@ def main():
                 brain, src, clock = Brain(b), (simulated() if sim else None), 0.0
                 last, sim_done = None, False
                 with st.lock:
-                    text = readout(dict(st.fields), dict(st.plan), st.mode)
-                speak(text)
+                    shown, text = readout_pair(dict(st.fields), dict(st.plan), st.mode)
+                speak(text, shown)
             if aao.base != st.aao_url:  # indirizzo cambiato dalla pagina
                 aao = AAO(st.aao_url)
                 print(f"AAO: {aao.base}", flush=True)
@@ -128,6 +131,7 @@ def main():
                         speak(phrase)
                     if finished:  # volo simulato finito: resta in "flying" con l'ultimo campione fermo
                         if sample:
+                            st.set_core(sample[0])
                             st.set_monitor(sample[1])
                         time.sleep(0.4)
                         continue
@@ -141,6 +145,7 @@ def main():
                 print("AAO not responding:", e)
                 time.sleep(2)
                 continue
+            st.set_core(s)
             st.set_monitor(mon)
             clock = clock + 1 if src else time.time()
             for phrase in brain.update(s, clock):

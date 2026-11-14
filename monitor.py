@@ -9,6 +9,7 @@ import math
 from dataclasses import dataclass, field
 
 NA = "n/d"
+FLIGHT_GROUP = "Flight data"  # voci cinematiche: solo nella card Flight data (restano nella richiesta AAO)
 
 MAPS = {
     "onoff": {0: "OFF", 1: "ON"},
@@ -146,6 +147,16 @@ ITEMS: list[Item] = [
     # Virtuali (nessuna sorgente): detent calcolato dalla calibrazione; None se non calibrato o dato assente
     Item("thr_det_l", "Thrust", "Thrust lever L detent", "detent"),
     Item("thr_det_r", "Thrust", "Thrust lever R detent", "detent"),
+    # Dati di volo correnti (sola lettura, solo standard: nessuna L-var). Segni MSFS: pitch + = muso giu', bank + = sinistra.
+    Item("lat", "Flight data", "Latitude", "numeric", {}, "(A:PLANE LATITUDE, Degrees)"),
+    Item("lon", "Flight data", "Longitude", "numeric", {}, "(A:PLANE LONGITUDE, Degrees)"),
+    Item("gs", "Flight data", "Ground speed (kt)", "numeric", {}, "(A:GROUND VELOCITY, Knots)"),
+    Item("hdg_mag", "Flight data", "Heading magnetic", "numeric", {}, "(A:PLANE HEADING DEGREES MAGNETIC, Degrees)"),
+    Item("trk_mag", "Flight data", "Track magnetic", "numeric", {}, "(A:GPS GROUND MAGNETIC TRACK, Degrees)"),
+    Item("pitch", "Flight data", "Pitch (MSFS sign)", "numeric", {}, "(A:PLANE PITCH DEGREES, Degrees)"),
+    Item("bank", "Flight data", "Bank (MSFS sign)", "numeric", {}, "(A:PLANE BANK DEGREES, Degrees)"),
+    Item("n1_1", "Engines", "N1 engine 1 (%)", "numeric", {}, "(A:TURB ENG N1:1, Percent)"),
+    Item("n1_2", "Engines", "N1 engine 2 (%)", "numeric", {}, "(A:TURB ENG N1:2, Percent)"),
 ]
 
 
@@ -227,6 +238,92 @@ def build(monitor: dict) -> list:
     """Dal dizionario {chiave: grezzo|None} ai gruppi [[gruppo, [[nome, etichetta, atteso, grezzo], ...]], ...]."""
     groups: dict = {}
     for it in ITEMS:
+        if it.group == FLIGHT_GROUP:
+            continue  # mostrato nella card "Flight data", non in "Cockpit state"
         raw = monitor.get(it.key)
         groups.setdefault(it.group, []).append([it.name, label(it, raw), expected_text(it), raw_text(raw)])
     return [[g, rows] for g, rows in groups.items()]
+
+
+# -- Pannello "Flight data" (puro): righe [etichetta, testo]; dato mancante/non numerico = "—", mai "0" --
+DASH = "\u2014"
+TRACK_MIN_GS = 2.0  # sotto questa velocita' al suolo la rotta GPS non e' significativa
+
+
+def _fmt(raw, spec: str, unit: str = "") -> str:
+    v = to_number(raw)
+    return DASH if v is None else f"{v:{spec}}{unit}"
+
+
+def _signed(v: float, nd: int) -> str:
+    r = round(v, nd)
+    return f"{0.0 if r == 0 else r:+.{nd}f}"
+
+
+def _coord(raw, pos: str, neg: str) -> str:
+    v = to_number(raw)
+    return DASH if v is None else f"{abs(v):.4f}\u00b0 {pos if v >= 0 else neg}"
+
+
+def _deg(raw) -> str:
+    v = to_number(raw)
+    return DASH if v is None else f"{round(v) % 360:03d}\u00b0"
+
+
+def _angle_up(raw, unit: str) -> str:
+    """Pitch/bank: segno invertito rispetto a MSFS (muso su = +, bank destra = +)."""
+    v = to_number(raw)
+    return DASH if v is None else f"{_signed(-v, 1)}{unit}"
+
+
+def _core_line(core: dict) -> str:
+    def num(k, spec, unit):
+        return _fmt(core.get(k), spec, unit)
+    onoff = {0: "OFF", 1: "ON"}
+
+    def flag(k, m):
+        v = to_number(core.get(k))
+        return DASH if v is None or int(v) not in m else m[int(v)]
+    parts = [f"Alt {num('alt', '.0f', ' ft')}", f"IAS {num('ias', '.0f', ' kt')}", f"VS {_vs(core.get('vs'))}",
+             f"AGL {num('agl', '.0f', ' ft')}", f"Ground {flag('on_ground', {0: 'AIR', 1: 'GND'})}",
+             f"Gear {flag('gear', {0: 'UP', 1: 'DOWN'})}", f"Landing {flag('landing', onoff)}",
+             f"Seatbelt {flag('seatbelt', onoff)}"]
+    return " \u00b7 ".join(parts)
+
+
+def _vs(raw) -> str:
+    v = to_number(raw)
+    return DASH if v is None else f"{round(v):+d} fpm"
+
+
+def flight_panel(raw: dict | None, core: dict | None) -> list:
+    """Righe [etichetta, testo] dei dati di volo, con unita'. raw = monitor (grezzi + virtuali), core = campione del comandante."""
+    raw, core = raw or {}, core or {}
+    gs = to_number(raw.get("gs"))
+    track = _deg(raw.get("trk_mag")) if gs is not None and gs >= TRACK_MIN_GS else DASH
+    return [["Position", f"{_coord(raw.get('lat'), 'N', 'S')}  {_coord(raw.get('lon'), 'E', 'W')}"],
+            ["Ground speed", _fmt(raw.get("gs"), ".0f", " kt")],
+            ["Heading (mag)", _deg(raw.get("hdg_mag"))], ["Track (mag)", track],
+            ["Pitch", _angle_up(raw.get("pitch"), "\u00b0")], ["Bank", _angle_up(raw.get("bank"), "\u00b0")],
+            ["Core", _core_line(core)]]
+
+
+# Registro delle pills dell'header: (chiave, etichetta, funzione (raw, core) -> testo). Ordine = ordine di visualizzazione.
+PILLS = [
+    ("gs", "GS", lambda raw, core: _fmt(raw.get("gs"), ".0f", " kt")),
+    ("alt", "ALT", lambda raw, core: _fmt(core.get("alt"), ".0f", " ft")),
+    ("vs", "VS", lambda raw, core: _vs(core.get("vs"))),
+]
+ACTIVE_PILLS = ["gs", "alt", "vs"]  # default fisso (la scelta da parte dell'utente non e' ancora implementata)
+
+
+def active_pill_defs(active: list | None = None) -> list:
+    """[[chiave, etichetta], ...] delle pills attive, nell'ordine del registro."""
+    keys = ACTIVE_PILLS if active is None else active
+    return [[k, lbl] for k, lbl, _ in PILLS if k in keys]
+
+
+def flight_pills(raw: dict | None, core: dict | None) -> dict:
+    """{chiave: testo} per tutte le pills del registro; "\u2014" se manca il dato."""
+    raw, core = raw or {}, core or {}
+    return {k: fn(raw, core) for k, _, fn in PILLS}

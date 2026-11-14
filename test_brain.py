@@ -116,7 +116,36 @@ def test_unknown_data_no_callouts():
     assert only.update(s(vs=2000, agl=1600, alt=1600, gear=0), 5) == ["Acceleration altitude"]  # solo quello noto
 
 
+def test_readout_pair_shown_vs_spoken():
+    from brain import readout, readout_pair
+    f, p = dict(origin="LIMC/17R", destination="EDDF", ta="6000"), dict(sid="SRN1R", star="EMPA5A")
+    shown, spoken = readout_pair(f, p, "normal")
+    assert shown == ("Briefing received. Departure LIMC runway 17R via SRN1R. Transition altitude 6000 feet. "
+                     "Arrival EDDF via EMPA5A.")
+    assert spoken == readout(f, p, "normal") and spoken != shown
+    assert readout_pair(dict(runway="17R"), {}, "normal")[0] == "Briefing received. Runway 17R."
+    assert readout_pair(dict(origin="LIMC"), {}, "normal")[0] == "Briefing received. Departure LIMC."
+    assert readout_pair({}, {}, "normal") == ("Briefing received.", "Briefing received.")
+    sp = dict(origin="LIMC/17R", v1="140", vr="145", v2="150")
+    a, b = readout_pair(sp, {}, "normal")
+    assert a.endswith("V1 140, rotation 145, V2 150.") and b.endswith("V1 140, rotation 145, V2 150.")
+    assert readout_pair(f, dict(sid=" srn 1r "), "training")[0].count("via SRN1R") == 1
+    assert readout_pair(f, p, "training")[0].endswith("Check the SID in the FMC before the clearance call.")
+
+
+def test_say_logs_shown_text():
+    import speak
+    got = []
+    speak.pyttsx3 = None  # niente voce vera nel test: il worker simula il tempo di lettura
+    speak.say("spoken text", on_start=got.append, shown="shown text")
+    speak.say("plain", on_start=got.append)
+    speak.wait()
+    assert got == ["shown text", "plain"]
+
+
 if __name__ == "__main__":
+    test_readout_pair_shown_vs_spoken()
+    test_say_logs_shown_text()
     test_parse_dep()
     test_readout_dep_with_runway_and_silent_on_unknown()
     test_unknown_data_no_callouts()

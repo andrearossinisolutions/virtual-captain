@@ -95,10 +95,11 @@ main.fv{max-width:none;padding:12px 16px}
 #thrtab{border-collapse:collapse;font:13px ui-monospace,monospace;width:100%}#thrtab th,#thrtab td{border-bottom:1px solid var(--bd);padding:3px 6px;text-align:right;white-space:nowrap}#thrtab th:first-child,#thrtab td:first-child{text-align:left}#thrtab .lv{font-weight:700}#thrtab .gd td:first-child{color:var(--fg)}
 ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{padding:6px 0;border-bottom:1px solid var(--bd);color:var(--mut)}
 </style></head><body><main id="main">
-<header id="hdr"><h1>Virtual Captain</h1><span class="pill" id="phase"></span><span class="pill" id="aao"></span>
-  <div class="chips" id="chips" hidden></div><span class="chip" id="sqk" hidden></span>
+<header id="hdr"><h1>Virtual Captain</h1><span class="pill" id="aao"></span>
+  <div class="chips" id="chips" hidden></div><span class="chip" id="sqk" hidden></span><div class="chips" id="fpills" hidden></div>
   <details id="more" hidden><summary>More</summary>
     <label class="livesw"><input type="checkbox" id="livesw"> Show real values on checklist</label>
+    <details class="card cs" id="fd"><summary>Flight data</summary><div id="fdbody"></div></details>
     <details class="card cs" id="cs"><summary>Cockpit state</summary><div id="csbody"></div></details>
     <div id="planflt"></div>
     <div class="morebtns"><button class="ghost" id="edit">Edit briefing</button><button class="ghost" id="end2" hidden>End flight (stop reading)</button></div>
@@ -154,7 +155,7 @@ ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{pa
 </section>
 </main>
 <script>
-const $=id=>document.getElementById(id);let lastRev=-1,spN=null,spUntil=0,spExp=false,chipsKey="",csKey="",planKey="",clBodyKey="",timer=null,phase="briefing",view="config",last=null;
+const $=id=>document.getElementById(id);let lastRev=-1,spN=null,spUntil=0,spExp=false,chipsKey="",csKey="",fdKey="",planKey="",clBodyKey="",timer=null,phase="briefing",view="config",shownView="config",last=null;
 async function api(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
   if(!r.ok){const t=await r.text();throw new Error(t||r.status)}return r.json()}
 function build(s){const g=$("grid");g.innerHTML="";$("apt").innerHTML="";for(const [k,l] of s.labels){const d=document.createElement("div");
@@ -205,9 +206,9 @@ function planHtml(p,open){if(!p||!(p.route||p.waypoints&&p.waypoints.length))ret
     for(const w of p.waypoints){const row=document.createElement("div");row.className="wp";for(const v of [w.ident,w.via||"",w.alt!=null?w.alt+" ft":""]){const c=document.createElement("span");c.textContent=v;row.appendChild(c)}dt.appendChild(row)}box.appendChild(dt)}
   return box}
 function plans(s){const k=JSON.stringify(s.plan);if(k===planKey)return;planKey=k;for(const [id,open] of [["plancfg",false],["planflt",false]]){const el=$(id);const keep=el.querySelector("details")?.open;const b=planHtml(s.plan,keep||open);el.innerHTML="";if(b)el.appendChild(b)}}
-function chips(s){const f=s.fields,c=$("chips"),k=JSON.stringify([f,s.mode]);if(k===chipsKey)return;chipsKey=k;c.innerHTML="";
+function chips(s){const f=s.fields,c=$("chips"),k=JSON.stringify(f);if(k===chipsKey)return;chipsKey=k;c.innerHTML="";
   const add=(k,v)=>{if(v){const d=document.createElement("span");d.className="chip";d.innerHTML=`<b>${k}</b>`;d.append(v);c.appendChild(d)}};
-  add("DEP",f.origin);add("MODE",s.mode[0].toUpperCase()+s.mode.slice(1))}
+  add("DEP",f.origin);add("ARR",f.destination)}
 function cockpit(s){const k=JSON.stringify(s.monitor);if(k===csKey)return;csKey=k;const b=$("csbody");b.textContent="";const m=s.monitor||[];
   if(!m.length){const p=document.createElement("div");p.className="meta";p.textContent="No data yet";b.appendChild(p);return}
   const mk=(c,t)=>{const e=document.createElement("div");e.className=c;e.textContent=t;return e};
@@ -217,6 +218,15 @@ function cockpit(s){const k=JSON.stringify(s.monitor);if(k===csKey)return;csKey=
       c.appendChild(mk("n",n));c.appendChild(mk("v"+(v.startsWith("n/d")?" na":""),v));
       if(x)c.appendChild(mk("x",x));if(r!=="")c.appendChild(mk("r","raw "+r));grid.appendChild(c)}
     b.appendChild(grid)}}
+function fdata(s){const k=JSON.stringify([s.flight,s.aao_ok]);if(k===fdKey)return;fdKey=k;const b=$("fdbody");b.textContent="";const f=s.flight||[];
+  const mk=(c,t)=>{const e=document.createElement("div");e.className=c;e.textContent=t;return e};
+  if(!f.length||s.aao_ok===false){b.appendChild(mk("meta",s.aao_ok===false?"AAO unavailable":"No data yet"));return}
+  const grid=document.createElement("div");grid.className="cg";
+  for(const [n,v] of f){const c=document.createElement("div");c.className="ci";c.appendChild(mk("n",n));c.appendChild(mk("v"+(v.startsWith("\u2014")?" na":""),v));grid.appendChild(c)}
+  b.appendChild(grid)}
+function fpills(s){const e=$("fpills"),defs=s.pill_defs||[],p=s.pills||{},k=JSON.stringify(defs);
+  if(k!==e.dataset.k){e.dataset.k=k;e.textContent="";for(const [key,l] of defs){const c=document.createElement("span");c.className="chip";c.id="pill-"+key;const b=document.createElement("b");b.textContent=l;c.appendChild(b);const v=document.createElement("span");c.appendChild(v);e.appendChild(c)}}
+  for(const [key] of defs){const v=$("pill-"+key).lastChild;const t=p[key]||"\u2014";if(v.textContent!==t)v.textContent=t}}
 let clKey="",showLive=localStorage.getItem("showLive")==="1";
 $("livesw").checked=showLive;$("livesw").onchange=()=>{showLive=$("livesw").checked;localStorage.setItem("showLive",showLive?"1":"0");if(last)checklist(last)};
 let craftEl=null,clrTimer=null,sqkEdit=false,sqkVal="";
@@ -316,11 +326,11 @@ function speech(s){const sp=$("speech"),tx=$("sptxt"),l=s.log,ago=s.spoke_ago==n
   if(l.length){const [t,...rest]=l[0].split("  ");tx.textContent=big?rest.join("  "):t+"  "+rest.join("  ");tx.className="";$("sptime").textContent=t}
   else{tx.textContent="Listening…";tx.className="idle";$("sptime").textContent=""}}
 function render(){const s=last;if(!s)return;const fly=s.phase==="flying";
-  $("main").classList.toggle("fv",view==="flight");$("cfg").hidden=view!=="config";$("flt").hidden=view!=="flight";$("chips").hidden=$("more").hidden=$("sqk").hidden=view!=="flight";
-  $("phase").textContent=fly?"✈ Flying — reading the simulator":"📝 Briefing";
+  if(view==="flight"&&shownView!=="flight")window.scrollTo(0,0);shownView=view;  // solo al cambio vista: la vista Volo parte dall'alto (pills visibili)
+  $("main").classList.toggle("fv",view==="flight");$("cfg").hidden=view!=="config";$("flt").hidden=view!=="flight";$("chips").hidden=$("more").hidden=$("sqk").hidden=$("fpills").hidden=view!=="flight";
   const a=$("aao");a.textContent=s.aao_ok===null?"AAO: waiting":s.aao_ok?"AAO: connected":"AAO: not responding";a.className="pill "+(s.aao_ok===null?"":s.aao_ok?"ok":"bad");
   $("go").textContent=fly?"Back to flight":"Briefing complete";$("go").className="big "+(fly?"fly":"");$("end").hidden=!fly;$("end2").hidden=!fly;
-  $("info").textContent=s.info;chips(s);checklist(s);cockpit(s);plans(s);calib(s);
+  $("info").textContent=s.info;chips(s);checklist(s);cockpit(s);fdata(s);fpills(s);plans(s);calib(s);
   speech(s);
   const l=s.log;
   $("log").innerHTML="";for(const t of l.slice(1)){const li=document.createElement("li");li.textContent=t;$("log").appendChild(li)}}
@@ -328,7 +338,7 @@ function apply(s){const prev=last;last=s;
   if(!prev||prev.phase!==s.phase)view=s.phase==="flying"?"flight":"config";  // cambio di fase → vista di default
   render()}
 async function poll(){try{const s=await api("/api/state");
-  if(lastRev===-1){build(s);fill(s);lastRev=s.rev}else if(s.rev!==lastRev){fill(s);lastRev=s.rev}apply(s)}catch(e){$("phase").textContent="Connection lost…"}setTimeout(poll,1500)}
+  if(lastRev===-1){build(s);fill(s);lastRev=s.rev}else if(s.rev!==lastRev){fill(s);lastRev=s.rev}apply(s)}catch(e){const a=$("aao");a.textContent="Connection lost…";a.className="pill bad"}setTimeout(poll,1500)}
 $("load").onclick=async()=>{$("load").disabled=true;$("info").textContent="Loading…";
   try{const s=await api("/api/load-plan",{simbrief:$("simbrief").value});fill(s);lastRev=s.rev;apply(s)}catch(e){$("info").textContent="SimBrief error: "+e.message}$("load").disabled=false};
 $("go").onclick=async()=>{await api("/api/fields",collect());
