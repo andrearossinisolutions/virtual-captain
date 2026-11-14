@@ -23,7 +23,7 @@ FIELDS = [("origin", "Departure"), ("destination", "Arrival"), ("dep_time", "Dep
 # Dati di decollo: si inseriscono nelle voci della checklist (FMGS PERFORMANCE); stesse chiavi in `fields`, non nel Briefing.
 INFLIGHT = [("runway", "T/O runway"), ("ta", "Transition altitude (ft)"), ("thr_red_agl", "Thrust reduction (ft AGL)"),
             ("accel_agl", "Acceleration (ft AGL)"), ("v1", "V1"), ("vr", "VR"), ("v2", "V2"), ("flap", "Flap"),
-            ("fob", "FOB"), ("zfw", "ZFW"), ("zfwcg", "ZFWCG")]
+            ("fob", "FOB"), ("zfw", "ZFW"), ("zfwcg", "ZFWCG"), ("taxiway", "Taxiway")]
 ALL_FIELDS = FIELDS + INFLIGHT
 FROM_PLAN = ["origin", "destination", "dep_time", "ta", "v1", "vr", "v2", "flap", "fob", "zfw"]  # runway deriva da origin; accel/thr_red solo manuali
 PLAN_RESET = ["runway", "ta", "v1", "vr", "v2", "flap", "fob", "zfw"]  # tornano al piano con "Reset to plan"
@@ -45,6 +45,11 @@ def _clean_clr(k: str, v) -> str:
     if k == "t":
         return v if len(v) <= CLR_MAX["t"] and all(ch in "01234567" for ch in v) else None
     return v[:CLR_MAX[k]]
+
+
+def clean_taxiway(text) -> str:
+    """Taxiway di uscita: maiuscolo, solo A-Z e 0-9, max 4 caratteri (es. " b5 " -> "B5")."""
+    return "".join(c for c in str(text).upper() if c.isascii() and c.isalnum())[:4]
 
 
 def _when(ts):
@@ -107,7 +112,7 @@ class State:
         with self.lock:
             for k, _ in ALL_FIELDS:
                 if k in data and k not in ("origin", "runway"):
-                    self.fields[k] = str(data[k]).strip()
+                    self.fields[k] = clean_taxiway(data[k]) if k == "taxiway" else str(data[k]).strip()
             if "origin" in data:
                 self._set_origin(str(data["origin"]))
             if "runway" in data and "origin" not in data:
@@ -373,6 +378,7 @@ class State:
                 if v is None:
                     missing.append(dict(ALL_FIELDS)[k])
             self.fields["runway"] = rwy
+            self.fields["taxiway"] = ""  # nuovo volo: il taxiway di uscita dell'atterraggio precedente non vale piu'
             if not rwy:
                 missing.append(dict(ALL_FIELDS)["runway"])
             self.wt_unit = data.get("wt_unit") or ""

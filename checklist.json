@@ -2480,8 +2480,15 @@
       {
        "id": "after-landing.rwy",
        "text": "RWY",
-       "response": "VACATED (annotate taxiway)",
-       "type": "action"
+       "response": "VACATED",
+       "type": "action",
+       "inputs": [
+        {
+         "k": "taxiway",
+         "label": "Taxiway",
+         "prefix": "VACATED VIA"
+        }
+       ]
       },
       {
        "id": "after-landing.landing-lights",

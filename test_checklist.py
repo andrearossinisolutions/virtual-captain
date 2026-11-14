@@ -562,7 +562,11 @@ def test_inputs_items():
     assert [f.get("plan", False) for f in cl.evaluate_phase("fmgs-performance-glareshield", {})["subphases"][0]["items"][-1]["inputs"]] == [False, False]
     # i link (NOW / Expected) restano sulle voci con campi inline
     assert cl.links[P + "t-o-rwy"]["check"] == {"show_ref": "fld.runway"}
-    bad = [{"k": "bogus", "label": "x"}], [], [{"k": "ta", "label": ""}], [{"k": "ta", "label": "a"}, {"k": "ta", "label": "b"}], "x", [{"k": "ta", "label": "a", "plan": "y"}]
+    rwy = {i["id"]: i for s in cl.evaluate_phase("after-landing", {})["subphases"] for i in s["items"]}["after-landing.rwy"]
+    assert [f["k"] for f in rwy["inputs"]] == ["taxiway"] and rwy["inputs"][0]["prefix"] == "VACATED VIA" and rwy["response"] == "VACATED"
+    assert rwy["status"] == "none"  # nessun link: stato invariato
+    bad = [{"k": "ta", "label": "a", "prefix": 5}], [{"k": "ta", "label": "a", "prefix": ""}], [{"k": "ta", "label": "a", "prefix": "  "}], \
+        [{"k": "bogus", "label": "x"}], [], [{"k": "ta", "label": ""}], [{"k": "ta", "label": "a"}, {"k": "ta", "label": "b"}], "x", [{"k": "ta", "label": "a", "plan": "y"}]
     for b in bad:
         data = json.loads(json.dumps(cl.data))
         data["phases"][0]["subphases"][0]["items"][0]["inputs"] = b
@@ -654,8 +658,14 @@ def test_new_links_wellformed():
     for iid, keys in expect.items():
         assert iid in cl.links and cl.links[iid]["verified"] is True, iid
         assert C.check_keys(cl.links[iid]["check"]) == keys, iid
-    for iid in ("after-landing.predictive-windshear-system", "parking.anti-ice", "securing-the-aircraft.adirs-1-2-3"):
+    for iid in ("after-landing.predictive-windshear-system", "securing-the-aircraft.adirs-1-2-3"):
         assert set(cl.links[iid]["check"]) == {"show"}
+    ai = cl.links["parking.anti-ice"]["check"]
+    assert "all" in ai and [(c["key"], c["eq"]) for c in ai["all"]] == [("eng1_ai", "OFF"), ("eng2_ai", "OFF")]
+    assert C.evaluate(ai, {"eng1_ai": "OFF", "eng2_ai": "OFF"})["status"] == "ok"
+    assert C.evaluate(ai, {"eng1_ai": "OFF", "eng2_ai": "ON"})["status"] == "bad"
+    assert C.evaluate(ai, {"eng1_ai": "ON", "eng2_ai": "OFF"})["status"] == "bad"
+    assert C.evaluate(ai, {"eng1_ai": "OFF"})["status"] == "na" and C.evaluate(ai, {})["kind"] == "unreadable"
     allon = {k: "OFF" for k in expect["parking.exterior-lights"]}
     res = lambda iid, lab: C.evaluate(cl.links[iid]["check"], lab)["status"]
     assert res("securing-the-aircraft.exterior-lights", allon) == "ok"

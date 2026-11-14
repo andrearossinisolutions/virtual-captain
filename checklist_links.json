@@ -1244,9 +1244,15 @@
  },
  "parking.anti-ice": {
   "check": {
-   "show": [
-    "eng1_ai",
-    "eng2_ai"
+   "all": [
+    {
+     "key": "eng1_ai",
+     "eq": "OFF"
+    },
+    {
+     "key": "eng2_ai",
+     "eq": "OFF"
+    }
    ]
   },
   "verified": true

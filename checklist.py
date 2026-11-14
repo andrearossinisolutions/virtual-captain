@@ -11,7 +11,7 @@ from checklist_eval import BY_KEY, REFS, _refs, evaluate, qnh_actual
 HERE = pathlib.Path(__file__).resolve().parent
 TYPES = ("action", "announce", "atc", "note", "craft")
 CRAFT_KEYS = ("c", "r", "a", "f", "t")
-INPUT_KEYS = ("runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg")  # campi di State.fields modificabili dalle voci
+INPUT_KEYS = ("runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg", "taxiway")  # campi di State.fields modificabili dalle voci
 
 
 def _check_keys(check: dict, where: str, inner: bool = False) -> None:
@@ -93,7 +93,8 @@ def _check_inputs(it: dict) -> None:
     if len(keys) != len(inputs) or any(k not in INPUT_KEYS for k in keys) or len(keys) != len(set(keys)):
         raise ValueError(f"{it['id']}: 'inputs' con chiavi non valide o duplicate")
     for f in inputs:
-        if not isinstance(f.get("label"), str) or not f["label"] or not isinstance(f.get("plan", False), bool):
+        if not isinstance(f.get("label"), str) or not f["label"] or not isinstance(f.get("plan", False), bool) \
+                or ("prefix" in f and (not isinstance(f["prefix"], str) or not f["prefix"].strip())):
             raise ValueError(f"{it['id']}: campo di 'inputs' non valido")
 
 

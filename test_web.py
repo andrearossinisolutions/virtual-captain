@@ -55,6 +55,29 @@ def test_api_flow():
         srv.shutdown()
 
 
+def test_taxiway_state():
+    import state as S
+    cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
+    st = State(cfg)
+    st.update({"taxiway": " b5 "})
+    assert st.fields["taxiway"] == "B5"
+    st.update({"taxiway": "a-1 x/y9z"})
+    assert st.fields["taxiway"] == "A1XY"  # solo A-Z0-9, max 4
+    st.update({"taxiway": "b5"})
+    assert "taxiway" not in cfg.read_text() and "taxiway" not in S.REMEMBERED + S.PLAN_RESET + S.FROM_PLAN  # solo memoria
+    st.update({"reset": ["taxiway", "fob"]})
+    assert st.fields["taxiway"] == "B5"  # il reset non la tocca
+    orig = (S.fetch_latest, S.to_briefing)
+    S.fetch_latest = lambda uid: {}
+    S.to_briefing = lambda ofp: {"origin": "LIMC", "destination": "EDDF", "runway": None, "dep_time": None, "ta": None, "generated": 1,
+                                 "v1": None, "vr": None, "v2": None, "flap": None, "fob": None, "zfw": None, "wt_unit": "", "plan": {}}
+    try:
+        st.load_plan("x")
+    finally:
+        S.fetch_latest, S.to_briefing = orig
+    assert st.fields["taxiway"] == ""
+
+
 def test_checklist_mode_endpoint():
     cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
     st = State(cfg)
@@ -226,7 +249,7 @@ def test_bad_values_use_defaults():
 def test_briefing_fields_and_inflight():
     import state as S
     assert [k for k, _ in S.FIELDS] == ["origin", "destination", "dep_time"]
-    assert [k for k, _ in S.INFLIGHT] == ["runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg"]
+    assert [k for k, _ in S.INFLIGHT] == ["runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg", "taxiway"]
     st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
     s = st.snapshot()
     assert [k for k, _ in s["labels"]] == ["origin", "destination", "dep_time"] and set(s["fields"]) >= {"runway", "ta", "v1", "flap"}
@@ -335,6 +358,12 @@ def test_inputs_markup():
     key = p[p.index("bk=JSON.stringify"):p.index("showLive,s.test_links")]
     assert "i.inputs" in key and "fields" not in key  # i valori scritti non fanno ricostruire la lista
     assert '"decimal"' in p and 'replace(/\\D/g,"")' in p and "fob:" not in p[p.index("const full="):p.index("[k];")]  # fob/zfw/zfwcg: nessun avanzamento automatico
+    for m in ("dataset.pf", 'el.dataset.pf+" "+(v||"---")', 'replace(/[^A-Z0-9]/g,"")', "slice(0,4)", '"taxiway"'):  # taxiway con prefisso: "VACATED VIA ---" / "VACATED VIA B5"
+        assert m in p, m
+    assert "taxiway" not in p[p.index("const full="):p.index("[k];")]  # nessun avanzamento automatico
+    # risposta lunga (oltre 40 caratteri o con "Eg.") sotto il titolo a tutta larghezza, la breve resta a destra
+    assert 'function longAns(t){return t.length>40||t.includes("Eg.")}' in p and '(longAns(av)?" lg":"")' in p
+    assert ".cl .cli .a.lg{grid-column:2/4;text-align:left;max-width:none}" in p and ".cl .cli .a{grid-column:3;text-align:right" in p
     chips = p[p.index("function chips"):p.index("function cockpit")]
     assert 'add("DEP",f.origin);add("ARR",f.destination)' in chips and "JSON.stringify(f)" in chips  # ARR come DEP, in cache
     assert '"TA"' not in chips and '"V1"' not in chips and '"FLAP"' not in chips and '"RWY"' not in chips
@@ -653,6 +682,7 @@ if __name__ == "__main__":
     test_load_plan_dep_and_reset()
     test_to_briefing_dep_runway()
     test_inputs_markup()
+    test_taxiway_state()
     test_to_briefing_fuel_and_zfw()
     test_fob_zfw_state_and_plan()
     test_checklist_mode_endpoint()

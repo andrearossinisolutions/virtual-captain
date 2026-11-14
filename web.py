@@ -53,7 +53,7 @@ main.fv{max-width:none;padding:12px 16px}
 .cl .cli{display:grid;grid-template-columns:1.8em minmax(0,1fr) auto;column-gap:10px;break-inside:avoid}.cl .cli.wl{grid-template-columns:5.2em minmax(0,1fr) auto}.cl .cli .rw{grid-column:2}.cl .cli .now.nv{color:var(--mut)}.cl .cli .now{grid-column:3;text-align:right;font-size:14px;color:var(--bad);white-space:nowrap}
 .cl .cli .exp{grid-column:2/4}
 .cl .cli .tx{display:contents}.cl .cli .ic{grid-column:1}.cl .cli .e{grid-column:2}
-.cl .cli .a{grid-column:3;text-align:right;max-width:16em}.cl .cli .d{grid-column:2/4;margin-top:0;font-size:14px}
+.cl .cli .a{grid-column:3;text-align:right;max-width:16em}.cl .cli .a.lg{grid-column:2/4;text-align:left;max-width:none}.cl .cli .d{grid-column:2/4;margin-top:0;font-size:14px}
 #clbody{columns:420px 2;column-gap:24px}.cl h3{break-after:avoid;margin-top:12px}
 }
 .plan{background:#0c131b;border:1px solid var(--bd);border-radius:12px;padding:12px;margin-top:12px;font-size:16px}
@@ -261,13 +261,13 @@ let inpDirty={},inpTimer=null;
 function inpSend(){clearTimeout(inpTimer);inpTimer=null;const o=inpDirty;inpDirty={};if(last)Object.assign(last.fields,o);if(Object.keys(o).length)api("/api/fields",o).then(s=>{lastRev=s.rev}).catch(()=>{})}
 function fval(k){return k in inpDirty?inpDirty[k]:((last&&last.fields[k])||"")}
 function fShow(el){if(el.querySelector("input"))return;const v=fval(el.dataset.f);el.textContent="";el.className="fld"+(v?" set":" nv")+(el.dataset.w?" w":"");
-  el.textContent=v||(el.dataset.r&&!el.dataset.pre?el.dataset.r:(el.dataset.pre?el.dataset.pre+" ":"")+"---")}
+  el.textContent=el.dataset.pf?el.dataset.pf+" "+(v||"---"):v||(el.dataset.r&&!el.dataset.pre?el.dataset.r:(el.dataset.pre?el.dataset.pre+" ":"")+"---")}
 function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f,i=document.createElement("input");i.value=fval(k);i.dataset.f=k;
-  const txt=k==="runway"||k==="flap";i.inputMode=txt?"text":k==="zfwcg"?"decimal":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
+  const txt=k==="runway"||k==="flap"||k==="taxiway";i.inputMode=txt?"text":k==="zfwcg"?"decimal":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
   let done=false;const end=()=>{if(done)return;done=true;inpSend();i.remove();fShow(el)};
   const nextF=()=>{let n=el.nextElementSibling;while(n&&!n.dataset.f)n=n.nextElementSibling;return n};
   const adv=()=>{const n=nextF();end();if(n)fStart(n)};
-  i.oninput=()=>{if(k==="runway")i.value=i.value.toUpperCase();
+  i.oninput=()=>{if(k==="runway")i.value=i.value.toUpperCase();if(k==="taxiway")i.value=i.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);
     if(k==="fob"||k==="zfw")i.value=i.value.replace(/\D/g,"");if(k==="zfwcg")i.value=i.value.replace(/[^\d.]/g,"").replace(/^(\d*\.?\d?).*$/,"$1");  // fob/zfw cifre, zfwcg un decimale (28.4): nessun avanzamento automatico, solo Invio o tocco fuori
     inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400);
     const full={v1:/^\d{3}$/,vr:/^\d{3}$/,v2:/^\d{3}$/,runway:/^\d{2}[LRC]$/,ta:/^\d{4}$/,thr_red_agl:/^\d{4}$/,accel_agl:/^\d{4}$/,flap:/^[1-3]$/}[k];
@@ -275,9 +275,11 @@ function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f
   i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();adv()}};i.onblur=end;
   el.textContent="";i.placeholder=el.dataset.l;el.append(i);i.focus({preventScroll:true});
   if(sel){try{i.setSelectionRange(sel[0],sel[1])}catch(e){}}else i.select()}
+// risposta lunga (piu' di 40 caratteri o con "Eg."): sotto il titolo a tutta larghezza invece che nella colonna destra
+function longAns(t){return t.length>40||t.includes("Eg.")}
 function inputsNode(it){const el=document.createElement("div");el.className="a inpr";const one=it.inputs.length===1;
   it.inputs.forEach((f,n)=>{if(n){const sp=document.createElement("span");sp.className="sep";sp.textContent=" / ";el.appendChild(sp)}
-    const c=document.createElement("span");c.dataset.f=f.k;c.dataset.l=f.label;c.title=f.label;if(["runway","flap","fob","zfw","zfwcg"].includes(f.k))c.dataset.w="1";
+    const c=document.createElement("span");c.dataset.f=f.k;c.dataset.l=f.label;c.title=f.label;if(["runway","flap","fob","zfw","zfwcg","taxiway"].includes(f.k))c.dataset.w="1";if(f.prefix)c.dataset.pf=f.prefix;
     if(one)c.dataset.r=it.response||"";else if(!f.plan)c.dataset.pre=f.label.split(" (")[0].toLowerCase();
     c.onclick=()=>fStart(c);fShow(c);el.appendChild(c)});
   const ks=it.inputs.filter(f=>f.plan).map(f=>f.k);
@@ -308,7 +310,7 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       r.appendChild(mk("div","ic"+(ic.length>2?" w":""),ic));const tx=mk("div","tx");const e=mk("div","e");
       if(it.type==="atc")e.appendChild(mk("span","badge","ATC"));if(it.type==="announce")e.appendChild(mk("span","badge","ANNOUNCE"));
       e.append(it.text);tx.appendChild(e);
-      const av=(it.expected||it.response);if(it.inputs)tx.appendChild(inputsNode(it));else if(av&&it.type!=="announce")tx.appendChild(mk("div","a"+(it.expected?" set":""),av));
+      const av=(it.expected||it.response);if(it.inputs)tx.appendChild(inputsNode(it));else if(av&&it.type!=="announce")tx.appendChild(mk("div","a"+(it.expected?" set":"")+(longAns(av)?" lg":""),av));
       if(showLive&&it.live&&it.live.length)tx.appendChild(mk("div","lv","Actual: "+it.live.map(l=>(it.live.length>1?l[0]+" ":"")+l[1]).join(" \u00b7 ")));
       if(s.test_links&&it.raw&&it.raw.length)tx.appendChild(mk("div","rw",it.raw.map(l=>l[0]+"="+l[1]).join(" \u00b7 ")));
       if(it.show&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","NOW: "+it.live.map(l=>l[1]).join(", ")));
