@@ -14,6 +14,8 @@ FLIGHT_GROUP = "Flight data"  # voci cinematiche: solo nella card Flight data (r
 # Stati GSX (FSDT_GSX_*_STATE): IPOTESI dalla documentazione GSX, da verificare dal vivo col grezzo (--test-links) e correggere qui.
 GSX_STATES = {1: "NOT AVAILABLE", 2: "AVAILABLE", 3: "UNAVAILABLE", 4: "BYPASSED", 5: "REQUESTED", 6: "PERFORMING", 7: "COMPLETED"}
 GSX_ACTIVE = ("PERFORMING", "COMPLETED")  # unico posto: stati GSX che valgono "servizio avviato" (in corso o completato) per i check {"gsx": [...]}
+GSX_DONE = ("COMPLETED",)  # unico posto: stati GSX che valgono "servizio concluso" (check {"gsx": [...], "set": "done"})
+GSX_SETS = {"active": GSX_ACTIVE, "done": GSX_DONE}  # nome del set nel check; default "active"
 
 MAPS = {
     "onoff": {0: "OFF", 1: "ON"},

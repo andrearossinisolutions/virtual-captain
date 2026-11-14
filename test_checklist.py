@@ -853,7 +853,18 @@ def test_gsx_links():
     cl = C.load()
     fc, bd = "cockpit-preparation.start-fueling-catering", "cockpit-preparation.start-boarding-passengers"
     assert cl.links[fc]["check"] == {"gsx": ["gsx_refuel", "gsx_cater"]} and cl.links[bd]["check"] == {"gsx": ["gsx_board"]}
-    assert "cockpit-preparation.check-boarding-completed" not in cl.links and "fmgs-performance-glareshield.check-boarding-completed" not in cl.links
+    cr, cp = "cockpit-preparation.check-refueling-completed", "cockpit-preparation.start-boarding-passengers"
+    assert cl.links[cr]["check"] == {"gsx": ["gsx_refuel"], "set": "done"} and cr not in cl.excluded
+    ids = [i["id"] for p in cl.phases for sp in p["subphases"] for i in sp["items"]]
+    assert ids.index(cr) + 1 == ids.index(cp) and next(i for p in cl.phases for sp in p["subphases"] for i in sp["items"] if i["id"] == cr)["type"] == "announce"
+    cb = "fmgs-performance-glareshield.check-boarding-completed"
+    assert cl.links[cb]["check"] == {"gsx": ["gsx_board"], "set": "done"} and cb not in cl.excluded
+    for chk in ({"gsx": ["gsx_board"], "set": "x"}, {"gsx": ["gsx_board"], "set": "done", "y": 1}):
+        try:
+            C.Checklist(cl.data, {cb: {"check": chk, "verified": True}})
+            assert False, chk
+        except ValueError:
+            pass
     assert C.check_keys(cl.links[fc]["check"]) == ["gsx_refuel", "gsx_cater"]
     ph = [p["id"] for p in cl.phases if any(i["id"] == fc for sp in p["subphases"] for i in sp["items"])][0]
     labels = mon.clean_labels({"gsx_refuel": 6, "gsx_cater": 7, "gsx_board": 5})

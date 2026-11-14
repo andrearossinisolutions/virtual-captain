@@ -281,6 +281,12 @@
        "type": "action"
       },
       {
+       "id": "cockpit-preparation.check-refueling-completed",
+       "text": "Check Refueling Completed",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      },
+      {
        "id": "cockpit-preparation.start-boarding-passengers",
        "text": "Start Boarding Passengers",
        "response": "ANNOUNCE",

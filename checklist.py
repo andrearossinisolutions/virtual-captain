@@ -27,7 +27,7 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
         return
     if "gsx" in check:  # solo voci announce, solo chiavi con mappa gsx
         keys = check["gsx"]
-        if inner or set(check) != {"gsx"} or not isinstance(keys, list) or not keys or any(k not in BY_KEY or BY_KEY[k].kind != "gsx" for k in keys):
+        if inner or not set(check) <= {"gsx", "set"} or check.get("set", "active") not in mon.GSX_SETS or not isinstance(keys, list) or not keys or any(k not in BY_KEY or BY_KEY[k].kind != "gsx" for k in keys):
             raise ValueError(f"{where}: 'gsx' non valido")
         return
     if "detent" in check:

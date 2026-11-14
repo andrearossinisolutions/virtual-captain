@@ -135,8 +135,9 @@ def detent_all(check: dict) -> dict:
 
 
 def gsx_all(check: dict) -> dict:
-    """{"gsx": [chiavi]} -> {"all": [chiave eq GSX_ACTIVE, ...]}: tutti i servizi GSX in corso o completati."""
-    return {"all": [{"key": k, "eq": list(mon.GSX_ACTIVE)} for k in check["gsx"]]}
+    """{"gsx": [chiavi], "set": "active"|"done"} -> {"all": [chiave eq <set>, ...]}: tutti i servizi GSX nel set (default: in corso o completati)."""
+    states = mon.GSX_SETS[check.get("set", "active")]
+    return {"all": [{"key": k, "eq": list(states)} for k in check["gsx"]]}
 
 
 def _refs(check: dict) -> list:

@@ -235,6 +235,10 @@ def test_gsx():
     assert evaluate(c, {"gsx_refuel": "COMPLETED", "gsx_cater": None})["status"] == "na"  # lvar muta: senza colore
     assert evaluate(c, {})["status"] == "na" and evaluate({"gsx": ["gsx_board"]}, {"gsx_board": "COMPLETED"})["status"] == "ok"
     assert evaluate(c, ok, verified=False)["status"] == "na"
+    d = {"gsx": ["gsx_board"], "set": "done"}
+    assert evaluate(d, {"gsx_board": "COMPLETED"})["status"] == "ok"
+    assert all(evaluate(d, {"gsx_board": st})["status"] == "bad" for st in mon.GSX_STATES.values() if st not in mon.GSX_DONE)  # anche PERFORMING
+    assert evaluate(d, {"gsx_board": None})["status"] == "na" and evaluate(d, {})["status"] == "na"
 
 if __name__ == "__main__":
     test_qnh_gated_by_transition_level()

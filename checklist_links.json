@@ -1389,5 +1389,23 @@
    ]
   },
   "verified": true
+ },
+ "fmgs-performance-glareshield.check-boarding-completed": {
+  "check": {
+   "gsx": [
+    "gsx_board"
+   ],
+   "set": "done"
+  },
+  "verified": true
+ },
+ "cockpit-preparation.check-refueling-completed": {
+  "check": {
+   "gsx": [
+    "gsx_refuel"
+   ],
+   "set": "done"
+  },
+  "verified": true
  }
 }
