@@ -136,6 +136,35 @@ def test_departure_atis_state_and_snapshot():
     assert dep["datis_hint"] == ["letter", "rwy", "qnh", "wind"] and dep["wx_hint"] == "dep" and "atis_hint" not in dep
 
 
+def test_atis_table_layout_and_advance_rules():
+    p = web.PAGE
+    for m in ("function tableNode", 'el.className="a lg craft tbl"', 'className="tc"', 'const TL={letter:"INFO",rwy:"RWY",wind:"WIND",qnh:"QNH"}', '"DEP":"ARR")+" ATIS"',
+              "c.onclick=()=>fStart(c);fShow(c)", ".craft.tbl .cf{", 'el.parentElement.classList.contains("tc")', "i.layout,i.atis_hint"):
+        assert m in p, m
+    assert "innerHTML" not in p[p.index("function tableNode"):p.index("function inputsNode")]  # solo textContent
+    # avanzamento: INFO una lettera, RWY terzo carattere (35L), WIND "/" automatico dopo la direzione poi 2 cifre, QNH 4 cifre o 29.92 (ultimo campo: chiude)
+    assert r'/^(\d{3}|VRB)$/.test(i.value)&&ev&&/^insert/.test(ev.inputType||"")' in p and 'i.value+="/"' in p and "i.oninput=ev=>" in p
+    assert r'.replace(/\/+/g,"/").slice(0,12);if(/^(\d{3}|VRB)$/' in p  # "/" ripetuti compressi nel vento
+    assert "setSelectionRange(n,n)" in p  # piste e vento: cursore in fondo per aggiungere "/35R" o "G25"
+    # pulsante "+" accanto a RWY (partenza e arrivo: la card e' la stessa funzione): aggiunge "/" in coda, max 12 caratteri, senza far perdere il focus
+    for m in ("function addRwy", 'if(/_rwy$/.test(f.k))', 'b.className="plus"', 'b.textContent="+"', 'b.onpointerdown=ev=>{ev.preventDefault();addRwy(c)}', "v.length+4<=12",
+              'i.value=v+"/"', '!v.endsWith("/")', ".craft.tbl .plus{min-width:34px;height:28px", 'e.target.closest(".plus")&&a.closest(".tc")&&a.closest(".tc")===e.target.closest(".tc")'):
+        assert m in p, m
+    assert "innerHTML" not in p[p.index("function addRwy"):p.index("function inputsNode")] and p.count('b.className="plus"') == 1
+    full = p[p.index("const full="):p.index("[k]||(isA")]
+    assert "taxiway" not in full and "atis" not in full
+
+
+def test_craft_order_and_columns():
+    p = web.PAGE
+    assert ".craft .cf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))" in p and ".craft .cf .w{grid-column:1/-1}" in p and "order:-1" not in p[p.index(".craft .cf"):p.index(".craft label")]
+    assert 'const w=f.k==="r"||f.k==="c";if(w)d.className="w"' in p and 'createElement(f.k==="r"?"textarea":"input")' in p  # c e r a tutta larghezza, a/f/t su tre colonne
+    assert "@media(max-width:420px){.craft input{padding:5px 6px}}" in p
+    import checklist as C
+    cr = next(i for ph in C.load().phases for sp in ph["subphases"] for i in sp["items"] if i["type"] == "craft")
+    assert [f["k"] for f in cr["fields"]] == ["c", "r", "a", "f", "t"]  # ordine del DOM = ordine visivo
+
+
 def test_rwy_conflict_red():
     import state as S
     c = S.rwy_conflict
@@ -491,7 +520,7 @@ def test_inputs_markup():
               'placeholder="LIMC/17R"', "el.dataset.r", '"---"'):
         assert m in p, m
     # il campo e' il valore atteso a destra (nessun chip a sinistra, nessun duplicato)
-    assert "tx.appendChild(inputsNode(it))" in p and "e.appendChild(inputsNode" not in p and ".chip.fld" not in p
+    assert "tx.appendChild(it.layout===\"table\"?tableNode(it):inputsNode(it))" in p and "e.appendChild(inputsNode" not in p and ".chip.fld" not in p
     assert 'querySelector(\'.fld[data-f="\'+keepF[0]' in p  # il campo in modifica sopravvive alla ricostruzione
     key = p[p.index("bk=JSON.stringify"):p.index("showLive,s.test_links")]
     assert "i.inputs" in key and "fields" not in key  # i valori scritti non fanno ricostruire la lista
@@ -502,7 +531,7 @@ def test_inputs_markup():
     # risposta lunga (oltre 40 caratteri o con "Eg.") sotto il titolo a tutta larghezza, la breve resta a destra
     assert 'function longAns(t){return t.length>40||t.includes("Eg.")}' in p and '(longAns(av)?" lg":"")' in p
     assert ".cl .cli .a.lg{grid-column:2/4;text-align:left;max-width:none}" in p and ".cl .cli .a{grid-column:3;text-align:right" in p
-    for m in ('isA&&sf==="letter"?/^[A-Z]$/:isA&&sf==="qnh"?/^\\d{4}$/', 'isA&&sf==="rwy"', 'isA&&sf==="wind"', '/[^0-9LRC\\/]/g', '/[^0-9\\/GVRBKT]/g',
+    for m in (r'letter:/^[A-Z]$/,rwy:/(^|\/)\d{2}[LRC]$/,wind:/^(\d{3}|VRB)\/\d{2}$/,qnh:/^(\d{4}|\d{2}\.\d{2})$/', 'isA&&sf==="rwy"', 'isA&&sf==="wind"', '/[^0-9LRC\\/]/g', '/[^0-9\\/GVRBKT]/g',
               'add("ARR ATIS",f.atis_letter)', 'f.datis_letter||"")+(f.datis_letter&&dr',  'rb.datis);', 'rb.atis);', ".chip.bad{", ".rb{color:var(--bad)!important}", 'x.startsWith("RWY ")&&(s.rwy_bad||{})[p]', 'last.rwy_bad[el.dataset.f.replace("_rwy","")]','for(const [hk,pre] of [["datis_hint","datis"],["atis_hint","atis"]])',
               'h.dataset.w=it.wx_hint', 's["wx_"+e.dataset.w]', 'a.textContent="\\u26a0 QNH differs: "+wn', "s.atis_warn"):
         assert m in p, m
@@ -835,6 +864,8 @@ if __name__ == "__main__":
     test_departure_atis_state_and_snapshot()
     test_qnh_from_atis()
     test_rwy_conflict_red()
+    test_atis_table_layout_and_advance_rules()
+    test_craft_order_and_columns()
     test_wx_dest_snapshot_and_markup()
     test_to_briefing_fuel_and_zfw()
     test_fob_zfw_state_and_plan()

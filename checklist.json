@@ -387,6 +387,7 @@
        "text": "Check Departure ATIS",
        "response": "ANNOTATE INFOS & LETTER",
        "type": "action",
+       "layout": "table",
        "inputs": [
         {
          "k": "datis_letter",
@@ -1665,6 +1666,7 @@
        "text": "Check Arrival ATIS",
        "response": "ANNOTATE INFOS & LETTER",
        "type": "action",
+       "layout": "table",
        "inputs": [
         {
          "k": "atis_letter",

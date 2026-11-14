@@ -588,6 +588,24 @@ def test_inputs_items():
             assert False, b
         except ValueError:
             pass
+    for iid in ("fmgs-initialization.check-departure-atis", "descent-preparation.check-arrival-atis"):
+        assert rows[iid]["layout"] == "table" and rows[iid]["inputs"][0]["k"].endswith("atis_letter")
+    assert "layout" not in rows["after-landing.rwy"]  # il taxiway resta inline
+    for b in ("grid", "", None, ["table"]):  # layout non valido (solo "table")
+        data = json.loads(json.dumps(cl.data))
+        next(i for p in data["phases"] for s in p["subphases"] for i in s["items"] if i.get("inputs"))["layout"] = b
+        try:
+            C.Checklist(data, {})
+            assert False, b
+        except ValueError:
+            pass
+    data = json.loads(json.dumps(cl.data))
+    next(i for p in data["phases"] for s in p["subphases"] for i in s["items"] if i["type"] == "action" and "inputs" not in i)["layout"] = "table"  # senza inputs
+    try:
+        C.Checklist(data, {})
+        assert False
+    except ValueError:
+        pass
     for b in ("src", "", None, ["dest"]):  # wx_hint non valido (solo "dest")
         data = json.loads(json.dumps(cl.data))
         next(i for p in data["phases"] for s in p["subphases"] for i in s["items"] if i["type"] == "action")["wx_hint"] = b

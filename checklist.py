@@ -154,6 +154,8 @@ class Checklist:
                         _check_craft(it)
                     if "inputs" in it:
                         _check_inputs(it)
+                    if "layout" in it and (it["layout"] != "table" or "inputs" not in it):  # solo rendering: card a tabella per i campi inline
+                        raise ValueError(f"{it['id']}: 'layout' non valido")
                     if "wx_hint" in it and (it["type"] not in ("action", "atc") or it["wx_hint"] not in ("dest", "dep")):
                         raise ValueError(f"{it['id']}: 'wx_hint' non valido")
                     for hk in ("atis_hint", "datis_hint"):  # righe ATIS di arrivo / partenza
@@ -226,6 +228,8 @@ class Checklist:
                     row["datis_hint"] = it["datis_hint"]
                 if it.get("atis_hint"):
                     row["atis_hint"] = it["atis_hint"]  # la pagina scrive la riga "ATIS: ..." dai campi annotati
+                if it.get("layout"):
+                    row["layout"] = it["layout"]
                 if it.get("inputs"):
                     row["inputs"] = it["inputs"]  # la pagina li scrive inline; i valori stanno in snapshot["fields"]
                 if raw is not None and link:
