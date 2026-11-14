@@ -653,12 +653,12 @@ def test_new_links_wellformed():
         "parking.exterior-lights": ["landing_l", "landing_r", "nose", "strobe", "beacon", "rwy_turnoff", "navlogo"],
         "securing-the-aircraft.exterior-lights": ["landing_l", "landing_r", "nose", "strobe", "beacon", "rwy_turnoff", "navlogo"],
         "after-landing.weather-radar": ["wx_sys"], "taxi-checklist.radar": ["wx_sys"], "descent-checklist.efis-option": ["cstr1", "cstr2"],
-        "landing.ground-spoilers": ["spoilers"], "after-landing.predictive-windshear-system": ["wx_pws"],
+        "ils-approach.appr-button-on-fcu": ["appr"], "ils-approach.autopilot-1-2": ["ap1", "ap2"], "landing.ground-spoilers": ["spoilers"], "after-landing.predictive-windshear-system": ["wx_pws"],
         "parking.anti-ice": ["eng1_ai", "eng2_ai"], "securing-the-aircraft.adirs-1-2-3": ["ir1", "ir2", "ir3"]}
     for iid, keys in expect.items():
         assert iid in cl.links and cl.links[iid]["verified"] is True, iid
         assert C.check_keys(cl.links[iid]["check"]) == keys, iid
-    for iid in ("after-landing.predictive-windshear-system", "securing-the-aircraft.adirs-1-2-3"):
+    for iid in ("after-landing.predictive-windshear-system",):
         assert set(cl.links[iid]["check"]) == {"show"}
     ai = cl.links["parking.anti-ice"]["check"]
     assert "all" in ai and [(c["key"], c["eq"]) for c in ai["all"]] == [("eng1_ai", "OFF"), ("eng2_ai", "OFF")]
@@ -666,6 +666,22 @@ def test_new_links_wellformed():
     assert C.evaluate(ai, {"eng1_ai": "OFF", "eng2_ai": "ON"})["status"] == "bad"
     assert C.evaluate(ai, {"eng1_ai": "ON", "eng2_ai": "OFF"})["status"] == "bad"
     assert C.evaluate(ai, {"eng1_ai": "OFF"})["status"] == "na" and C.evaluate(ai, {})["kind"] == "unreadable"
+    ev = lambda iid, lab: C.evaluate(cl.links[iid]["check"], lab)
+    ad = "securing-the-aircraft.adirs-1-2-3"
+    assert cl.links[ad]["check"]["all"] == [{"key": k, "eq": "OFF"} for k in ("ir1", "ir2", "ir3")]
+    assert ev(ad, {"ir1": "OFF", "ir2": "OFF", "ir3": "OFF"})["status"] == "ok" and ev(ad, {"ir1": "OFF", "ir2": "NAV", "ir3": "OFF"})["status"] == "bad"
+    assert ev(ad, {"ir1": "OFF", "ir2": "OFF"})["status"] == "na"
+    ap = "ils-approach.autopilot-1-2"
+    assert cl.links[ap]["check"]["all"] == [{"key": "ap1", "eq": "ON"}, {"key": "ap2", "eq": "ON"}]
+    assert ev(ap, {"ap1": "ON", "ap2": "ON"})["status"] == "ok" and ev(ap, {"ap1": "ON", "ap2": "OFF"})["status"] == "bad" and ev(ap, {"ap1": "ON"})["status"] == "na"
+    ap_ = "ils-approach.appr-button-on-fcu"
+    assert cl.links[ap_]["check"] == {"key": "appr", "eq": "ON"}
+    assert next(i for i in mon.ITEMS if i.key == "appr").lvar == "I_FCU_APPR"
+    npa = "non-precision-approach.manage-vert-guidance-appr-appr-button"
+    assert cl.links[npa]["check"] == {"key": "appr", "eq": "ON"} and cl.links[npa]["verified"] is True
+    assert ev(npa, {"appr": "ON"})["status"] == "ok" and ev(npa, {"appr": "OFF"})["status"] == "bad" and ev(npa, {})["status"] == "na"
+    assert ev(ap_, {"appr": "ON"})["status"] == "ok" and ev(ap_, {"appr": "OFF"})["status"] == "bad" and ev(ap_, {})["status"] == "na"
+    assert cl.links["takeoff.autopilot"]["check"] == {"show": ["ap1", "ap2"]} and "non-precision-approach.autopilot" not in cl.links
     allon = {k: "OFF" for k in expect["parking.exterior-lights"]}
     res = lambda iid, lab: C.evaluate(cl.links[iid]["check"], lab)["status"]
     assert res("securing-the-aircraft.exterior-lights", allon) == "ok"

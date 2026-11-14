@@ -104,6 +104,7 @@ ITEMS: list[Item] = [
     Item("ap1", "Glareshield", "Autopilot 1", "onoff", {}, None, "I_FCU_AP1"),  # lampada, da verificare dal vivo
     Item("ap2", "Glareshield", "Autopilot 2", "onoff", {}, None, "I_FCU_AP2"),
     Item("athr", "Glareshield", "Autothrust", "onoff", {}, None, "I_FCU_ATHR"),
+    Item("appr", "Glareshield", "APPR button", "onoff", {}, None, "I_FCU_APPR"),  # lampada, da verificare dal vivo
     Item("eng1_ai", "Anti-ice", "Engine 1 anti-ice sw", "onoff", {}, None, "S_OH_PNEUMATIC_ENG1_ANTI_ICE"),  # da verificare dal vivo
     Item("eng2_ai", "Anti-ice", "Engine 2 anti-ice sw", "onoff", {}, None, "S_OH_PNEUMATIC_ENG2_ANTI_ICE"),
     Item("autobrake_max", "Autobrake", "Autobrake MAX (lamp L)", "onoff", {"Before T/O": "ON"}, None, "I_MIP_AUTOBRAKE_MAX_L"),  # ipotesi: la lampada L si accende a MAX armato, da provare dal vivo

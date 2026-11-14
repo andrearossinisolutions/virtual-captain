@@ -1259,11 +1259,49 @@
  },
  "securing-the-aircraft.adirs-1-2-3": {
   "check": {
-   "show": [
-    "ir1",
-    "ir2",
-    "ir3"
+   "all": [
+    {
+     "key": "ir1",
+     "eq": "OFF"
+    },
+    {
+     "key": "ir2",
+     "eq": "OFF"
+    },
+    {
+     "key": "ir3",
+     "eq": "OFF"
+    }
    ]
+  },
+  "verified": true
+ },
+ "ils-approach.appr-button-on-fcu": {
+  "check": {
+   "key": "appr",
+   "eq": "ON"
+  },
+  "verified": true
+ },
+ "ils-approach.autopilot-1-2": {
+  "check": {
+   "all": [
+    {
+     "key": "ap1",
+     "eq": "ON"
+    },
+    {
+     "key": "ap2",
+     "eq": "ON"
+    }
+   ]
+  },
+  "verified": true
+ },
+ "non-precision-approach.manage-vert-guidance-appr-appr-button": {
+  "check": {
+   "key": "appr",
+   "eq": "ON"
   },
   "verified": true
  }
