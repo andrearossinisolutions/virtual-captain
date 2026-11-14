@@ -1087,5 +1087,178 @@
    "detent": "BETWEEN"
   },
   "verified": true
+ },
+ "securing-the-aircraft.battery-1-2": {
+  "check": {
+   "all": [
+    {
+     "key": "bat1",
+     "eq": "OFF"
+    },
+    {
+     "key": "bat2",
+     "eq": "OFF"
+    }
+   ]
+  },
+  "verified": true
+ },
+ "securing-the-aircraft.oxygen-crew-supply": {
+  "check": {
+   "key": "crew_oxy",
+   "eq": "OFF"
+  },
+  "verified": true
+ },
+ "parking.exterior-lights": {
+  "check": {
+   "all": [
+    {
+     "key": "landing_l",
+     "eq": [
+      "OFF",
+      "RETRACT"
+     ]
+    },
+    {
+     "key": "landing_r",
+     "eq": [
+      "OFF",
+      "RETRACT"
+     ]
+    },
+    {
+     "key": "nose",
+     "eq": "OFF"
+    },
+    {
+     "key": "strobe",
+     "eq": "OFF"
+    },
+    {
+     "key": "beacon",
+     "eq": "OFF"
+    },
+    {
+     "key": "rwy_turnoff",
+     "eq": "OFF"
+    },
+    {
+     "key": "navlogo",
+     "eq": [
+      "NAV",
+      "LOGO"
+     ]
+    }
+   ]
+  },
+  "verified": true
+ },
+ "securing-the-aircraft.exterior-lights": {
+  "check": {
+   "all": [
+    {
+     "key": "landing_l",
+     "eq": [
+      "OFF",
+      "RETRACT"
+     ]
+    },
+    {
+     "key": "landing_r",
+     "eq": [
+      "OFF",
+      "RETRACT"
+     ]
+    },
+    {
+     "key": "nose",
+     "eq": "OFF"
+    },
+    {
+     "key": "strobe",
+     "eq": "OFF"
+    },
+    {
+     "key": "beacon",
+     "eq": "OFF"
+    },
+    {
+     "key": "rwy_turnoff",
+     "eq": "OFF"
+    },
+    {
+     "key": "navlogo",
+     "eq": "OFF"
+    }
+   ]
+  },
+  "verified": true
+ },
+ "after-landing.weather-radar": {
+  "check": {
+   "key": "wx_sys",
+   "eq": "OFF"
+  },
+  "verified": true
+ },
+ "taxi-checklist.radar": {
+  "check": {
+   "key": "wx_sys",
+   "eq": [
+    "SYS 1",
+    "SYS 2"
+   ]
+  },
+  "verified": true
+ },
+ "descent-checklist.efis-option": {
+  "check": {
+   "all": [
+    {
+     "key": "cstr1",
+     "eq": "ON"
+    },
+    {
+     "key": "cstr2",
+     "eq": "ON"
+    }
+   ]
+  },
+  "verified": true
+ },
+ "landing.ground-spoilers": {
+  "check": {
+   "key": "spoilers",
+   "eq": "FULL"
+  },
+  "verified": true
+ },
+ "after-landing.predictive-windshear-system": {
+  "check": {
+   "show": [
+    "wx_pws"
+   ]
+  },
+  "verified": true
+ },
+ "parking.anti-ice": {
+  "check": {
+   "show": [
+    "eng1_ai",
+    "eng2_ai"
+   ]
+  },
+  "verified": true
+ },
+ "securing-the-aircraft.adirs-1-2-3": {
+  "check": {
+   "show": [
+    "ir1",
+    "ir2",
+    "ir3"
+   ]
+  },
+  "verified": true
  }
 }

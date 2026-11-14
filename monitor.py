@@ -155,8 +155,6 @@ ITEMS: list[Item] = [
     Item("trk_mag", "Flight data", "Track magnetic", "numeric", {}, "(A:GPS GROUND MAGNETIC TRACK, Degrees)"),
     Item("pitch", "Flight data", "Pitch (MSFS sign)", "numeric", {}, "(A:PLANE PITCH DEGREES, Degrees)"),
     Item("bank", "Flight data", "Bank (MSFS sign)", "numeric", {}, "(A:PLANE BANK DEGREES, Degrees)"),
-    Item("n1_1", "Engines", "N1 engine 1 (%)", "numeric", {}, "(A:TURB ENG N1:1, Percent)"),
-    Item("n1_2", "Engines", "N1 engine 2 (%)", "numeric", {}, "(A:TURB ENG N1:2, Percent)"),
 ]
 
 

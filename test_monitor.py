@@ -94,9 +94,9 @@ def test_detent_labels():
 
 
 def test_flight_items_std_only():
-    keys = ["lat", "lon", "gs", "hdg_mag", "trk_mag", "pitch", "bank", "n1_1", "n1_2"]
+    keys = ["lat", "lon", "gs", "hdg_mag", "trk_mag", "pitch", "bank"]
     for k in keys:
-        assert BY[k].group in ("Flight data", "Engines") and BY[k].kind == "numeric" and BY[k].std and BY[k].lvar is None
+        assert BY[k].group in ("Flight data",) and BY[k].kind == "numeric" and BY[k].std and BY[k].lvar is None
     from aao import AAO, MONITOR
     assert all(MONITOR[k]["std"] and MONITOR[k]["lvar"] is None for k in keys)
     _, m = AAO._parse({"getvars": []})
@@ -105,7 +105,7 @@ def test_flight_items_std_only():
 
 def test_flight_panel_values_and_dashes():
     raw = {"lat": 45.6301, "lon": -8.7202, "gs": 150.4, "hdg_mag": 168.4, "trk_mag": 170.2, "pitch": -5.04, "bank": 3.26,
-           "n1_1": 88.56, "n1_2": 90.0, "total_weight": 110231, "fuel_weight": 22046, "cfg_lbs": 0, "fob_now": 10000}
+           "total_weight": 110231, "fuel_weight": 22046, "cfg_lbs": 0, "fob_now": 10000}
     core = {"alt": 5000, "ias": 250, "vs": 1500, "agl": 4800, "on_ground": 0, "gear": 0, "landing": 0, "seatbelt": 1}
     d = dict(monitor.flight_panel(raw, core))
     assert d["Position"] == "45.6301\u00b0 N  8.7202\u00b0 W" and d["Ground speed"] == "150 kt"
@@ -116,7 +116,7 @@ def test_flight_panel_values_and_dashes():
     assert dict(monitor.flight_panel({**raw, "hdg_mag": float("nan")}, core))["Heading (mag)"] == "\u2014"
     assert dict(monitor.flight_panel({k: v for k, v in raw.items() if k not in ("cfg_lbs", "fob_now")}, core))["Position"].startswith("45.6301")
     assert dict(monitor.flight_panel({**raw, "gs": 1.5}, core))["Track (mag)"] == "\u2014"  # sotto 2 kt
-    bad = dict(monitor.flight_panel({"lat": None, "gs": float("nan"), "pitch": "x", "n1_1": None}, {"alt": None, "vs": "a"}))
+    bad = dict(monitor.flight_panel({"lat": None, "gs": float("nan"), "pitch": "x"}, {"alt": None, "vs": "a"}))
     assert all(bad[k] == "\u2014" for k in ("Ground speed", "Pitch", "Bank", "Track (mag)"))
     assert "0" not in bad["Position"] and " 0" not in bad["Core"].replace("Core", "")
     assert monitor.flight_pills({}, {}) == {"gs": "\u2014", "alt": "\u2014", "vs": "\u2014"}
@@ -130,11 +130,11 @@ def test_no_key_in_both_cards():
     cockpit = {r[0] for _, rows in build(raw) for r in rows}
     flight_names = {BY[k].name for k in ("lat", "lon", "gs", "hdg_mag", "trk_mag", "pitch", "bank")}
     assert not (cockpit & flight_names) and "Flight data" not in [g for g, _ in build(raw)]
-    assert {"N1 engine 1 (%)", "N1 engine 2 (%)"} <= cockpit and {"Total weight (MSFS, lbs)", "FOB (Fenix, display unit)"} <= cockpit
+    assert {"Total weight (MSFS, lbs)", "FOB (Fenix, display unit)"} <= cockpit
     labels = " ".join(r[0] for r in monitor.flight_panel(raw, {}))
-    assert "N1" not in labels and "weight" not in labels.lower() and "FOB" not in labels
+    assert "weight" not in labels.lower() and "FOB" not in labels
     from aao import MONITOR
-    assert all(k in MONITOR for k in ("lat", "lon", "gs", "hdg_mag", "trk_mag", "pitch", "bank", "n1_1", "n1_2"))  # restano nella richiesta AAO
+    assert all(k in MONITOR for k in ("lat", "lon", "gs", "hdg_mag", "trk_mag", "pitch", "bank"))  # restano nella richiesta AAO
 
 
 def test_read_all_fallback_new_keys_none():
@@ -147,7 +147,7 @@ def test_read_all_fallback_new_keys_none():
         return {"getvars": [{"var": v, "value": 1} for v in names]}
     a._get = fake
     values, m = a.read_all()
-    assert values["alt"] == 1.0 and m["gs"] is None and m["n1_2"] is None
+    assert values["alt"] == 1.0 and m["gs"] is None and m["bank"] is None
 
 
 if __name__ == "__main__":

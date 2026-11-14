@@ -642,6 +642,29 @@ def test_briefing_complete_restarts_checklist():
     assert st.cl_phase == st.cl_visible()[0]
 
 
+def test_new_links_wellformed():
+    cl = C.load()
+    expect = {
+        "securing-the-aircraft.battery-1-2": ["bat1", "bat2"], "securing-the-aircraft.oxygen-crew-supply": ["crew_oxy"],
+        "parking.exterior-lights": ["landing_l", "landing_r", "nose", "strobe", "beacon", "rwy_turnoff", "navlogo"],
+        "securing-the-aircraft.exterior-lights": ["landing_l", "landing_r", "nose", "strobe", "beacon", "rwy_turnoff", "navlogo"],
+        "after-landing.weather-radar": ["wx_sys"], "taxi-checklist.radar": ["wx_sys"], "descent-checklist.efis-option": ["cstr1", "cstr2"],
+        "landing.ground-spoilers": ["spoilers"], "after-landing.predictive-windshear-system": ["wx_pws"],
+        "parking.anti-ice": ["eng1_ai", "eng2_ai"], "securing-the-aircraft.adirs-1-2-3": ["ir1", "ir2", "ir3"]}
+    for iid, keys in expect.items():
+        assert iid in cl.links and cl.links[iid]["verified"] is True, iid
+        assert C.check_keys(cl.links[iid]["check"]) == keys, iid
+    for iid in ("after-landing.predictive-windshear-system", "parking.anti-ice", "securing-the-aircraft.adirs-1-2-3"):
+        assert set(cl.links[iid]["check"]) == {"show"}
+    allon = {k: "OFF" for k in expect["parking.exterior-lights"]}
+    res = lambda iid, lab: C.evaluate(cl.links[iid]["check"], lab)["status"]
+    assert res("securing-the-aircraft.exterior-lights", allon) == "ok"
+    assert res("parking.exterior-lights", allon) == "bad"
+    assert res("parking.exterior-lights", {**allon, "navlogo": "NAV"}) == "ok"
+    assert res("taxi-checklist.radar", {"wx_sys": "SYS 2"}) == "ok" and res("taxi-checklist.radar", {"wx_sys": "OFF"}) == "bad"
+    assert res("landing.ground-spoilers", {"spoilers": "FULL"}) == "ok" and res("landing.ground-spoilers", {"spoilers": "ARM"}) == "bad"
+
+
 if __name__ == "__main__":
     test_fob_zfw_items_and_tolerance()
     test_briefing_complete_restarts_checklist()
@@ -649,6 +672,7 @@ if __name__ == "__main__":
     test_flap_and_taxi_alt_links()
     test_files_valid()
     test_links_reference_real_things()
+    test_new_links_wellformed()
     test_new_links_show_optional()
     test_thrust_levers_show()
     test_validation_rejects_bad_data()

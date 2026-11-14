@@ -45,7 +45,7 @@ def sim_monitor(t, roll):
             "baro_std": 0 if t < 20 else 1, "baro_hpa": 1013, "baro_inch": 29.92,
             "lat": 45.63 + t * 0.001, "lon": 8.72 + t * 0.001, "gs": t * 20 if roll else 165,
             "hdg_mag": 168.0, "trk_mag": 170.0, "pitch": 0.0 if roll else -12.0, "bank": 1.5 if t % 4 else -1.5,
-            "n1_1": 88.5, "n1_2": None, "total_weight": 150000, "fuel_weight": 40000, "cfg_lbs": 0, "fuel_total": 18.1}
+            "total_weight": 150000, "fuel_weight": 40000, "cfg_lbs": 0, "fuel_total": 18.1}
 
 
 def show_qr(url):
