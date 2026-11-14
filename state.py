@@ -25,7 +25,7 @@ FIELDS = [("origin", "Departure"), ("destination", "Arrival"), ("dep_time", "Dep
 INFLIGHT = [("runway", "T/O runway"), ("ta", "Transition altitude (ft)"), ("thr_red_agl", "Thrust reduction (ft AGL)"),
             ("accel_agl", "Acceleration (ft AGL)"), ("v1", "V1"), ("vr", "VR"), ("v2", "V2"), ("flap", "Flap"),
             ("fob", "FOB"), ("zfw", "ZFW"), ("zfwcg", "ZFWCG"), ("taxiway", "Taxiway"),
-            ("atis_letter", "ATIS letter"), ("atis_rwy", "Landing runway(s)"), ("atis_wind", "Wind"), ("atis_qnh", "QNH"),
+            ("atis_letter", "ATIS letter"), ("atis_rwy", "Landing runway(s)"), ("atis_wind", "Wind"), ("atis_qnh", "QNH"), ("atis_tl", "Transition level"),
             ("datis_letter", "ATIS letter"), ("datis_rwy", "Departure runway(s)"), ("datis_wind", "Wind"), ("datis_qnh", "QNH")]
 ALL_FIELDS = FIELDS + INFLIGHT
 FROM_PLAN = ["origin", "destination", "dep_time", "ta", "v1", "vr", "v2", "flap", "fob", "zfw"]  # runway deriva da origin; accel/thr_red solo manuali
@@ -33,8 +33,8 @@ PLAN_RESET = ["runway", "ta", "v1", "vr", "v2", "flap", "fob", "zfw"]  # tornano
 REMEMBERED = ["thr_red_agl", "accel_agl"]  # unico campo dei dati di volo che si ricorda
 MODES = ("normal", "training")
 CL_MODES = ("complete", "simplified")
-CLR_KEYS = ("c", "r", "a", "f", "t")  # CRAFT: cleared to, route, altitude, frequency, transponder (solo memoria, mai salvato)
-CLR_MAX = {"c": 40, "r": 400, "a": 20, "f": 20, "t": 4}
+CLR_KEYS = ("c", "w", "r", "a", "f", "t")  # CRAFT: cleared to, pista in uso (opzionale), route, altitude, frequency, transponder (solo memoria, mai salvato)
+CLR_MAX = {"c": 40, "w": 12, "r": 400, "a": 20, "f": 20, "t": 4}
 CALIB_STALE = 3.0  # secondi: oltre, le letture non valgono per registrare un passo
 CALIB_ACTIONS = ("start", "next", "back", "skip", "cancel", "clear")
 
@@ -47,11 +47,13 @@ def _clean_clr(k: str, v) -> str:
     v = str(v).strip()
     if k == "t":
         return v if len(v) <= CLR_MAX["t"] and all(ch in "01234567" for ch in v) else None
+    if k == "w":
+        return clean_field("atis_rwy", v)  # stesso sanificatore delle piste ("17R/17L")
     return v[:CLR_MAX[k]]
 
 
 ATIS_PARTS = ("letter", "rwy", "wind", "qnh")
-ATIS_KEYS = tuple("atis_" + p for p in ATIS_PARTS)  # annotazioni dell'ATIS di arrivo: solo memoria, azzerate col nuovo piano e al ritorno in briefing
+ATIS_KEYS = tuple("atis_" + p for p in ATIS_PARTS + ("tl",))  # annotazioni dell'ATIS di arrivo: solo memoria, azzerate col nuovo piano e al ritorno in briefing
 DATIS_KEYS = tuple("datis_" + p for p in ATIS_PARTS)  # ATIS di partenza: solo memoria, azzerate solo col nuovo piano
 QNH_OK = ((950.0, 1050.0), (28.0, 31.0))  # QNH da ATIS plausibile: hPa (4 cifre) o inHg (con punto)
 QNH_WARN = 3.0  # hPa: oltre questa differenza tra QNH dell'ATIS e del METAR si avvisa (solo avviso)
@@ -99,6 +101,10 @@ def clean_field(k: str, v) -> str:
             elif c == "." and not dot:
                 out, dot = out + c, True
         return out[:5]
+    if k == "atis_tl":  # transition level (solo arrivo): "070" / "FL70" -> prefisso FL scartato, solo cifre, max 3
+        fl = u.startswith("FL")  # prefisso FL esplicito: riempito a 3 cifre ("FL70" -> "070"); senza FL nessun riempimento (digitazione in corso)
+        d = "".join(c for c in re.sub(r"^FL", "", u) if c.isascii() and c.isdigit())[:3]
+        return d.zfill(3) if fl and d else d
     return s
 
 
@@ -273,7 +279,7 @@ class State:
         with self.lock:
             live = raw is not None and self.phase == "flying"
             if live:
-                raw = {**raw, **thrust.annotate(raw, self.thrust_cal), **mon.weight_annotate(raw)}
+                raw = {**raw, **thrust.annotate(raw, self.thrust_cal), **mon.weight_annotate(raw), **mon.vs_annotate(raw, self.core), **mon.autobrake_state(raw)}
                 self.set_calib_raw(raw)
             self.monitor = mon.build(raw) if live else []
             self.labels = mon.clean_labels(raw) if live else {}
@@ -481,6 +487,10 @@ class State:
             a = atis_qnh_hpa(self.fields.get(pre + "_qnh"))  # QNH annotato dall'ATIS (se plausibile) prima del METAR
             q = self.weather.get(parse_dep(self.fields.get(k, ""))[0])
             e[ref] = f"{a:.0f} hPa (ATIS)" if a is not None else (f"{q:.0f} hPa (METAR)" if q is not None else "")
+        tl = self.fields.get("atis_tl", "")
+        alt = self.core.get("alt")
+        e["fld.atis_tl"] = tl  # livello di transizione dell'ATIS di arrivo: la voce baro a TL si valuta solo sotto
+        e["sys.alt"] = "" if alt is None else str(alt)  # quota letta dal monitor (pill ALT), piedi
         e["cal.thrust"] = "1" if self.thrust_cal else ""  # vuoto: i link {"detent"} mostrano solo NOW
         e["plan.sid"] = str((self.plan or {}).get("sid") or "")
         return e

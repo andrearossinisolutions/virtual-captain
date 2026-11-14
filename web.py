@@ -77,14 +77,14 @@ main.fv{max-width:none;padding:12px 16px}
 .cli.st-ok{border-left-color:var(--ok)}.cli.st-ok .ic{color:var(--ok)}
 .cli.st-bad{border-left-color:var(--bad);background:rgba(227,86,74,.08)}.cli.st-bad .ic{color:var(--bad)}
 .cli.st-opt{border-left-color:var(--opt)}.cli.st-opt .ic{color:var(--opt)}
-.cli.st-na{border-left-color:#5d6d7d}.cli.st-na .ic{color:#6b7c8d;font-size:12px;font-weight:500}.cli .ic.w{flex:0 0 5.2em;min-width:5.2em;white-space:nowrap;text-align:left}.cli .rw{font:12px ui-monospace,monospace;color:var(--mut);word-break:break-all}
+.cli.st-wait{border-left-color:#5d6d7d}.cli.st-wait .ic{color:var(--mut);opacity:.7}.cli.st-na{border-left-color:#5d6d7d}.cli.st-na .ic{color:#6b7c8d;font-size:12px;font-weight:500}.cli .ic.w{flex:0 0 5.2em;min-width:5.2em;white-space:nowrap;text-align:left}.cli .rw{font:12px ui-monospace,monospace;color:var(--mut);word-break:break-all}
 .cli.t-atc .e,.cli.t-announce .e,.cli.t-note .e{font-style:italic;color:var(--mut)}
 .badge{display:inline-block;font-size:11px;font-style:normal;font-weight:700;letter-spacing:.05em;border:1px solid var(--bd);border-radius:6px;padding:1px 6px;margin-right:6px;color:var(--warn)}
 .cli .a.set{color:var(--fg);font-weight:600}
 .craft{background:#0c131b;border:1px solid var(--bd);border-radius:10px;padding:8px;margin:8px 0;break-inside:avoid}
 .craft .ch{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--warn);margin-bottom:4px}
-.craft .cf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 6px}.craft .cf .w{grid-column:1/-1}@media(max-width:420px){.craft input{padding:5px 6px}}  /* CRAFT: Cleared to e Route a tutta larghezza, poi A, F, T su tre colonne */
-.craft.tbl .cf{grid-template-columns:.5fr 1.7fr 1.2fr 1.7fr;gap:4px}@media(max-width:420px){.craft.tbl .tc .fld{padding:5px 4px;font-size:15px}.craft.tbl .tr{gap:2px}.craft.tbl .plus{min-width:30px}.craft.tbl .plus.un{min-width:34px;font-size:11px}}.craft.tbl .tr{display:flex;align-items:center;gap:4px}.craft.tbl .tr .fld{flex:1 1 0;min-width:0}.craft.tbl .plus{flex:0 0 auto;min-width:34px;height:28px;margin:0;padding:0;font-size:20px;line-height:1;font-weight:600;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer;touch-action:manipulation}.craft.tbl .plus.un{font-size:12px;min-width:40px}.craft.tbl .tc .fld{display:block;cursor:pointer;min-height:1.6em;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:var(--card);overflow:hidden;white-space:nowrap}.craft.tbl .tc .fld.nv{color:var(--mut)}.craft.tbl .tc .fld.set{color:var(--fg);font-weight:600}.craft.tbl .tc .fld input{padding:0;border:0;background:transparent}
+.craft .cf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 6px}.craft .cf .w{grid-column:1/-1}.craft .cf .c2{grid-column:span 2}@media(max-width:420px){.craft input{padding:5px 6px}}  /* CRAFT: Cleared to e Route a tutta larghezza, poi A, F, T su tre colonne */
+.craft.tbl .cf{grid-template-columns:.5fr 1.7fr 1.2fr 1.7fr;gap:4px}.craft.tbl .cf.c5 .tc:nth-child(5){grid-column:1/3}@media(max-width:420px){.craft.tbl .tc .fld{padding:5px 4px;font-size:15px}.craft.tbl .tr{gap:2px}.craft.tbl .plus{min-width:30px}.craft.tbl .plus.un{min-width:34px;font-size:11px}}.craft.tbl .tr{display:flex;align-items:center;gap:4px}.craft.tbl .tr .fld{flex:1 1 0;min-width:0}.craft.tbl .plus{flex:0 0 auto;min-width:34px;height:28px;margin:0;padding:0;font-size:20px;line-height:1;font-weight:600;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer;touch-action:manipulation}.craft.tbl .plus.un{font-size:12px;min-width:40px}.craft.tbl .tc .fld{display:block;cursor:pointer;min-height:1.6em;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:var(--card);overflow:hidden;white-space:nowrap}.craft.tbl .tc .fld.nv{color:var(--mut)}.craft.tbl .tc .fld.set{color:var(--fg);font-weight:600}.craft.tbl .tc .fld input{padding:0;border:0;background:transparent}
 .craft label{display:block;font-size:11px;color:var(--mut);line-height:1.2}
 .craft input,.craft textarea{width:100%;padding:5px 8px;font-size:16px;border-radius:8px;border:1px solid var(--bd);background:var(--card);color:var(--fg);scroll-margin-bottom:calc(var(--sp-h,120px) + 24px)}
 .craft textarea{font:16px/1.3 ui-monospace,monospace;text-transform:uppercase;min-height:3.6em;resize:vertical}
@@ -248,11 +248,11 @@ function clrSend(){clearTimeout(clrTimer);clrTimer=null;if(craftEl)api("/api/cle
 function craftNode(it){if(craftEl)return craftEl;
   const el=document.createElement("div");el.className="craft";const h=document.createElement("div");h.className="ch";h.textContent=it.text;el.appendChild(h);
   const g=document.createElement("div");g.className="cf";
-  for(const f of it.fields){const d=document.createElement("div");const w=f.k==="r"||f.k==="c";if(w)d.className="w";
+  for(const f of it.fields){const d=document.createElement("div");if(f.k==="r")d.className="w";else if(f.k==="c")d.className="c2";
     const lb=document.createElement("label");lb.textContent=f.label;const i=document.createElement(f.k==="r"?"textarea":"input");i.dataset.c=f.k;
     i.setAttribute("autocomplete","off");i.setAttribute("autocapitalize",f.k==="t"?"off":"characters");i.setAttribute("autocorrect","off");i.spellcheck=false;
     if(f.k==="t"){i.inputMode="numeric";i.maxLength=4;i.pattern="[0-7]*"}
-    i.oninput=()=>{if(f.k==="t"){const v=i.value.replace(/[^0-7]/g,"");if(v!==i.value)i.value=v}clearTimeout(clrTimer);clrTimer=setTimeout(clrSend,400)};
+    i.oninput=()=>{if(f.k==="t"){const v=i.value.replace(/[^0-7]/g,"");if(v!==i.value)i.value=v}if(f.k==="f"&&i.value.length===7){const n=craftEl.querySelector('[data-c="t"]');if(n)n.focus()}clearTimeout(clrTimer);clrTimer=setTimeout(clrSend,400)};
     i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();i.blur()}};
     d.appendChild(lb);d.appendChild(i);g.appendChild(d)}
   el.appendChild(g);const b=document.createElement("div");b.className="cb";const rb=document.createElement("button");rb.className="ghost";rb.textContent="Reset to plan";
@@ -266,11 +266,12 @@ function fval(k){return k in inpDirty?inpDirty[k]:((last&&last.fields[k])||"")}
 function fShow(el){if(el.querySelector("input"))return;const v=fval(el.dataset.f);el.textContent="";el.className="fld"+(v?" set":" nv")+(el.dataset.w?" w":"")+(/^d?atis_rwy$/.test(el.dataset.f)&&last&&last.rwy_bad&&last.rwy_bad[el.dataset.f.replace("_rwy","")]?" rb":"");
   el.textContent=el.dataset.pf?el.dataset.pf+" "+(v||"---"):v||(el.dataset.r&&!el.dataset.pre?el.dataset.r:(el.dataset.pre?el.dataset.pre+" ":"")+"---")}
 // ATIS-PURE-BEGIN (regole pure: provate anche con node nei test)
-const ATIS_FULL={letter:/^[A-Z]$/,rwy:/(^|\/)\d{2}[LRC]$/,wind:/^(\d{3}|VRB)\/\d{2}$/,qnh:/^(\d{4}|\d{2}\.\d{2})$/};  // valore completo: passa al campo successivo (QNH: ultimo, chiude)
+const ATIS_FULL={letter:/^[A-Z]$/,rwy:/(^|\/)\d{2}[LRC]$/,wind:/^(\d{3}|VRB)\/\d{2}$/,qnh:/^(\d{4}|\d{2}\.\d{2})$/,tl:/^\d{3}$/};  // valore completo: passa al campo successivo (arrivo: TL ultimo, chiude; partenza: QNH ultimo)
 // sanifica un campo ATIS mentre si scrive; typed: digitazione vera (non incolla); inMode: QNH in inHg (3 cifre -> "29.9")
 function atisClean(sf,v,typed,inMode){let u;
   if(sf==="letter")return v.toUpperCase().replace(/[^A-Z]/g,"").slice(0,1);
   if(sf==="rwy")return v.toUpperCase().replace(/[\s,]+/g,"/").replace(/[^0-9LRC\/]/g,"").replace(/\/+/g,"/").replace(/^\//,"").slice(0,12);
+  if(sf==="tl"){const fl=/^\s*FL/i.test(v),d=v.toUpperCase().replace(/^\s*FL/,"").replace(/\D/g,"").slice(0,3);return fl&&!typed&&d?d.padStart(3,"0"):d}  // "FL70" incollato -> "070"; digitando niente riempimento (si completa alla chiusura del campo)  // transition level: "FL70" -> "70"; solo cifre, max 3
   if(sf==="wind"){u=v.toUpperCase().replace(/[^0-9\/GVRBKT]/g,"").replace(/\/+/g,"/").slice(0,12);u=u.replace(/^(\d{3}|VRB)(\d)/,"$1/$2");  // direzione + cifre senza "/": lo rimette
     if(typed&&/^(\d{3}|VRB)$/.test(u))u+="/";return u}  // direzione completa digitata: "/" automatico (non su incolla)
   u=v.replace(/[^\d.]/g,"").replace(/^([^.]*\.?)(.*)$/,(m,a,b)=>a+b.replace(/\./g,""));
@@ -284,7 +285,7 @@ function qnhFull(v){return /^\d{4}$/.test(v)||/^\d{2}\.\d{2}$/.test(v)}  // solo
 // ATIS-PURE-END
 function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f,i=document.createElement("input");i.value=fval(k);i.dataset.f=k;
   const sf=k.replace(/^d?atis_/,""),isA=sf!==k,txt=["runway","flap","taxiway"].includes(k)||isA&&["letter","rwy","wind"].includes(sf);i.inputMode=txt?"text":k==="zfwcg"||isA&&sf==="qnh"?"decimal":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
-  let done=false;const end=()=>{if(done)return;done=true;if(isA&&sf==="rwy"&&/\/$/.test(i.value)){i.value=i.value.replace(/\/+$/,"");inpDirty[k]=i.value}inpSend();i.remove();fShow(el)};
+  let done=false;const end=()=>{if(done)return;done=true;if(isA&&sf==="tl"&&/^\d{1,2}$/.test(i.value)){i.value=i.value.padStart(3,"0");inpDirty[k]=i.value}if(isA&&sf==="rwy"&&/\/$/.test(i.value)){i.value=i.value.replace(/\/+$/,"");inpDirty[k]=i.value}inpSend();i.remove();fShow(el)};
   const nextF=()=>{const tc=el.closest(".tc");if(tc){const c=tc.nextElementSibling;return c&&c.querySelector(".fld")}let n=el.nextElementSibling;while(n&&!n.dataset.f)n=n.nextElementSibling;return n};  // tabella ATIS: il campo successivo e' nella cella accanto
   const adv=()=>{const n=nextF();end();if(n)fStart(n)};
   i.oninput=ev=>{if(k==="runway")i.value=i.value.toUpperCase();if(isA){const nv=atisClean(sf,i.value,/^(insertText|insertCompositionText)$/.test(ev&&ev.inputType||""),sf==="qnh"&&qnhInMode(k,i.value));if(nv!==i.value){i.value=nv;if(sf==="wind"){const n=nv.length;try{i.setSelectionRange(n,n)}catch(e){}}}}  /* riassegna (e cursore in fondo dopo il "/" rimesso) solo se il valore pulito differisce: niente salti a meta' stringa ne' interferenza con l'IME */if(k==="taxiway")i.value=i.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);
@@ -298,7 +299,7 @@ function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f
 // risposta lunga (piu' di 40 caratteri o con "Eg."): sotto il titolo a tutta larghezza invece che nella colonna destra
 function longAns(t){return t.length>40||t.includes("Eg.")}
 // card a tabella per l'ATIS (stile CRAFT): etichetta sopra, valore sotto; stessi campi inline (.fld) di prima, quindi stessi sanificatori, persistenza e focus
-const TL={letter:"INFO",rwy:"RWY",wind:"WIND",qnh:"QNH"};
+const TL={letter:"INFO",rwy:"RWY",wind:"WIND",qnh:"QNH",tl:"TL"};
 // "+" accanto a RWY: torna nel campo (anche se il focus e' passato oltre), aggiunge "/" in coda se c'e' una pista e c'e' posto per altre 3 cifre (max 12 caratteri), cursore in fondo; la pulizia del "/" finale resta alla chiusura
 function addRwy(c){let i=c.querySelector("input");if(!i){fStart(c);i=c.querySelector("input")}if(!i)return;const k=c.dataset.f,v=i.value;
   if(v&&!v.endsWith("/")&&v.length+4<=12){i.value=v+"/";inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400)}
@@ -308,7 +309,7 @@ function toggleQnh(c){const k=c.dataset.f,i=c.querySelector("input"),v=(i?i.valu
   qnhUnits();if(i){i.focus({preventScroll:true});const n=i.value.length;try{i.setSelectionRange(n,n)}catch(e){}}}
 function qnhUnits(){document.querySelectorAll("#clbody .un").forEach(b=>{b.textContent=qUnit(b.dataset.f,fval(b.dataset.f).trim())})}
 function tableNode(it){const el=document.createElement("div");el.className="a lg craft tbl";const h=document.createElement("div");h.className="ch";h.textContent=(/^datis_/.test(it.inputs[0].k)?"DEP":"ARR")+" ATIS";el.appendChild(h);
-  const g=document.createElement("div");g.className="cf";
+  const g=document.createElement("div");g.className="cf"+(it.inputs.length>4?" c5":"");
   for(const f of it.inputs){const d=document.createElement("div");d.className="tc";const lb=document.createElement("label");lb.textContent=TL[f.k.replace(/^d?atis_/,"")]||f.label;
     const c=document.createElement("span");c.dataset.f=f.k;c.dataset.l=f.label;c.title=f.label;c.onclick=()=>fStart(c);fShow(c);
     const tr=document.createElement("div");tr.className="tr";tr.appendChild(c);  // riga del valore: campo flessibile + controllo piccolo a destra (le etichette restano tutte alla stessa altezza)
@@ -333,7 +334,7 @@ const NATO={A:"Alpha",B:"Bravo",C:"Charlie",D:"Delta",E:"Echo",F:"Foxtrot",G:"Go
 // riga "ATIS: Information KILO (K) · RWY 35L · QNH 1013 · Wind 270/12" dai campi annotati (solo quelli presenti, ordine fisso); vuota se nessun dato
 function atisLine(keys,pre){const v=k=>fval(pre+"_"+k).trim(),p=[],l=v("letter");
   if(keys.includes("letter")&&l)p.push("Information "+(NATO[l]||l)+" ("+l+")");
-  if(keys.includes("rwy")&&v("rwy"))p.push("RWY "+v("rwy"));if(keys.includes("qnh")&&v("qnh"))p.push("QNH "+v("qnh"));if(keys.includes("wind")&&v("wind"))p.push("Wind "+v("wind"));
+  if(keys.includes("rwy")&&v("rwy"))p.push("RWY "+v("rwy"));if(keys.includes("qnh")&&v("qnh"))p.push("QNH "+v("qnh"));if(keys.includes("wind")&&v("wind"))p.push("Wind "+v("wind"));if(keys.includes("tl")&&v("tl"))p.push("TL "+v("tl"));
   return p}  // parti della riga ("Information Kilo (K)", "RWY 35L", ...); la pagina le unisce con " \u00b7 " dopo "ATIS: "
 // METAR della destinazione sotto la voce (snapshot wx_dest, testo gia' formattato dal server): riga dati + grezzo piccolo; senza dati "METAR not available" attenuato
 function wxFill(s){document.querySelectorAll("#clbody .wh").forEach(e=>{const w=s["wx_"+e.dataset.w];e.textContent="";e.classList.toggle("nd",!w);
@@ -359,7 +360,7 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
   for(const sp of c.subphases){if(sp.name)body.appendChild(mk("h3","",sp.name));
     for(const it of sp.items){if(it.type==="craft"){body.appendChild(craftNode(it));continue}
       const r=mk("div","cli st-"+it.status+" t-"+it.type);
-      const ic=it.status==="ok"?"\u2713":it.status==="bad"?"\u2717":it.status==="opt"?"\u25cb":it.status==="na"?(it.kind==="unverified"?"unverified":"n/d"):"\u00b7";
+      const ic=it.status==="ok"?"\u2713":it.status==="bad"?"\u2717":it.status==="opt"?"\u25cb":it.status==="wait"?"\u23f3":it.status==="na"?(it.kind==="unverified"?"unverified":"n/d"):"\u00b7";
       if(ic.length>2)r.classList.add("wl");
       r.appendChild(mk("div","ic"+(ic.length>2?" w":""),ic));const tx=mk("div","tx");const e=mk("div","e");
       if(it.type==="atc")e.appendChild(mk("span","badge","ATC"));if(it.type==="announce")e.appendChild(mk("span","badge","ANNOUNCE"));
@@ -370,6 +371,7 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(showLive&&it.live&&it.live.length)tx.appendChild(mk("div","lv","Actual: "+it.live.map(l=>(it.live.length>1?l[0]+" ":"")+l[1]).join(" \u00b7 ")));
       if(s.test_links&&it.raw&&it.raw.length)tx.appendChild(mk("div","rw",it.raw.map(l=>l[0]+"="+l[1]).join(" \u00b7 ")));
       if(it.show&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","NOW: "+it.live.map(l=>l[1]).join(", ")));
+      if(it.kind==="wait")tx.appendChild(mk("div","now nv","After TL"+(it.detail?" ("+it.detail+")":"")));
       if(it.kind==="mismatch"){const mm=[...it.detail.matchAll(/actual ([^;,]+)/g)].map(m=>m[1].trim());
         tx.appendChild(mm.length?mk("div","now","NOW: "+mm.join(", ")):mk("div","d",it.detail))}
       r.appendChild(tx);body.appendChild(r)}}

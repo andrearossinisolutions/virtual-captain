@@ -873,7 +873,8 @@
  },
  "descent-checklist.barometric-reference": {
   "check": {
-   "qnh": "wx.qnh_dest"
+   "qnh": "wx.qnh_dest",
+   "gate_tl": true
   },
   "verified": true
  },
@@ -1212,6 +1213,22 @@
   },
   "verified": true
  },
+ "descent-checklist.ls-button": {
+  "check": {
+   "show": [
+    "ls1",
+    "ls2"
+   ]
+  },
+  "verified": true
+ },
+ "descent-checklist.descent": {
+  "check": {
+   "key": "vs_fpm",
+   "lt": -100
+  },
+  "verified": true
+ },
  "descent-checklist.efis-option": {
   "check": {
    "all": [
@@ -1302,6 +1319,57 @@
   "check": {
    "key": "appr",
    "eq": "ON"
+  },
+  "verified": true
+ },
+ "descent-preparation.auto-brake": {
+  "check": {
+   "key": "autobrake_sel",
+   "eq": [
+    "LO",
+    "MED",
+    "MAX"
+   ]
+  },
+  "verified": true
+ },
+ "ils-approach.autobrakes": {
+  "check": {
+   "key": "autobrake_sel",
+   "eq": [
+    "LO",
+    "MED",
+    "MAX"
+   ]
+  },
+  "verified": true
+ },
+ "non-precision-approach.autobrakes": {
+  "check": {
+   "key": "autobrake_sel",
+   "eq": [
+    "LO",
+    "MED",
+    "MAX"
+   ]
+  },
+  "verified": true
+ },
+ "descent-preparation.engine-anti-ice": {
+  "check": {
+   "show": [
+    "eng1_ai",
+    "eng2_ai",
+    "sat"
+   ]
+  },
+  "verified": true
+ },
+ "landing.autobrakes": {
+  "check": {
+   "show": [
+    "autobrake_sel"
+   ]
   },
   "verified": true
  }

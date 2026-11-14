@@ -9,10 +9,10 @@ import thrust
 from checklist_eval import BY_KEY, REFS, _refs, evaluate, qnh_actual
 
 HERE = pathlib.Path(__file__).resolve().parent
-ATIS_HINT = ("letter", "rwy", "qnh", "wind")  # dati ATIS annotati mostrati sotto una voce (ordine canonico della riga)
+ATIS_HINT = ("letter", "rwy", "qnh", "wind", "tl")  # dati ATIS annotati mostrati sotto una voce (ordine canonico della riga)
 TYPES = ("action", "announce", "atc", "note", "craft")
-CRAFT_KEYS = ("c", "r", "a", "f", "t")
-INPUT_KEYS = ("runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg", "taxiway", "atis_letter", "atis_rwy", "atis_wind", "atis_qnh", "datis_letter", "datis_rwy", "datis_wind", "datis_qnh")  # campi di State.fields modificabili dalle voci
+CRAFT_KEYS = ("c", "w", "r", "a", "f", "t")
+INPUT_KEYS = ("runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg", "taxiway", "atis_letter", "atis_rwy", "atis_wind", "atis_qnh", "atis_tl", "datis_letter", "datis_rwy", "datis_wind", "datis_qnh")  # campi di State.fields modificabili dalle voci
 
 
 def _check_keys(check: dict, where: str, inner: bool = False) -> None:
@@ -36,7 +36,7 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
             raise ValueError(f"{where}: 'std' non valido")
         return
     if "qnh" in check:
-        if inner or set(check) != {"qnh"} or check["qnh"] not in ("wx.qnh_dep", "wx.qnh_dest"):
+        if inner or set(check) - {"qnh", "gate_tl"} or check.get("gate_tl", True) is not True or check["qnh"] not in ("wx.qnh_dep", "wx.qnh_dest"):
             raise ValueError(f"{where}: 'qnh' non valido")
         return
     if "all" in check:
@@ -65,6 +65,10 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
             raise ValueError(f"{where}: eq_ref {check['eq_ref']} non ammesso su {key}")
         if mon.MAPS[BY_KEY[key].kind] and BY_KEY[key].kind != "flap":
             raise ValueError(f"{where}: eq_ref non ammesso su {key} (ha una mappa di etichette)")
+        return
+    if "lt" in check:  # numerico: valore < soglia (es. VS < 0), solo fuori da 'all'
+        if inner or set(check) != {"key", "lt"} or BY_KEY[key].kind != "numeric" or isinstance(check["lt"], bool) or not isinstance(check["lt"], (int, float)):
+            raise ValueError(f"{where}: 'lt' non valido")
         return
     eq = check.get("eq")
     wanted = [eq] if isinstance(eq, str) else eq

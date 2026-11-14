@@ -303,7 +303,7 @@ def test_departure_clearance():
     assert ids == ["departure-clearance." + k for k in ("expected-rwy", "mcdu-departure-page", "available-sids",
                                                         "obtain-departure-clearance", "craft", "check-cleared-sid")]
     craft = _items(cl)["departure-clearance.craft"]
-    assert craft["type"] == "craft" and [f["k"] for f in craft["fields"]] == ["c", "r", "a", "f", "t"]
+    assert craft["type"] == "craft" and [f["k"] for f in craft["fields"]] == ["c", "w", "r", "a", "f", "t"]
     assert [s["name"] for s in cl.phase("fmgs-performance-glareshield")["subphases"]] == ["PERFORMANCE", "GLARESHIELD / PEDESTAL"]
     assert "fmgs-performance-glareshield.check-boarding-completed" in _items(cl)
     assert not any("d-i-f-s-r-i-p" in i for i in _items(cl)) and not any("d-i-f-s-r-i-p" in k for k in cl.links)
@@ -343,6 +343,7 @@ def test_craft_validation():
     data = json.loads(json.dumps(cl.data))
     for it in [i for p in data["phases"] for s in p["subphases"] for i in s["items"] if i["type"] == "craft"]:
         it["fields"] = it["fields"][:-1]
+    assert [f["label"] for f in cl.phase("departure-clearance")["subphases"][0]["items"][4]["fields"]] == ["Cleared to", "RWY in use", "Route", "Initial Climb", "Frequency", "Squawk"]
     try:
         C.Checklist(data, {})
         assert False
@@ -397,9 +398,12 @@ def test_expected_links():
 def test_clearance_state():
     cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
     st = State(cfg)
-    assert st.clearance == {k: "" for k in ["c", "r", "a", "f", "t"]} and st.snapshot()["clearance"] == st.clearance
+    assert st.clearance == {k: "" for k in ["c", "w", "r", "a", "f", "t"]} and st.snapshot()["clearance"] == st.clearance
     st.set_clearance({"a": " FL100 ", "t": "2000", "zzz": "x", "f": "126.5"})
     assert st.clearance["a"] == "FL100" and st.clearance["t"] == "2000" and "zzz" not in st.clearance
+    st.set_clearance({"w": " 17r  17l,x"})
+    assert st.clearance["w"] == "17R/17L"
+    st.set_clearance({"w": ""})
     st.set_clearance({"r": "x" * 900})
     assert len(st.clearance["r"]) == 400
     for bad in ({"t": "20000"}, {"t": "2008"}, {"t": "ab"}, {"a": ["x"]}, {"c": None}, [1]):
@@ -416,12 +420,12 @@ def test_clearance_state():
     st.fields["destination"], st.plan = "LIRF", {"route": "SID DCT ABC STAR"}
     st.set_clearance({"a": "5000", "t": "1234"})
     st.reset_clearance()
-    assert st.clearance == {"c": "LIRF", "r": "SID DCT ABC STAR", "a": "", "f": "", "t": ""}
+    assert st.clearance == {"c": "LIRF", "w": "", "r": "SID DCT ABC STAR", "a": "", "f": "", "t": ""}
     st.set_clearance({"f": "121.7"})
     st.set_phase("flying")
     assert st.clearance["f"] == "121.7"
     st.set_phase("briefing")  # ritorno in briefing: riparte dal piano
-    assert st.clearance == {"c": "LIRF", "r": "SID DCT ABC STAR", "a": "", "f": "", "t": ""}
+    assert st.clearance == {"c": "LIRF", "w": "", "r": "SID DCT ABC STAR", "a": "", "f": "", "t": ""}
     # i valori attesi arrivano dallo snapshot
     st.fields["runway"], st.fields["ta"], st.plan["sid"] = "35R", "5000", "TOSNU"
     st.set_clearance({"a": "FL100", "t": "2000"})
@@ -431,7 +435,7 @@ def test_clearance_state():
     assert (rows[P + "initial-climb"]["expected"], rows[P + "t-o-rwy"]["expected"], rows[P + "sid"]["expected"],
             rows[P + "transition-altitude"]["expected"], rows[P + "squawk-code"]["expected"]) == ("FL100", "35R", "TOSNU", "5000", "2000")
     # non persiste al riavvio
-    assert State(cfg).clearance == {k: "" for k in ["c", "r", "a", "f", "t"]}
+    assert State(cfg).clearance == {k: "" for k in ["c", "w", "r", "a", "f", "t"]}
     # il caricamento del piano precompila c e r e svuota a/f/t
     import state as S
     orig = (S.fetch_latest, S.to_briefing)
@@ -443,13 +447,13 @@ def test_clearance_state():
         st.load_plan("x")
     finally:
         S.fetch_latest, S.to_briefing = orig
-    assert st.clearance == {"c": "LIPZ", "r": "AAA DCT BBB", "a": "", "f": "", "t": ""}
+    assert st.clearance == {"c": "LIPZ", "w": "", "r": "AAA DCT BBB", "a": "", "f": "", "t": ""}
 
 
 def test_qnh_links():
     cl = C.load()
     for iid, ref in (("fmgs-performance-glareshield.barometric-reference", "wx.qnh_dep"), ("descent-checklist.barometric-reference", "wx.qnh_dest")):
-        assert cl.links[iid]["check"] == {"qnh": ref} and cl.links[iid]["verified"] is True
+        assert cl.links[iid]["check"] == ({"qnh": ref, "gate_tl": True} if ref == "wx.qnh_dest" else {"qnh": ref}) and cl.links[iid]["verified"] is True
     assert cl.links["climb.barometric-reference"] == {"check": {"std": True}, "verified": True}
     assert cl.links["climb.engine-anti-ice"] == {"check": {"show": ["eng1_ai", "eng2_ai"]}, "verified": True}
     assert C.check_keys({"std": True}) == ["baro_std", "baro_hpa", "baro_inch"]
@@ -566,13 +570,13 @@ def test_inputs_items():
     assert [f["k"] for f in rwy["inputs"]] == ["taxiway"] and rwy["inputs"][0]["prefix"] == "VACATED VIA" and rwy["response"] == "VACATED"
     assert rwy["status"] == "none"  # nessun link: stato invariato
     atis = {i["id"]: i for s in cl.evaluate_phase("descent-preparation", {})["subphases"] for i in s["items"]}["descent-preparation.check-arrival-atis"]
-    assert [f["k"] for f in atis["inputs"]] == ["atis_letter", "atis_rwy", "atis_wind", "atis_qnh"]
-    assert [f.get("prefix") for f in atis["inputs"]] == ["INFO", "RWY", None, "QNH"] and atis["status"] == "none" and atis["response"] == "ANNOTATE INFOS & LETTER"
+    assert [f["k"] for f in atis["inputs"]] == ["atis_letter", "atis_rwy", "atis_wind", "atis_qnh", "atis_tl"]
+    assert [f.get("prefix") for f in atis["inputs"]] == ["INFO", "RWY", None, "QNH", "TL"] and atis["status"] == "none" and atis["response"] == "ANNOTATE INFOS & LETTER"
     assert "descent-preparation.check-arrival-atis" not in cl.links and "descent-preparation.check-arrival-atis" not in cl.excluded
     rows = {i["id"]: i for ph in cl.ids for s in cl.evaluate_phase(ph, {})["subphases"] for i in s["items"]}
     hints = {k: r["atis_hint"] for k, r in rows.items() if "atis_hint" in r}
-    assert hints == {"descent-checklist.contact-approach": ["letter", "rwy", "qnh", "wind"],
-                     "ils-approach.obtain-landing-clearance": ["rwy", "wind"], "non-precision-approach.obtain-landing-clearance": ["rwy", "wind"]}
+    assert hints == {"descent-checklist.contact-approach": ["letter", "rwy", "qnh", "wind", "tl"],
+                     "descent-checklist.barometric-reference": ["tl"], "ils-approach.obtain-landing-clearance": ["rwy", "wind"], "non-precision-approach.obtain-landing-clearance": ["rwy", "wind"]}
     assert {k: r["wx_hint"] for k, r in rows.items() if "wx_hint" in r} == {"descent-preparation.weather-landing-information": "dest", "departure-clearance.obtain-departure-clearance": "dep"}
     dep = rows["fmgs-initialization.check-departure-atis"]
     assert [f["k"] for f in dep["inputs"]] == ["datis_letter", "datis_rwy", "datis_wind", "datis_qnh"] and [f.get("prefix") for f in dep["inputs"]] == ["INFO", "RWY", None, "QNH"]
@@ -731,6 +735,35 @@ def test_new_links_wellformed():
         assert C.check_keys(cl.links[iid]["check"]) == keys, iid
     for iid in ("after-landing.predictive-windshear-system",):
         assert set(cl.links[iid]["check"]) == {"show"}
+    ls = cl.links["descent-checklist.ls-button"]  # LS pb: solo "NOW", lvar ipotizzata; mai verde/rosso, anche senza lettura
+    assert ls["check"] == {"show": ["ls1", "ls2"]}
+    for lab in ({"ls1": "ON", "ls2": "OFF"}, {}):
+        r = [i for sp in cl.evaluate_phase("descent-checklist", lab)["subphases"] for i in sp["items"] if i["id"] == "descent-checklist.ls-button"][0]
+        assert r["status"] == "none" and r["show"] is True
+    assert r["live"] == [["LS pb 1", "n/d"], ["LS pb 2", "n/d"]]
+    assert cl.links["descent-checklist.descent"] == {"check": {"key": "vs_fpm", "lt": -100}, "verified": True}
+    for lab, st in (({"vs_fpm": "-800"}, "ok"), ({"vs_fpm": "-101"}, "ok"), ({"vs_fpm": "-100"}, "bad"), ({"vs_fpm": "0"}, "bad"), ({}, "na")):
+        r = [i for sp in cl.evaluate_phase("descent-checklist", lab)["subphases"] for i in sp["items"] if i["id"] == "descent-checklist.descent"][0]
+        assert r["status"] == st and "show" not in r
+    for bad in ({"key": "vs_fpm", "lt": "0"}, {"key": "fd1", "lt": 0}, {"key": "vs_fpm", "lt": 0, "eq": "ON"}):
+        try:
+            C._check_keys(bad, "x"); assert False, bad
+        except ValueError:
+            pass
+    for iid in ("descent-preparation.auto-brake", "ils-approach.autobrakes", "non-precision-approach.autobrakes"):
+        assert cl.links[iid]["check"] == {"key": "autobrake_sel", "eq": ["LO", "MED", "MAX"]}
+        def row(lab, iid=iid):
+            return [i for sp in cl.evaluate_phase(iid.split(".")[0], lab)["subphases"] for i in sp["items"] if i["id"] == iid][0]
+        assert [row({"autobrake_sel": v})["status"] for v in ("LO", "MED", "MAX")] == ["ok"] * 3
+        r = row({"autobrake_sel": "OFF"})
+        assert r["status"] == "bad" and r["detail"] == "expected LO / MED / MAX, actual OFF" and r["live"] == [["Autobrake selected (from lamps)", "OFF"]]
+        assert row({})["status"] == "na" and row({"autobrake_sel": None})["kind"] == "unreadable"
+    assert cl.links["landing.autobrakes"]["check"] == {"show": ["autobrake_sel"]}
+    r = [i for sp in cl.evaluate_phase("landing", {"autobrake_sel": "MED"})["subphases"] for i in sp["items"] if i["id"] == "landing.autobrakes"][0]
+    assert r["status"] == "none" and r["show"] is True and r["live"] == [["Autobrake selected (from lamps)", "MED"]]
+    assert cl.links["taxi-checklist.autobrake-pb"]["check"] == {"key": "autobrake_max", "eq": "ON"}
+    r = [i for sp in cl.evaluate_phase("descent-preparation", {"eng1_ai": "ON", "eng2_ai": "OFF", "sat": "-45"})["subphases"] for i in sp["items"] if i["id"] == "descent-preparation.engine-anti-ice"][0]
+    assert r["status"] == "none" and r["show"] is True and [v[1] for v in r["live"]] == ["ON", "OFF", "-45"]
     ai = cl.links["parking.anti-ice"]["check"]
     assert "all" in ai and [(c["key"], c["eq"]) for c in ai["all"]] == [("eng1_ai", "OFF"), ("eng2_ai", "OFF")]
     assert C.evaluate(ai, {"eng1_ai": "OFF", "eng2_ai": "OFF"})["status"] == "ok"

@@ -43,6 +43,17 @@ def test_all_priority():
     assert evaluate(c, {"landing_l": "ON", "landing_r": "ON"}, verified=False)["status"] == "na"
 
 
+def test_lt_threshold():
+    c = {"key": "vs_fpm", "lt": -100}  # soglia di Andrea: VS < -100 fpm
+    assert evaluate(c, {"vs_fpm": "-700"})["status"] == "ok" and evaluate(c, {"vs_fpm": "-101"})["status"] == "ok"
+    r = evaluate(c, {"vs_fpm": "-100"})  # stretto: -100 esatto e' rosso
+    assert r == {"status": "bad", "kind": "mismatch", "detail": "expected < -100, actual -100"}
+    assert evaluate(c, {"vs_fpm": "0"})["status"] == "bad"
+    assert evaluate(c, {"vs_fpm": "300"})["status"] == "bad"
+    assert evaluate(c, {"vs_fpm": None})["status"] == "na" and evaluate(c, {})["kind"] == "unreadable"
+    assert evaluate(c, {"vs_fpm": "-700"}, verified=False)["status"] == "na"
+
+
 def test_show_and_optional():
     s = {"show": ["wx_gain"]}
     assert evaluate(s, {"wx_gain": "0.5"}) == {"status": "none", "kind": "none", "detail": ""}
@@ -167,6 +178,20 @@ def test_qnh():
     assert ev(base, ver=False)["kind"] == "unverified"
 
 
+def test_qnh_gated_by_transition_level():
+    c = {"qnh": "wx.qnh_dest", "gate_tl": True}
+    lab = {"baro_std": "0", "baro_hpa": "1019", "baro_inch": None}  # QNH sbagliato (atteso 1013)
+    ev = lambda tl, alt: evaluate(c, lab, expected={"wx.qnh_dest": "1013 hPa (ATIS)", "fld.atis_tl": tl, "sys.alt": alt})
+    r = ev("070", "8000")
+    assert r["status"] == "wait" and r["kind"] == "wait" and r["detail"] == "TL 070"  # sopra il TL: non valutata
+    assert ev("070", "7000")["status"] == "wait"  # alla quota del TL: ancora non sotto
+    assert ev("070", "6900")["status"] == "bad"  # sotto il TL: controllo normale
+    assert ev("070", "")["status"] == "wait" and ev("070", "abc")["status"] == "wait"  # quota non leggibile
+    assert evaluate(c, {**lab, "baro_hpa": "1013"}, expected={"wx.qnh_dest": "1013 hPa", "fld.atis_tl": "070", "sys.alt": "5000"})["status"] == "ok"
+    assert ev("", "8000")["status"] == "bad" and ev("", "")["status"] == "bad"  # TL assente: come oggi
+    assert evaluate({"qnh": "wx.qnh_dest"}, lab, expected={"wx.qnh_dest": "1013 hPa", "fld.atis_tl": "070", "sys.alt": "8000"})["status"] == "bad"  # senza gate_tl: invariato
+
+
 def test_qnh_source_in_detail():
     c = {"qnh": "wx.qnh_dep"}
     base = {"baro_std": "0", "baro_hpa": "1013", "baro_inch": None}
@@ -199,6 +224,7 @@ def test_detent():
 
 
 if __name__ == "__main__":
+    test_qnh_gated_by_transition_level()
     test_qnh_source_in_detail()
     test_detent()
     test_expected_refs()

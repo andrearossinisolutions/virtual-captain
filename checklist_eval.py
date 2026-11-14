@@ -1,6 +1,6 @@
 """Confronto puro tra uno stato atteso della checklist e le etichette lette dal cockpit (sola lettura, nessun I/O).
 
-check: {"key": k, "eq": "ON" | ["ON", "OFF"]}, {"all": [check, ...]}, {"detent": "IDLE" | ["FLX", "TOGA"]} (entrambe le leve nel detent, valori virtuali thr_det_l/thr_det_r; senza calibrazione "none") oppure {"show": [chiavi]} (solo mostrare: nessun esito).
+check: {"key": k, "eq": "ON" | ["ON", "OFF"]}, {"all": [check, ...]}, {"detent": "IDLE" | ["FLX", "TOGA"]} (entrambe le leve nel detent, valori virtuali thr_det_l/thr_det_r; senza calibrazione "none") {"key": k, "lt": soglia} (numerico stretto, es. VS < 0; non leggibile "na"), oppure {"show": [chiavi]} (solo mostrare: nessun esito).
 Valore atteso da un riferimento chiuso (REFS): {"key": k, "eq_ref": "clr.t"} (kind con mappa di etichette ammessi solo se l'atteso normalizzato e' un'etichetta valida, altrimenti "none"; ammesso dentro "all", dove i riferimenti con atteso vuoto sono saltati)
 e {"show_ref": "clr.a"} (solo atteso, nessun esito). expected: {riferimento: testo}; atteso vuoto => "none" (si mostra solo NOW).
 optional (campo del link): se la voce non e' conforme l'esito e' "opt" (neutro, non conta come bad) invece di "bad".
@@ -174,6 +174,11 @@ def _single(check: dict, labels: dict, expected: dict | None = None) -> dict:
     if item.uncertain:  # sorgente da provare dal vivo: mai un verde o un rosso
         return _res("na", UNVERIFIED, "unverified")
     cur = labels.get(item.key)
+    if "lt" in check:  # numerico a soglia: ok se valore < soglia (stretto); non leggibile -> "na" (senza colore)
+        act = _num(cur)
+        if act is None:
+            return _res("na", UNREADABLE, "unreadable")
+        return _res("ok") if act < check["lt"] else _res("bad", f"expected < {check['lt']:g}, actual {act:g}", "mismatch")
     if "tol_ref" in check:
         return _tolerance(item, check, cur, labels, expected)
     if "eq_ref" in check:
@@ -204,6 +209,12 @@ def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: 
     elif "qnh" in check:
         if not _want(expected, check["qnh"]):
             return _res("none")
+        if check.get("gate_tl"):  # controllo solo sotto il livello di transizione (TL compilato nell'ATIS); TL assente: come prima
+            tl = _num(_want(expected, "fld.atis_tl"))
+            if tl:
+                alt = _num(_want(expected, "sys.alt"))
+                if alt is None or alt >= tl * 100:
+                    return _res("wait", f"TL {int(tl):03d}", "wait")  # non ancora valutata (quota sopra il TL o non leggibile)
     elif _refs(check) and not any(_active(c, expected) for c in (check.get("all") or [check]) if ref_of(c)):
         return _res("none")  # niente atteso: si mostra solo NOW
     res = _evaluate(check, labels, verified, expected)

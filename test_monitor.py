@@ -36,7 +36,7 @@ def test_items_are_valid():
     assert len(keys) == len(set(keys))
     for it in ITEMS:
         assert it.group and it.name and it.kind in MAPS, it.key
-        assert it.std or it.lvar or it.kind == "detent" or it.key in ("zfw_calc", "fob_now"), it.key  # detent e zfw_calc: virtuali
+        assert it.std or it.lvar or it.kind == "detent" or it.key in ("zfw_calc", "fob_now", "vs_fpm", "autobrake_sel"), it.key  # detent e zfw_calc: virtuali
         assert it.std_fallback is False or (it.std and it.lvar) or it.key == "gear"
         for v in it.expected.values():
             assert v
@@ -44,6 +44,13 @@ def test_items_are_valid():
     for k in ("v1", "vr", "v2", "flex", "cstr1", "cstr2", "fd1", "fd2", "baro_std", "baro_hpa", "baro_inch"):
         assert k in keys, k
     assert BY["cstr1"].kind == "onoff" and BY["cstr1"].uncertain is False and BY["v1"].lvar == "N_MISC_PERF_TO_V1"
+    assert BY["vs_fpm"].group == monitor.FLIGHT_GROUP and not BY["vs_fpm"].lvar and monitor.vs_annotate({}, {"vs": -700}) == {"vs_fpm": -700.0} and monitor.vs_annotate({}, {}) == {"vs_fpm": None}
+    A = monitor.autobrake_state
+    assert A({"autobrake_lo": 0, "autobrake_med": 0, "autobrake_max": 0}) == {"autobrake_sel": 0} and A({"autobrake_lo": 1, "autobrake_med": 0, "autobrake_max": 0}) == {"autobrake_sel": 1}
+    assert A({"autobrake_lo": None, "autobrake_med": None, "autobrake_max": 1}) == {"autobrake_sel": 3} and A({"autobrake_med": 1}) == {"autobrake_sel": 2}
+    assert A({"autobrake_lo": 1, "autobrake_med": 1, "autobrake_max": 0}) == {"autobrake_sel": None} and A({"autobrake_max": 0}) == {"autobrake_sel": None} and A(None) == {"autobrake_sel": None}
+    assert monitor.clean_label(BY["autobrake_sel"], 2) == "MED" and monitor.clean_label(BY["autobrake_sel"], None) is None and BY["autobrake_lo"].uncertain
+    assert BY["ls1"].lvar == "I_FCU_EFIS1_LS" and BY["ls2"].lvar == "I_FCU_EFIS2_LS" and BY["ls1"].uncertain and BY["ls1"].kind == "onoff"  # nome ipotizzato
     for k in ("apu_master", "apu_bleed", "pack1", "pack2", "landing_l", "landing_r", "nose", "strobe", "beacon",
               "navlogo", "rwy_turnoff", "seatbelt", "flap", "spoilers", "gear", "engmode", "eng1", "eng2", "parking"):
         assert k in keys, k

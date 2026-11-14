@@ -104,6 +104,9 @@ def test_departure_atis_state_and_snapshot():
     chk = lambda k, v: (st.update({k: v}), st.fields[k])[1]
     assert chk("datis_letter", " k ") == "K" and chk("datis_rwy", "35l, 35r") == "35L/35R" and chk("datis_rwy", " /35l// ") == "35L"
     assert chk("datis_wind", "270/12g25kt") == "270/12G25KT" and chk("datis_qnh", "10.1.3") == "10.13" and chk("datis_qnh", "1013") == "1013"
+    cl_ = lambda v: S.clean_field("atis_tl", v)
+    assert [cl_(x) for x in ("070", "FL70", " fl 070", "0700", "7a0", None, "FL")] == ["070", "070", "070", "070", "70", "", ""]
+    assert "atis_tl" in S.ATIS_KEYS and "datis_tl" not in S.DATIS_KEYS and "atis_tl" not in S.REMEMBERED and "atis_tl" not in cfg.read_text()
     assert S.clean_field("datis_letter", None) == "" and S.clean_field("datis_letter", "5") == ""
     assert all(k not in cfg.read_text() for k in S.DATIS_KEYS)
     assert not set(S.DATIS_KEYS) & set(S.REMEMBERED + S.PLAN_RESET + S.FROM_PLAN)
@@ -122,7 +125,7 @@ def test_departure_atis_state_and_snapshot():
         st.load_plan("x")
     finally:
         S.fetch_latest, S.to_briefing = orig
-    assert [st.fields[k] for k in S.DATIS_KEYS + S.ATIS_KEYS] == [""] * 8  # nuovo piano: azzera partenza e arrivo
+    assert [st.fields[k] for k in S.DATIS_KEYS + S.ATIS_KEYS] == [""] * 9  # nuovo piano: azzera partenza e arrivo
     s = st.snapshot()
     assert s["wx_dep"]["icao"] == "LIMC" and s["wx_dep"]["line"].startswith("Wind 270/08 \u00b7 QNH 1009") and s["wx_dest"] is None
     # avviso QNH ATIS/METAR oltre 3 hPa (solo avviso)
@@ -138,8 +141,8 @@ def test_departure_atis_state_and_snapshot():
 
 def test_atis_table_layout_and_advance_rules():
     p = web.PAGE
-    for m in ("function tableNode", 'el.className="a lg craft tbl"', 'className="tc"', 'const TL={letter:"INFO",rwy:"RWY",wind:"WIND",qnh:"QNH"}', '"DEP":"ARR")+" ATIS"',
-              "c.onclick=()=>fStart(c);fShow(c)", ".craft.tbl .cf{", 'el.closest(".tc")', "i.layout,i.atis_hint"):
+    for m in ("function tableNode", 'el.className="a lg craft tbl"', 'className="tc"', 'const TL={letter:"INFO",rwy:"RWY",wind:"WIND",qnh:"QNH",tl:"TL"}', '"DEP":"ARR")+" ATIS"',
+              "c.onclick=()=>fStart(c);fShow(c)", ".craft.tbl .cf{", 'el.closest(".tc")', '(it.inputs.length>4?" c5":"")', ".craft.tbl .cf.c5 .tc:nth-child(5){grid-column:1/3}", "i.layout,i.atis_hint"):
         assert m in p, m
     assert "innerHTML" not in p[p.index("function tableNode"):p.index("function inputsNode")]  # solo textContent
     # avanzamento: INFO una lettera, RWY terzo carattere (35L), WIND "/" automatico dopo la direzione poi 2 cifre, QNH 4 cifre o 29.92 (ultimo campo: chiude)
@@ -193,6 +196,7 @@ R.push(["wind2", full("wind",atisClean("wind","270/12",true,false)), full("wind"
 R.push(["windfull", full("wind","270/12"), full("wind","VRB/05"), full("wind","270/1"), full("wind","270/12G25")]);
 R.push(["qnh", atisClean("qnh","1013",true,false), atisClean("qnh","2992",true,true), atisClean("qnh","299",true,true), atisClean("qnh","29.92",true,false), atisClean("qnh","10.1.3",true,false), atisClean("qnh","1013.25",true,false)]);
 R.push(["qnhfull", full("qnh","1013"), full("qnh","29.92"), full("qnh","29.9"), full("qnh","101")]);
+R.push(["tl", atisClean("tl","070",true,false), atisClean("tl","FL70",true,false), atisClean("tl","fl 070",false,false), atisClean("tl","FL70",false,false), atisClean("tl","FL7",true,false), atisClean("tl","0700",true,false), atisClean("tl","F",true,false), full("tl","070"), full("tl","70")]);
 R.push(["conv", qnhConvert("1013"), qnhConvert("29.92"), qnhConvert("1009"), qnhConvert("30.00"), qnhConvert("28.10"), qnhConvert("x")]);
 qu.q="In";let ty="";for(const ch of "2992"){ty=atisClean("qnh",ty+ch,true,qnhInMode("q",ty+ch))}
 const m1=ty;qu.q="hPa";let th="";for(const ch of "1013"){th=atisClean("qnh",th+ch,true,qnhInMode("q",th+ch))}
@@ -207,6 +211,7 @@ console.log(JSON.stringify(R));"""
     assert r["wind2"] == [True, False]  # 270/12 avanza; 270/1 ancora no  # "/" solo digitando; reinserito se manca (anche da incolla di 27012)
     assert r["windfull"] == [True, True, False, False]  # "270/12" avanza subito; la raffica si aggiunge tornando nel campo
     assert r["qnh"] == ["1013", "29.92", "29.9", "29.92", "10.13", "1013."] and r["qnhfull"] == [True, True, False, False]
+    assert r["tl"] == ["070", "70", "070", "070", "7", "070", "", True, False]  # FL70: "70" digitando, "070" se incollato
     assert r["conv"] == ["29.91", "1013", "29.80", "1016", "952", "x"]  # 1013 hPa = 29.914 inHg -> 29.91 (33.8639 esatto); 1009 hPa = 29.796 -> 29.80
     assert r["typing"] == ["29.92", "1013", True, True, False, False, False]  # M1: con unita' In in memoria e campo vuoto, 2,9,9,2 -> "29.92"; in hPa resta 1013; m1: solo valori completi
     assert r["rt"] == ["29.91", "1013", "29.91"] and abs(int(r["rt"][1]) - 1013) <= 1  # round-trip hPa->inHg->hPa entro 1 hPa
@@ -217,11 +222,12 @@ console.log(JSON.stringify(R));"""
 def test_craft_order_and_columns():
     p = web.PAGE
     assert ".craft .cf{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))" in p and ".craft .cf .w{grid-column:1/-1}" in p and "order:-1" not in p[p.index(".craft .cf"):p.index(".craft label")]
-    assert 'const w=f.k==="r"||f.k==="c";if(w)d.className="w"' in p and 'createElement(f.k==="r"?"textarea":"input")' in p  # c e r a tutta larghezza, a/f/t su tre colonne
+    assert 'if(f.k==="r")d.className="w";else if(f.k==="c")d.className="c2"' in p and ".craft .cf .c2{grid-column:span 2}" in p and 'createElement(f.k==="r"?"textarea":"input")' in p  # c e r a tutta larghezza, a/f/t su tre colonne
     assert "@media(max-width:420px){.craft input{padding:5px 6px}}" in p
+    assert 'f.k==="f"&&i.value.length===7' in p and """craftEl.querySelector('[data-c="t"]')""" in p  # frequenza a 7 caratteri: focus sullo squawk
     import checklist as C
     cr = next(i for ph in C.load().phases for sp in ph["subphases"] for i in sp["items"] if i["type"] == "craft")
-    assert [f["k"] for f in cr["fields"]] == ["c", "r", "a", "f", "t"]  # ordine del DOM = ordine visivo
+    assert [f["k"] for f in cr["fields"]] == ["c", "w", "r", "a", "f", "t"]  # ordine del DOM = ordine visivo
 
 
 def test_rwy_conflict_red():
@@ -287,10 +293,10 @@ def test_atis_state():
     assert all(k not in cfg.read_text() for k in S.ATIS_KEYS)
     assert not set(S.ATIS_KEYS) & set(S.REMEMBERED + S.PLAN_RESET + S.FROM_PLAN)
     st.update({"reset": list(S.ATIS_KEYS)})
-    assert [st.fields[k] for k in S.ATIS_KEYS] == ["K", "35L", "270/12", "1013"]  # il reset non li tocca
+    assert [st.fields[k] for k in S.ATIS_KEYS] == ["K", "35L", "270/12", "1013", ""]  # il reset non li tocca
     st.set_phase("flying")
     st.set_phase("briefing")
-    assert [st.fields[k] for k in S.ATIS_KEYS] == ["", "", "", ""]
+    assert [st.fields[k] for k in S.ATIS_KEYS] == [""] * 5
     st.update({"atis_letter": "B"})
     orig = (S.fetch_latest, S.to_briefing)
     S.fetch_latest = lambda uid: {}
@@ -474,7 +480,7 @@ def test_bad_values_use_defaults():
 def test_briefing_fields_and_inflight():
     import state as S
     assert [k for k, _ in S.FIELDS] == ["origin", "destination", "dep_time"]
-    assert [k for k, _ in S.INFLIGHT] == ["runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg", "taxiway", "atis_letter", "atis_rwy", "atis_wind", "atis_qnh",
+    assert [k for k, _ in S.INFLIGHT] == ["runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap", "fob", "zfw", "zfwcg", "taxiway", "atis_letter", "atis_rwy", "atis_wind", "atis_qnh", "atis_tl",
                                                     "datis_letter", "datis_rwy", "datis_wind", "datis_qnh"]
     st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
     s = st.snapshot()
@@ -657,9 +663,11 @@ def test_clearance_endpoint():
     srv = web.serve(st, "127.0.0.1", 0)
     base = f"http://127.0.0.1:{srv.server_address[1]}"
     try:
-        assert call(base, "/api/state")["clearance"] == {k: "" for k in ["c", "r", "a", "f", "t"]}
+        assert call(base, "/api/state")["clearance"] == {k: "" for k in ["c", "w", "r", "a", "f", "t"]}
+        assert call(base, "/api/clearance", {"w": " 17r,17l "})["clearance"]["w"] == "17R/17L"
+        call(base, "/api/clearance", {"w": ""})
         s = call(base, "/api/clearance", {"a": " FL100 ", "t": "2000", "r": "abc dct def", "bogus": "x"})
-        assert s["clearance"] == {"c": "", "r": "abc dct def", "a": "FL100", "f": "", "t": "2000"}
+        assert s["clearance"] == {"c": "", "w": "", "r": "abc dct def", "a": "FL100", "f": "", "t": "2000"}
         for bad in ({"t": "9"}, {"t": "12345"}, {"a": {"x": 1}}):
             try:
                 call(base, "/api/clearance", bad)
@@ -674,7 +682,7 @@ def test_clearance_endpoint():
         assert call(base, "/api/state")["clearance"]["t"] == "2000"
         st.fields["destination"], st.plan = "LIPZ", {"route": "A DCT B"}
         s = call(base, "/api/clearance", {"reset": True})
-        assert s["clearance"] == {"c": "LIPZ", "r": "A DCT B", "a": "", "f": "", "t": ""}
+        assert s["clearance"] == {"c": "LIPZ", "w": "", "r": "A DCT B", "a": "", "f": "", "t": ""}
     finally:
         srv.shutdown()
 

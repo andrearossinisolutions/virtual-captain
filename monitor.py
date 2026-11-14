@@ -27,6 +27,7 @@ MAPS = {
     "emerlt": {0: "OFF", 1: "ARM", 2: "ON"},  # provvisoria: da verificare dal vivo col grezzo
     "tcas": {0: "STBY", 1: "TA", 2: "TA/RA"},  # provvisoria (ipotesi): da verificare dal vivo col grezzo
     "detent": {-1: "BETWEEN", 0: "REVERSE", 1: "REVERSE IDLE", 2: "IDLE", 3: "CLIMB", 4: "FLX", 5: "TOGA"},  # virtuale, dalla calibrazione (thrust.py)
+    "autobrake": {0: "OFF", 1: "LO", 2: "MED", 3: "MAX"},  # virtuale, dalle tre lampade (autobrake_state)
     "numeric": {},  # nessuna mappa: si mostra solo il valore (nessun esito)
 }
 AMBIGUOUS = {"landing", "nose", "flap", "speedbrake", "engmode", "wxsys", "irmode", "signs", "emerlt", "tcas"}  # lo 0 non e' "spento": mostra anche il grezzo
@@ -99,14 +100,22 @@ ITEMS: list[Item] = [
     Item("flex", "FMGS performance", "Flex temp", "numeric", {"Before start": "as briefing"}, None, "N_MISC_PERF_TO_FLEX"),
     Item("cstr1", "Glareshield", "Constraint pb 1", "onoff", {"Before start": "ON"}, None, "I_FCU_EFIS1_CSTR"),
     Item("cstr2", "Glareshield", "Constraint pb 2", "onoff", {"Before start": "ON"}, None, "I_FCU_EFIS2_CSTR"),
+    # LS pb: nome L-var IPOTIZZATO per analogia con CSTR/FD, NON verificato dal vivo (se non risponde il valore e' "n/d")
+    Item("ls1", "Glareshield", "LS pb 1", "onoff", {}, None, "I_FCU_EFIS1_LS", uncertain=True),
+    Item("ls2", "Glareshield", "LS pb 2", "onoff", {}, None, "I_FCU_EFIS2_LS", uncertain=True),
     Item("fd1", "Glareshield", "Flight director pb 1", "onoff", {"Before start": "ON"}, None, "I_FCU_EFIS1_FD"),
     Item("fd2", "Glareshield", "Flight director pb 2", "onoff", {"Before start": "ON"}, None, "I_FCU_EFIS2_FD"),
     Item("ap1", "Glareshield", "Autopilot 1", "onoff", {}, None, "I_FCU_AP1"),  # lampada, da verificare dal vivo
     Item("ap2", "Glareshield", "Autopilot 2", "onoff", {}, None, "I_FCU_AP2"),
     Item("athr", "Glareshield", "Autothrust", "onoff", {}, None, "I_FCU_ATHR"),
     Item("appr", "Glareshield", "APPR button", "onoff", {}, None, "I_FCU_APPR"),  # lampada, da verificare dal vivo
+    Item("sat", "Anti-ice", "SAT (C)", "numeric", {}, "(A:AMBIENT TEMPERATURE, Celsius)"),  # SimVar standard, solo da mostrare (se non risponde: n/d)
     Item("eng1_ai", "Anti-ice", "Engine 1 anti-ice sw", "onoff", {}, None, "S_OH_PNEUMATIC_ENG1_ANTI_ICE"),  # da verificare dal vivo
     Item("eng2_ai", "Anti-ice", "Engine 2 anti-ice sw", "onoff", {}, None, "S_OH_PNEUMATIC_ENG2_ANTI_ICE"),
+    # LO/MED: nomi L-var IPOTIZZATI per analogia con MAX, NON verificati dal vivo (se non rispondono: ripiego, vedi autobrake_state)
+    Item("autobrake_lo", "Autobrake", "Autobrake LO (lamp L)", "onoff", {}, None, "I_MIP_AUTOBRAKE_LO_L", uncertain=True),
+    Item("autobrake_med", "Autobrake", "Autobrake MED (lamp L)", "onoff", {}, None, "I_MIP_AUTOBRAKE_MED_L", uncertain=True),
+    Item("autobrake_sel", "Autobrake", "Autobrake selected (from lamps)", "autobrake"),  # virtuale, solo da mostrare
     Item("autobrake_max", "Autobrake", "Autobrake MAX (lamp L)", "onoff", {"Before T/O": "ON"}, None, "I_MIP_AUTOBRAKE_MAX_L"),  # ipotesi: la lampada L si accende a MAX armato, da provare dal vivo
     Item("baro_std", "Glareshield", "Baro STD (EFIS 1)", "numeric", {"Before start": "set"}, None, "B_FCU_EFIS1_BARO_STD"),
     Item("baro_hpa", "Glareshield", "Baro hPa (EFIS 1)", "numeric", {"Before start": "set"}, None, "N_FCU_EFIS1_BARO_HPA"),
@@ -134,6 +143,7 @@ ITEMS: list[Item] = [
     Item("total_weight", "Weight & fuel", "Total weight (MSFS, lbs)", "numeric", {}, "(A:TOTAL WEIGHT, Pounds)"),
     Item("fuel_weight", "Weight & fuel", "Fuel weight (MSFS, lbs)", "numeric", {}, "(A:FUEL TOTAL QUANTITY WEIGHT, Pounds)"),
     Item("zfw_calc", "Weight & fuel", "ZFW calc. (MSFS total - fuel, Fenix unit)", "numeric"),  # virtuale, solo da mostrare
+    Item("vs_fpm", FLIGHT_GROUP, "VS (fpm)", "numeric"),  # virtuale: A:VERTICAL SPEED del core (stessa della pill VS), per il check "lt" della checklist
     # Thrust levers: solo valori correnti (soglie dei detent da ricavare dal vivo)
     Item("thr_gate_l", "Thrust", "Throttle gate L (raw)", "numeric", {}, None, "A_FC_THROTTLE_LEFT_GATE"),  # solo grezzo
     Item("thr_gate_r", "Thrust", "Throttle gate R (raw)", "numeric", {}, None, "A_FC_THROTTLE_RIGHT_GATE"),  # solo grezzo
@@ -183,6 +193,23 @@ def weight_annotate(raw: dict | None) -> dict:
     if to_number((raw or {}).get("cfg_lbs")) == 0:
         zfw /= LB_PER_KG
     return {**out, "zfw_calc": round(zfw)}
+
+
+def vs_annotate(raw: dict | None, core: dict | None) -> dict:
+    """Valore virtuale vs_fpm = VS del core (fpm); None se non leggibile."""
+    return {"vs_fpm": to_number((core or {}).get("vs"))}
+
+
+def autobrake_state(raw: dict | None) -> dict:
+    """Valore virtuale autobrake 0 OFF / 1 LO / 2 MED / 3 MAX dalle lampade. Prudente: una sola lampada accesa => quella (anche se le altre non si leggono);
+    OFF solo se tutte e tre sono leggibili e spente; piu' lampade accese o dati mancanti senza nessuna accesa => None (n/d)."""
+    vals = [to_number((raw or {}).get(k)) for k in ("autobrake_lo", "autobrake_med", "autobrake_max")]
+    on = [i + 1 for i, v in enumerate(vals) if v is not None and v >= 0.5]
+    if len(on) == 1:
+        return {"autobrake_sel": on[0]}
+    if not on and all(v is not None for v in vals):
+        return {"autobrake_sel": 0}
+    return {"autobrake_sel": None}
 
 
 def raw_text(raw) -> str:

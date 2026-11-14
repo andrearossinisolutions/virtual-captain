@@ -497,21 +497,25 @@
          "src": "plan.destination"
         },
         {
+         "k": "w",
+         "label": "RWY in use"
+        },
+        {
          "k": "r",
          "label": "Route",
          "src": "plan.route"
         },
         {
          "k": "a",
-         "label": "Altitude"
+         "label": "Initial Climb"
         },
         {
          "k": "f",
-         "label": "Frequency (departure)"
+         "label": "Frequency"
         },
         {
          "k": "t",
-         "label": "Transponder (squawk)"
+         "label": "Squawk"
         }
        ]
       },
@@ -1686,6 +1690,11 @@
          "k": "atis_qnh",
          "label": "QNH",
          "prefix": "QNH"
+        },
+        {
+         "k": "atis_tl",
+         "label": "Transition level",
+         "prefix": "TL"
         }
        ]
       },
@@ -1893,7 +1902,7 @@
        "text": "Contact Approach",
        "response": "Eg. \"Malpensa Approach, ASX415, FL100, Information Charlie\" / Eg. RB: \"Expect ILS Z 35L, Descend 6000 ft, QNH 1016, ASX415\"",
        "type": "atc",
-       "atis_hint": ["letter", "rwy", "qnh", "wind"]
+       "atis_hint": ["letter", "rwy", "qnh", "wind", "tl"]
       }
      ]
     },
@@ -1905,7 +1914,8 @@
        "id": "descent-checklist.barometric-reference",
        "text": "Barometric Reference",
        "response": "SET (at transition level)",
-       "type": "action"
+       "type": "action",
+       "atis_hint": ["tl"]
       }
      ]
     }
