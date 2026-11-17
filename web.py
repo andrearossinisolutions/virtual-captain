@@ -96,7 +96,7 @@ main.fv{max-width:none;padding:12px 16px}
 #thrtab{border-collapse:collapse;font:13px ui-monospace,monospace;width:100%}#thrtab th,#thrtab td{border-bottom:1px solid var(--bd);padding:3px 6px;text-align:right;white-space:nowrap}#thrtab th:first-child,#thrtab td:first-child{text-align:left}#thrtab .lv{font-weight:700}#thrtab .gd td:first-child{color:var(--fg)}
 ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{padding:6px 0;border-bottom:1px solid var(--bd);color:var(--mut)}
 </style></head><body><main id="main">
-<header id="hdr"><h1>Virtual Captain</h1><span class="pill" id="aao"></span>
+<header id="hdr"><h1>Virtual Captain</h1><span class="pill" id="sim"></span>
   <div class="chips" id="chips" hidden></div><span class="chip" id="sqk" hidden></span><div class="chips" id="fpills" hidden></div>
   <details id="more" hidden><summary>More</summary>
     <label class="livesw"><input type="checkbox" id="livesw"> Show real values on checklist</label>
@@ -136,10 +136,10 @@ ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{pa
       </div>
       <p id="thrmsg" class="bad" style="margin:8px 0"></p>
     </div>
-    <label for="aaourl">AAO address</label>
-    <input id="aaourl" autocapitalize="off" autocorrect="off" placeholder="127.0.0.1:43380">
-    <p style="margin:12px 0 0"><button class="ghost" id="aaotest" style="width:100%">Test connection</button></p>
-    <p id="aaores" class="meta"></p>
+    <label>SimConnect</label>
+    <p id="simstat" class="meta" style="margin:0 0 8px"></p>
+    <div class="row"><button class="ghost" id="simdll" hidden>Download SimConnect.dll</button><button class="ghost" id="simretry">Retry</button></div>
+    <p id="simmsg" class="meta"></p>
   </details>
   <button class="big" id="go">Briefing complete</button>
   <p style="margin-top:12px"><button class="ghost" id="end" hidden style="width:100%">End flight (stop reading)</button></p>
@@ -164,7 +164,7 @@ function build(s){const g=$("grid");g.innerHTML="";$("apt").innerHTML="";for(con
   if(k==="dep_time"){const e=document.createElement("div");e.innerHTML='<label>Local time</label><input id="deploc" disabled>';$("apt").appendChild(e)}}
   $("mode").innerHTML=s.modes.map(m=>`<option value="${m}">${m[0].toUpperCase()+m.slice(1)}</option>`).join("");
   $("clmode").innerHTML=s.cl_modes.map(m=>`<option value="${m}">${m[0].toUpperCase()+m.slice(1)}</option>`).join("");
-  document.querySelectorAll("[data-k]").forEach(i=>i.oninput=()=>{save();localTime()});$("mode").onchange=save;$("clmode").onchange=save;document.querySelectorAll("#cfg input").forEach(i=>i.onkeydown=nextField);$("simbrief").oninput=save;$("aaourl").oninput=save;$("aaotest").onclick=testAao;
+  document.querySelectorAll("[data-k]").forEach(i=>i.oninput=()=>{save();localTime()});$("mode").onchange=save;$("clmode").onchange=save;document.querySelectorAll("#cfg input").forEach(i=>i.onkeydown=nextField);$("simbrief").oninput=save;$("simdll").onclick=simDll;$("simretry").onclick=simRetry;
   for(const a of ["start","next","back","skip","cancel"])$("thr"+a).onclick=()=>thrAct(a);$("thrclose").onclick=()=>thrAct("cancel");
   $("thrclear").onclick=()=>{if(confirm("Clear the thrust levers calibration?"))thrAct("clear")}}
 let calKey="";
@@ -175,7 +175,7 @@ function calib(s){const c=s.calib,t=s.thr_cal,k=JSON.stringify([c,t]);if(k===cal
   $("thrstart").hidden=!!(c&&c.active);$("thrclear").hidden=!t;$("thrcard").hidden=!(c&&c.active);
   if(!(c&&c.active))return;
   $("thrtitle").textContent=c.done?"Calibration complete":`Step ${c.step+1}/${c.total}: ${c.name}`;
-  $("thrtext").textContent=c.done?"":c.text;$("thrwarn").hidden=c.done;$("threrr").textContent=c.error||(c.has_live||c.done?"":"No live data from AAO (is the simulator connected?)");
+  $("thrtext").textContent=c.done?"":c.text;$("thrwarn").hidden=c.done;$("threrr").textContent=c.error||(c.has_live||c.done?"":"No live data from the simulator (is MSFS connected?)");
   $("thrbtns").hidden=c.done;$("thrsum").hidden=!c.done;
   $("thrback").disabled=c.step===0;$("thrskip").hidden=!c.can_skip;
   if(c.done&&t)$("thrsumtxt").textContent=`Saved ${t.when}. Guide L: ${t.guides.l}; R: ${t.guides.r}.`;
@@ -189,12 +189,11 @@ function localTime(){const el=$("deploc");if(!el)return;const v=(document.queryS
 function nextField(e){if(e.key!=="Enter")return;e.preventDefault();
   const all=[...document.querySelectorAll("#cfg input:not([disabled])")].filter(i=>i.offsetParent);const n=all[all.indexOf(e.target)+1];
   if(n){n.focus();n.select&&n.select()}else{e.target.blur()}}
-async function testAao(){const r=$("aaores");r.textContent="Testing…";
-  try{const x=await api("/api/aao-test",{url:$("aaourl").value});
-    r.textContent=x.ok?`Connected in ${x.ms} ms (${x.url}). Read: `+Object.entries(x.values).map(([k,v])=>k+" "+Math.round(v)).join(", "):`Not responding after ${x.ms} ms (${x.url}): ${x.error}`;
-    if(x.ok)$("aaourl").value=x.url}catch(e){r.textContent="Test failed: "+e.message}}
-function fill(s){document.querySelectorAll("[data-k]").forEach(i=>i.value=s.fields[i.dataset.k]);$("simbrief").value=s.simbrief;if(document.activeElement!==$("aaourl"))$("aaourl").value=s.aao_url||"";$("mode").value=s.mode;$("clmode").value=s.checklist_mode;localTime()}
-function collect(){const o={simbrief:$("simbrief").value,aao_url:$("aaourl").value,mode:$("mode").value,checklist_mode:$("clmode").value};document.querySelectorAll("[data-k]").forEach(i=>o[i.dataset.k]=i.value);return o}
+async function simDll(){const r=$("simmsg");if(!confirm(last&&last.dll_confirm||"Download SimConnect.dll?"))return;
+  r.textContent="";try{await api("/api/simdll-fetch",{confirm:true})}catch(e){r.textContent="Download failed: "+e.message}}
+async function simRetry(){const r=$("simmsg");r.textContent="";try{await api("/api/sim-retry",{})}catch(e){r.textContent="Retry failed: "+e.message}}
+function fill(s){document.querySelectorAll("[data-k]").forEach(i=>i.value=s.fields[i.dataset.k]);$("simbrief").value=s.simbrief;$("mode").value=s.mode;$("clmode").value=s.checklist_mode;localTime()}
+function collect(){const o={simbrief:$("simbrief").value,mode:$("mode").value,checklist_mode:$("clmode").value};document.querySelectorAll("[data-k]").forEach(i=>o[i.dataset.k]=i.value);return o}
 function save(){clearTimeout(timer);timer=setTimeout(async()=>{try{const s=await api("/api/fields",collect());lastRev=s.rev}catch(e){}},400)}
 function planHtml(p,open){if(!p||!(p.route||p.waypoints&&p.waypoints.length))return null;
   const box=document.createElement("div");box.className="plan";
@@ -221,9 +220,9 @@ function cockpit(s){const k=JSON.stringify(s.monitor);if(k===csKey)return;csKey=
       c.appendChild(mk("n",n));c.appendChild(mk("v"+(v.startsWith("n/d")?" na":""),v));
       if(x)c.appendChild(mk("x",x));if(r!=="")c.appendChild(mk("r","raw "+r));grid.appendChild(c)}
     b.appendChild(grid)}}
-function fdata(s){const k=JSON.stringify([s.flight,s.aao_ok]);if(k===fdKey)return;fdKey=k;const b=$("fdbody");b.textContent="";const f=s.flight||[];
+function fdata(s){const k=JSON.stringify([s.flight,s.sim_ok]);if(k===fdKey)return;fdKey=k;const b=$("fdbody");b.textContent="";const f=s.flight||[];
   const mk=(c,t)=>{const e=document.createElement("div");e.className=c;e.textContent=t;return e};
-  if(!f.length||s.aao_ok===false){b.appendChild(mk("meta",s.aao_ok===false?"AAO unavailable":"No data yet"));return}
+  if(!f.length||s.sim_ok===false){b.appendChild(mk("meta",s.sim_ok===false?"SimConnect unavailable":"No data yet"));return}
   const grid=document.createElement("div");grid.className="cg";
   for(const [n,v] of f){const c=document.createElement("div");c.className="ci";c.appendChild(mk("n",n));c.appendChild(mk("v"+(v.startsWith("\u2014")?" na":""),v));grid.appendChild(c)}
   b.appendChild(grid)}
@@ -388,7 +387,8 @@ function speech(s){const sp=$("speech"),tx=$("sptxt"),l=s.log,ago=s.spoke_ago==n
 function render(){const s=last;if(!s)return;const fly=s.phase==="flying";
   if(view==="flight"&&shownView!=="flight")window.scrollTo(0,0);shownView=view;  // solo al cambio vista: la vista Volo parte dall'alto (pills visibili)
   $("main").classList.toggle("fv",view==="flight");$("cfg").hidden=view!=="config";$("flt").hidden=view!=="flight";$("chips").hidden=$("more").hidden=$("sqk").hidden=$("fpills").hidden=view!=="flight";
-  const a=$("aao");a.textContent=s.aao_ok===null?"AAO: waiting":s.aao_ok?"AAO: connected":"AAO: not responding";a.className="pill "+(s.aao_ok===null?"":s.aao_ok?"ok":"bad");
+  const a=$("sim");a.textContent=s.sim_demo?"SimConnect: demo":s.sim_ok===null?"SimConnect: waiting":s.sim_ok?"SimConnect: connected":s.dll_missing?"SimConnect: DLL missing":"SimConnect: not connected";a.className="pill "+(s.sim_ok===null?"":s.sim_ok?"ok":"bad");
+  $("simstat").textContent=s.sim_demo?"Demo flight: the simulator is not read.":s.sim_ok?"Connected to MSFS.":(s.sim_error||"Waiting for MSFS…");$("simmsg").textContent=s.dll_fetching?"Downloading…":(s.dll_msg||"");$("simdll").hidden=!s.dll_missing;$("simdll").disabled=!!s.dll_fetching;$("simretry").hidden=!!s.sim_demo;
   $("go").textContent=fly?"Back to flight":"Briefing complete";$("go").className="big "+(fly?"fly":"");$("end").hidden=!fly;$("end2").hidden=!fly;
   $("info").textContent=s.info;chips(s);checklist(s);cockpit(s);fdata(s);fpills(s);plans(s);calib(s);
   speech(s);
@@ -398,7 +398,7 @@ function apply(s){const prev=last;last=s;
   if(!prev||prev.phase!==s.phase)view=s.phase==="flying"?"flight":"config";  // cambio di fase → vista di default
   render()}
 async function poll(){try{const s=await api("/api/state");
-  if(lastRev===-1){build(s);fill(s);lastRev=s.rev}else if(s.rev!==lastRev){fill(s);lastRev=s.rev}apply(s)}catch(e){const a=$("aao");a.textContent="Connection lost…";a.className="pill bad"}setTimeout(poll,1500)}
+  if(lastRev===-1){build(s);fill(s);lastRev=s.rev}else if(s.rev!==lastRev){fill(s);lastRev=s.rev}apply(s)}catch(e){const a=$("sim");a.textContent="Connection lost…";a.className="pill bad"}setTimeout(poll,1500)}
 $("load").onclick=async()=>{$("load").disabled=true;$("info").textContent="Loading…";
   try{const s=await api("/api/load-plan",{simbrief:$("simbrief").value});fill(s);lastRev=s.rev;apply(s)}catch(e){$("info").textContent="SimBrief error: "+e.message}$("load").disabled=false};
 $("go").onclick=async()=>{await api("/api/fields",collect());
@@ -468,8 +468,15 @@ def make_handler(st: State):
                     st.update(data)
                 elif self.path == "/api/load-plan":
                     st.load_plan(str(data.get("simbrief", "")))
-                elif self.path == "/api/aao-test":
-                    return self._json(st.test_aao(str(data.get("url", "")).strip() or None))
+                elif self.path == "/api/simdll-fetch":
+                    if not (isinstance(data, dict) and data.get("confirm") is True):
+                        return self._send(400, b"confirmation required", "text/plain")
+                    try:
+                        st.fetch_dll()
+                    except ValueError as e:
+                        return self._send(400, str(e).encode(), "text/plain")
+                elif self.path == "/api/sim-retry":
+                    st.sim_retry()
                 elif self.path == "/api/checklist-phase":
                     try:
                         if not isinstance(data, dict):

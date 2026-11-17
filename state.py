@@ -14,7 +14,8 @@ import checklist_eval as ceval
 import monitor as mon
 import thrust
 from brain import Briefing, join_dep, parse_dep
-from aao import AAO, normalize_url
+import dll_fetch
+import simconnect_backend
 from simbrief import fetch_latest, to_briefing
 from weather import Weather, format_metar
 
@@ -141,13 +142,18 @@ class State:
         self.simbrief = str(cfg.get("simbrief", ""))
         self.mode = _mode(cfg.get("mode"))
         self.checklist_mode = cfg.get("checklist_mode") if cfg.get("checklist_mode") in CL_MODES else "complete"
-        self.aao_url = normalize_url(cfg.get("aao_url") or None)
         self.phase = "briefing"  # "briefing" | "flying"
         self.info = ""
         self.plan: dict = {}
         self.clearance = _empty_clearance()  # NON persiste al riavvio
         self.rev = 0  # cambia quando il server modifica i campi (es. piano caricato)
-        self.aao_ok: bool | None = None
+        self.sim_ok: bool | None = None  # SimConnect: None = non ancora noto, True = dati freschi, False = non connesso
+        self.sim_error = ""
+        self.dll_missing = False  # SimConnect.dll non trovata: si puo' scaricare (dopo il consenso)
+        self.sim_demo = False  # solo --sim: il simulatore non si legge
+        self.sim_backend = None  # SimConnectBackend, assegnato da main.py (None in --sim e nei test)
+        self.dll_fetching = False
+        self.dll_msg = ""  # esito dell'ultimo download (vuoto se ok)
         self.log: deque = deque(maxlen=30)
         self.spoke_at: float | None = None  # istante dell'ultima frase
         self.spoke_n = 0  # contatore frasi dette
@@ -188,8 +194,6 @@ class State:
                 m = data["checklist_mode"]
                 self.checklist_mode = m if m in CL_MODES else "complete"
                 self._fix_cl_phase()
-            if data.get("aao_url") is not None:
-                self.aao_url = normalize_url(str(data["aao_url"]).strip() or None)
             self._save()
 
     def _set_origin(self, text: str) -> None:
@@ -244,14 +248,34 @@ class State:
             self.clearance["c"] = _clean_clr("c", self.fields.get("destination", ""))
             self.clearance["r"] = _clean_clr("r", (self.plan or {}).get("route") or "")
 
-    def test_aao(self, url: str | None = None) -> dict:
-        """Prova l'indirizzo indicato (o quello salvato); se risponde, lo adotta e lo salva."""
-        res = AAO(url or self.aao_url).test()
-        if res["ok"]:
+    def fetch_dll(self) -> None:
+        """Scarica la SimConnect.dll in vendor/ (la conferma dell'utente e' gia' stata data dalla pagina) e la ricarica."""
+        be = self.sim_backend
+        if be is None or not be.dll_missing:
+            raise ValueError("SimConnect.dll is not missing")
+
+        def done(result) -> None:
             with self.lock:
-                self.aao_url = res["url"]
-                self._save()
-        return res
+                self.dll_fetching = False
+                self.dll_msg = "" if result.ok else result.message
+            if result.ok:
+                be.retry_dll()
+
+        with self.lock:
+            self.dll_fetching = True
+        if dll_fetch.start_fetch(simconnect_backend.vendor_dir(), done) is None:
+            with self.lock:
+                self.dll_fetching = True  # un download e' gia' in corso
+            raise ValueError("download already in progress")
+
+    def sim_retry(self) -> None:
+        """Pulsante Retry: il backend riprova subito (DLL e apertura di SimConnect)."""
+        if self.sim_backend is not None:
+            self.sim_backend.retry()
+
+    def set_sim(self, ok: bool | None, error: str = "", dll_missing: bool = False) -> None:
+        with self.lock:
+            self.sim_ok, self.dll_missing, self.sim_error = ok, dll_missing, error
 
     def set_phase(self, phase: str):
         if phase in ("briefing", "flying"):
@@ -349,7 +373,7 @@ class State:
                 snap[k] = thrust.median(xs)
         cands = [k for ks in thrust.CANDIDATES.values() for k in ks]
         if not any(k in snap for k in cands):
-            raise ValueError("no live data from AAO")
+            raise ValueError("no live data from the simulator")
         prev = c["snaps"].get(thrust.DETENTS[c["step"] - 1]) if c["step"] > 0 else None
         if prev is not None:
             both = [k for k in cands if k in snap and k in prev]
@@ -466,7 +490,7 @@ class State:
             self.cfg_path.write_text(json.dumps({"accel_agl": self.fields["accel_agl"],
                                                  "thr_red_agl": self.fields["thr_red_agl"],
                                                  "simbrief": self.simbrief, "mode": self.mode,
-                                                 "aao_url": self.aao_url, "checklist_phase": self.cl_phase,
+                                                 "checklist_phase": self.cl_phase,
                                                  "checklist_mode": self.checklist_mode,
                                                  **({"thrust_cal": self.thrust_cal} if self.thrust_cal else {})}))
         except OSError:
@@ -535,7 +559,8 @@ class State:
         with self.lock:
             return {"wx_dest": self._wx("destination"), "wx_dep": self._wx("origin"), "atis_warn": self._qnh_warn(), "rwy_bad": self._rwy_bad(), "phase": self.phase, "fields": dict(self.fields), "simbrief": self.simbrief,
                     "mode": self.mode, "checklist_mode": self.checklist_mode, "cl_modes": list(CL_MODES), "info": self.info, "plan": self.plan, "rev": self.rev,
-                    "aao_ok": self.aao_ok, "aao_url": self.aao_url, "log": list(self.log),
+                    "sim_ok": self.sim_ok, "sim_error": self.sim_error, "dll_missing": self.dll_missing, "sim_demo": self.sim_demo,
+                    "dll_fetching": self.dll_fetching, "dll_msg": self.dll_msg, "dll_confirm": dll_fetch.describe(), "log": list(self.log),
                     "now": time.time(), "spoke_n": self.spoke_n,
                     "spoke_ago": None if self.spoke_at is None else max(0.0, time.time() - self.spoke_at),
                     "labels": [[k, l] for k, l in FIELDS], "modes": list(MODES),

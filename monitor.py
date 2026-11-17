@@ -9,7 +9,7 @@ import math
 from dataclasses import dataclass, field
 
 NA = "n/d"
-FLIGHT_GROUP = "Flight data"  # voci cinematiche: solo nella card Flight data (restano nella richiesta AAO)
+FLIGHT_GROUP = "Flight data"  # voci cinematiche: solo nella card Flight data (restano nella richiesta SimConnect)
 
 # Stati GSX (FSDT_GSX_*_STATE): IPOTESI dalla documentazione GSX, da verificare dal vivo col grezzo (--test-links) e correggere qui.
 GSX_STATES = {1: "NOT AVAILABLE", 2: "AVAILABLE", 3: "UNAVAILABLE", 4: "BYPASSED", 5: "REQUESTED", 6: "PERFORMING", 7: "COMPLETED"}

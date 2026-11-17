@@ -48,7 +48,7 @@ def test_api_flow():
         # si ricordano solo ID, modalità e accelerazione
         saved = json.loads(cfg.read_text())
         assert saved == {"accel_agl": "1000", "thr_red_agl": "800", "simbrief": "x", "mode": "training",
-                     "aao_url": "http://127.0.0.1:43380/webapi", "checklist_phase": "sim-preparation",
+                     "checklist_phase": "sim-preparation",
                      "checklist_mode": "complete"}
         assert State(cfg).fields["ta"] == "" and State(cfg).fields["accel_agl"] == "1000"
     finally:
@@ -392,82 +392,62 @@ def test_monitor_cleared_outside_flight():
     assert st.snapshot()["monitor"] == []
 
 
-def test_aao_parse_missing_variable():
-    from aao import AAO, VARS, MONITOR
-    ll = MONITOR["landing_l"]["lvar"]
-    data = {"getvars": [{"var": VARS["ias"], "value": 120}, {"var": ll, "value": 2},
-                        {"var": MONITOR["nose"]["lvar"], "value": "abc"},
-                        {"var": MONITOR["apu_master"]["std"], "value": 1}]}
-    values, monitor = AAO._parse(data)
-    assert values["ias"] == 120.0 and values["vs"] == 0.0 and set(values) == set(VARS)
-    assert monitor["landing_l"] == 2.0
-    assert monitor["landing_r"] is None and monitor["nose"] is None and monitor["pack1"] is None
-    assert monitor["apu_master"] == 1.0  # L-var assente, ripiega sulla standard
-    assert monitor["apu_bleed"] is None and monitor["eng1"] is None
-    assert monitor["gear"] is None
-    v2, m2 = AAO._parse({"getvars": [{"var": VARS["gear"], "value": 1}]})
-    assert v2["gear"] == 1.0 and m2["gear"] == 1.0 and all(v is None for k, v in m2.items() if k != "gear")
-    assert set(m2) == set(MONITOR)
-
-
-def test_aao_read_falls_back_to_core():
-    import aao as A
-    a = A.AAO()
-    calls = []
-
-    def fake(names, timeout):
-        calls.append(len(names))
-        if len(names) > len(A.VARS):
-            raise ValueError("lvar")
-        return {"getvars": [{"var": v, "value": 1} for v in names]}
-    a._get = fake
-    values, monitor = a.read_all()
-    assert calls == [calls[0], len(A.VARS)] and calls[0] > len(A.VARS)
-    assert values["ias"] == 1.0 and all(v is None for v in monitor.values())
-    a.read_all()  # entro 30 s: solo core, niente richiesta piena
-    assert calls[2:] == [len(A.VARS)]
-    a._core_only_until = 0.0  # scaduto: riprova la piena
-    a.read_all()
-    assert calls[3] > len(A.VARS)
-    assert a.read() == values
-
-
-def test_aao_unreachable_not_doubled():
-    import aao as A
-    a = A.AAO()
-    n = []
-
-    def fake(names, timeout):
-        n.append(1)
-        raise OSError("down")
-    a._get = fake
-    try:
-        a.read_all()
-        assert False
-    except OSError:
-        pass
-    assert len(n) == 1
-
-
-def test_aao_requests_only_used_vars():
-    import aao as A
+def test_simvars_monitor_requests_and_missing_is_zero():
+    import simvars as V
     from monitor import ITEMS
-    for it in ITEMS:
-        m = A.MONITOR[it.key]
-        assert (m["std"] is not None) == bool(it.std and (it.std_fallback or not it.lvar)), it.key
-    assert A.MONITOR["landing_l"]["std"] is None and A.MONITOR["flap"]["std"] is None
-    assert A.MONITOR["gear"]["std"] and A.MONITOR["seatbelt"]["std"]
+    assert set(V.MONITOR) == {i.key for i in ITEMS}
+    for it in ITEMS:  # L-var Fenix se c'e', altrimenti la standard; nessun ripiego tra le due
+        want = (f"(L:{it.lvar}, Number)" if it.lvar else it.std)
+        assert V.MONITOR[it.key] == want, it.key
+    assert V.default_core() == {k: 0.0 for k in V.VARS} and V.default_monitor()["gear"] == 0.0
+    assert V.default_monitor()["thr_det_l"] is None
 
 
-def test_aao_parse_dict_format_and_values_unchanged():
-    import aao as A
-    d = {A.VARS["ias"]: 150, A.VARS["on_ground"]: 1, A.VARS["gear"]: None}
-    values, monitor = A.AAO._parse(d)
-    assert values == {"on_ground": 1.0, "vs": 0.0, "agl": 0.0, "alt": 0.0, "ias": 150.0, "gear": 0.0,
-                      "landing": 0.0, "seatbelt": 0.0}
-    assert monitor["gear"] is None and monitor["apu_master"] is None
-    v2, _ = A.AAO._parse({"getvars": [{"var": A.VARS["vs"], "value": "2000"}]})
-    assert v2["vs"] == 2000.0 and v2["ias"] == 0.0
+def test_sim_state_snapshot_and_old_aao_url_ignored():
+    import json as J
+    cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
+    cfg.write_text(J.dumps({"simbrief": "x", "aao_url": "http://1.2.3.4:1/webapi"}))
+    st = State(cfg)  # il vecchio aao_url e' ignorato senza errori
+    assert st.simbrief == "x" and not hasattr(st, "aao_url")
+    st.update({"aao_url": "boh", "mode": "training"})
+    assert "aao_url" not in J.loads(cfg.read_text())
+    s = st.snapshot()
+    assert s["sim_ok"] is None and s["dll_missing"] is False and "aao_ok" not in s and "aao_url" not in s
+    assert "SHA-256" in s["dll_confirm"] and "files.pythonhosted.org" in s["dll_confirm"]
+    st.set_sim(False, "SimConnect.dll not found", True)
+    s = st.snapshot()
+    assert s["sim_ok"] is False and s["dll_missing"] is True and "not found" in s["sim_error"]
+    st.set_sim(True)
+    assert st.snapshot()["sim_ok"] is True and st.snapshot()["sim_error"] == ""
+
+
+def test_sim_endpoints_and_markup():
+    import simconnect_backend as SB
+    cfg = pathlib.Path(tempfile.mkdtemp()) / "c.json"
+    st = State(cfg)
+    srv = web.serve(st, "127.0.0.1", 0)
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        page = call(base, "/")
+        for needle in ('id="sim"', 'id="simdll"', 'id="simretry"', "Download SimConnect.dll", "/api/simdll-fetch", "/api/sim-retry"):
+            assert needle in page, needle
+        assert "AAO" not in page and "aaourl" not in page and "Test connection" not in page and "aao_" not in page
+        # senza backend (o con DLL non mancante) niente download; senza conferma esplicita niente nemmeno la richiesta
+        for body, code in (({}, 400), ({"confirm": True}, 400)):
+            req = urllib.request.Request(base + "/api/simdll-fetch", json.dumps(body).encode(), {"Content-Type": "application/json"})
+            try:
+                urllib.request.urlopen(req)
+                raise AssertionError("errore atteso")
+            except urllib.error.HTTPError as e:
+                assert e.code == code, (body, e.code)
+        # Retry: ok anche senza backend; con backend finto lo chiama
+        calls = []
+        st.sim_backend = type("B", (), {"dll_missing": False, "retry": lambda self: calls.append(1)})()
+        call(base, "/api/sim-retry", {})
+        assert calls == [1]
+    finally:
+        srv.shutdown()
+    assert SB.STALE_S > 0
 
 
 def test_bad_values_use_defaults():
@@ -796,12 +776,12 @@ def test_thrust_cal_flow():
         c = s["calib"]
         assert c["active"] and c["step"] == 0 and c["total"] == 6 and c["name"] == "FULL REVERSE" and not c["can_skip"]
         assert c["text"] == "Move both thrust levers to FULL REVERSE, then press Next" and not c["has_live"]
-        assert err({"action": "next"}) == "no live data from AAO"
+        assert err({"action": "next"}) == "no live data from the simulator"
         assert err({"action": "skip"}) == "nothing to keep: not calibrated yet"
         # dati vecchi (oltre 3 s) rifiutati
         _feed(st, clock, -20, 15)
         clock[0] += 10
-        assert err({"action": "next"}) == "no live data from AAO"
+        assert err({"action": "next"}) == "no live data from the simulator"
         # sei passi; le due leve sono opposte (L crescente, R decrescente)
         L = [-20, -5, 0, 25, 50, 100]
         R = [30, 25, 10, 0, -10, -30]
@@ -900,7 +880,7 @@ def test_thrust_cal_failure_and_invalid_file():
 
 def test_thrust_cal_markup_and_main():
     page = web.PAGE
-    assert page.index('id="thrcal"') < page.index('id="aaourl"') and "/api/thrust-cal" in page and "Clear calibration" in page
+    assert page.index('id="thrcal"') < page.index('id="simstat"') and "/api/thrust-cal" in page and "Clear calibration" in page
     assert page.count("function calib(") == 1 and "Hold the levers still" in page
     import main
     import inspect
@@ -942,11 +922,9 @@ if __name__ == "__main__":
     test_checklist_phase_endpoint()
     test_phase_bar_hides_empty_phase_endpoint()
     test_monitor_cleared_outside_flight()
-    test_aao_parse_missing_variable()
-    test_aao_read_falls_back_to_core()
-    test_aao_unreachable_not_doubled()
-    test_aao_requests_only_used_vars()
-    test_aao_parse_dict_format_and_values_unchanged()
+    test_simvars_monitor_requests_and_missing_is_zero()
+    test_sim_state_snapshot_and_old_aao_url_ignored()
+    test_sim_endpoints_and_markup()
     test_firewall_noop_off_windows()
     test_plan_extraction()
     test_old_mode_values_migrate()

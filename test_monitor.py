@@ -60,9 +60,9 @@ def test_weight_items_and_zfw_calc():
     from monitor import weight_annotate
     assert BY["fuel_total"].lvar == "N_FUEL_TOTAL_QTY" and BY["cfg_lbs"].lvar == "B_CONFIG_WEIGHT_LBS"
     assert BY["total_weight"].std == "(A:TOTAL WEIGHT, Pounds)" and BY["fuel_weight"].std == "(A:FUEL TOTAL QUANTITY WEIGHT, Pounds)"
-    import aao
-    assert aao.MONITOR["total_weight"] == {"std": "(A:TOTAL WEIGHT, Pounds)", "lvar": None}  # std chiesta perche' senza L-var
-    assert aao.MONITOR["fuel_total"] == {"std": None, "lvar": "(L:N_FUEL_TOTAL_QTY, Number)"} and aao.MONITOR["zfw_calc"] == {"std": None, "lvar": None}
+    import simvars
+    assert simvars.MONITOR["total_weight"] == "(A:TOTAL WEIGHT, Pounds)"  # std chiesta perche' senza L-var
+    assert simvars.MONITOR["fuel_total"] == "(L:N_FUEL_TOTAL_QTY, Number)" and simvars.MONITOR["zfw_calc"] is None
     N = {"fob_now": None}
     assert weight_annotate({"total_weight": 150000, "fuel_weight": 30000}) == {**N, "zfw_calc": 120000}  # lbs (default)
     assert weight_annotate({"total_weight": 150000, "fuel_weight": 30000, "cfg_lbs": 1}) == {**N, "zfw_calc": 120000}
@@ -94,9 +94,8 @@ def test_detent_labels():
     assert label(d, -1) == "BETWEEN" and monitor.clean_label(d, -1) == "BETWEEN"
     assert label(d, None) == "n/d" and monitor.clean_label(d, None) is None and label(d, 9) == "n/d (9)"
     assert monitor.lvar_request(d) is None and monitor.std_request(d) is None
-    import aao
-    assert aao.MONITOR["thr_det_l"] == {"std": None, "lvar": None}
-    assert aao.AAO._parse({"getvars": []})[1]["thr_det_r"] is None
+    import simvars
+    assert simvars.MONITOR["thr_det_l"] is None and simvars.default_monitor()["thr_det_r"] is None
     assert BY["thr_pos_3"].lvar.endswith("POS_3") and BY["thr_pos_4"].lvar.endswith("POS_4")
 
 
@@ -104,10 +103,9 @@ def test_flight_items_std_only():
     keys = ["lat", "lon", "gs", "hdg_mag", "trk_mag", "pitch", "bank"]
     for k in keys:
         assert BY[k].group in ("Flight data",) and BY[k].kind == "numeric" and BY[k].std and BY[k].lvar is None
-    from aao import AAO, MONITOR
-    assert all(MONITOR[k]["std"] and MONITOR[k]["lvar"] is None for k in keys)
-    _, m = AAO._parse({"getvars": []})
-    assert all(m[k] is None for k in keys)
+    from simvars import MONITOR, default_monitor
+    assert all(MONITOR[k] and MONITOR[k].startswith("(A:") for k in keys)
+    assert all(default_monitor()[k] == 0.0 for k in keys)  # assente = 0
 
 
 def test_flight_panel_values_and_dashes():
@@ -140,21 +138,19 @@ def test_no_key_in_both_cards():
     assert {"Total weight (MSFS, lbs)", "FOB (Fenix, display unit)"} <= cockpit
     labels = " ".join(r[0] for r in monitor.flight_panel(raw, {}))
     assert "weight" not in labels.lower() and "FOB" not in labels
-    from aao import MONITOR
-    assert all(k in MONITOR for k in ("lat", "lon", "gs", "hdg_mag", "trk_mag", "pitch", "bank"))  # restano nella richiesta AAO
+    from simvars import MONITOR
+    assert all(MONITOR.get(k) for k in ("lat", "lon", "gs", "hdg_mag", "trk_mag", "pitch", "bank"))  # restano nella richiesta SimConnect
 
 
-def test_read_all_fallback_new_keys_none():
-    import urllib.error
-    from aao import AAO, VARS
-    a = AAO("127.0.0.1:1")
-    def fake(names, timeout):
-        if len(names) > len(VARS):
-            raise urllib.error.HTTPError("u", 400, "bad", {}, None)
-        return {"getvars": [{"var": v, "value": 1} for v in names]}
-    a._get = fake
-    values, m = a.read_all()
-    assert values["alt"] == 1.0 and m["gs"] is None and m["bank"] is None
+def test_read_all_missing_values_are_zero():
+    import simvars
+    from simconnect_backend import SimConnectBackend
+    be = SimConnectBackend(dll=object(), clock=lambda: 0.0, use_thread=False)
+    be._connected, be._core_ts = True, 0.0
+    be._core = {"alt": 5000.0}
+    core, m = be.read_all(0.1)
+    assert core["alt"] == 5000.0 and core["vs"] == 0.0 and m["gs"] == 0.0 and m["bank"] == 0.0 and m["thr_det_l"] is None
+    assert set(core) == set(simvars.VARS)
 
 
 def test_gsx_states():
@@ -167,7 +163,7 @@ def test_gsx_states():
 if __name__ == "__main__":
     test_flight_items_std_only()
     test_flight_panel_values_and_dashes()
-    test_read_all_fallback_new_keys_none()
+    test_read_all_missing_values_are_zero()
     test_no_key_in_both_cards()
     test_weight_items_and_zfw_calc()
     test_detent_labels()

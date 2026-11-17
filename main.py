@@ -1,15 +1,17 @@
-"""Virtual Captain. Uso: python main.py [--sim] [--test-links] [--port 8080] [--host IP] [--no-firewall]
+"""Virtual Captain. Uso: python main.py [--sim] [--test-links] [--port 8080] [--host IP] [--no-firewall] [--simconnect-dll PERCORSO]
 
-Avvia la pagina web del briefing (raggiungibile dal tablet via Tailscale) e, quando dal tablet si preme
-"Briefing complete", legge il simulatore (AAO) e parla. --sim = volo simulato, senza AAO.
+Avvia la pagina web del briefing (raggiungibile dal tablet via Tailscale) e il lettore SimConnect (sola lettura,
+all'apertura del programma); quando dal tablet si preme "Briefing complete" il capitano legge il simulatore e parla.
+--sim = volo simulato, senza SimConnect. Diagnosi: python simconnect_backend.py --probe
 """
+import logging
 import sys
 import time
 
 import firewall
 import web
-from aao import AAO
 from brain import Brain, parse_dep, readout_pair
+from simconnect_backend import BackendError, SimConnectBackend
 from speak import say, wait
 from state import State
 from weather import Weather, online_fetch
@@ -65,6 +67,7 @@ def arg(name, default=None):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     sim = "--sim" in sys.argv
     port = int(arg("--port", 8080))
     host = arg("--host") or web.tailscale_ip()
@@ -91,24 +94,36 @@ def main():
     def speak(text, shown=None):
         say(text, on_start=st.add_log, shown=shown)  # nel log (e in grande nella pagina) solo quando inizia la lettura
 
-    if arg("--aao"):
-        st.update({"aao_url": arg("--aao")})
-    aao, brain, src, clock = AAO(st.aao_url), None, None, 0.0
+    backend, brain, src, clock = None, None, None, 0.0
     last, sim_done = None, False
-    if not sim:
-        print(f"AAO: {aao.base}", flush=True)
+    if sim:
+        st.sim_demo = True
+    else:
+        backend = SimConnectBackend(dll_path=arg("--simconnect-dll"))
+        st.sim_backend = backend
+        backend.start()  # all'apertura del programma, non dopo "Briefing complete"; mai scritture sul simulatore
+
+    def read_sim(timeout):
+        """Cache SimConnect -> (core, monitor) e stato per la pagina; BackendError se non connesso o dati vecchi."""
+        try:
+            data = backend.read_all(timeout)
+        except BackendError as e:
+            st.set_sim(False, str(e), backend.dll_missing)
+            raise
+        st.set_sim(True)
+        return data
+
     try:
         while True:
             if st.phase != "flying":
                 brain = None
-                if st.calib_active() and not sim:  # calibrazione leve in Briefing: solo lettura, nessun brain e nessun parlato
-                    if aao.base != st.aao_url:
-                        aao = AAO(st.aao_url)
+                if backend is not None:  # fuori dal volo la lettura serve alla riga di stato e alla calibrazione
                     try:
-                        st.set_calib_raw(aao.read_all()[1])
-                        st.aao_ok = True
-                    except Exception:  # noqa: BLE001
-                        st.aao_ok = False
+                        data = read_sim(0)
+                        if st.calib_active():  # calibrazione leve in Briefing: solo lettura, nessun brain e nessun parlato
+                            st.set_calib_raw(data[1])
+                    except BackendError:
+                        pass
                     time.sleep(0.5)
                     continue
                 time.sleep(0.3)
@@ -120,9 +135,6 @@ def main():
                 with st.lock:
                     shown, text = readout_pair(dict(st.fields), dict(st.plan), st.mode)
                 speak(text, shown)
-            if aao.base != st.aao_url:  # indirizzo cambiato dalla pagina
-                aao = AAO(st.aao_url)
-                print(f"AAO: {aao.base}", flush=True)
             brain.b = st.briefing()  # modifiche dal tablet valide subito
             try:
                 if src:
@@ -138,11 +150,9 @@ def main():
                     last = sample
                     s, mon = sample
                 else:
-                    s, mon = aao.read_all()
-                st.aao_ok = True if not src else None
-            except Exception as e:  # noqa: BLE001
-                st.aao_ok = False
-                print("AAO not responding:", e)
+                    s, mon = read_sim(1.0)
+            except BackendError as e:
+                print("SimConnect not responding:", e)
                 time.sleep(2)
                 continue
             st.set_core(s)
@@ -154,6 +164,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        if backend is not None:
+            backend.stop()
         srv.shutdown()
         wait()
 
