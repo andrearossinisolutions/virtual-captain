@@ -7,11 +7,18 @@ The program connects to `wss://<base>/ws/agent` with `Authorization: Bearer <acc
   program -> server   {"t":"ping"}  every HEARTBEAT seconds;  server -> program {"t":"pong"}
   program -> server   {"t":"snapshot","sv":1,"seq":N,"d":{...}}  (only after the hello; see sanitize_snapshot)
   either side         {"t":"bye"}
+Remote commands (step U3): the hello may add `"caps":["cmd"]` and `"cv":1`;
+  server -> program   {"t":"cmd","id":<32 hex>,"name":<ENABLED_COMMANDS>,"d":{...}}  (only if the program has the cap)
+  program -> server   {"t":"result","id":...,"ok":true} or {"t":"result","id":...,"ok":false,"code":<RESULT_CODES>,
+                       "msg":<text, only for "invalid">,"reason":<LOAD_REASONS, only for load-plan>}
+The program re-validates every command with `validate_command` (it does not trust the server) and the server maps the
+result codes to fixed texts (the program's text never reaches the browser).
 The server closes a connection that is silent for STALE_AFTER seconds, after MAX_LIFETIME seconds,
 and re-reads the authorisation (token family) every FAMILY_RECHECK seconds.
 """
 from __future__ import annotations
 
+import json
 import re
 
 __all__ = [
@@ -20,6 +27,10 @@ __all__ = [
     "CLOSE_REVOKED", "CLOSE_TOO_BIG", "CLOSE_RESTART", "T_WELCOME", "T_HELLO", "T_PING", "T_PONG",
     "T_BYE", "welcome_message", "T_SNAPSHOT", "SNAPSHOT_VERSION", "SUPPORTED_SNAPSHOT_VERSIONS",
     "MAX_SNAPSHOT_TARGET", "SNAPSHOT_FIELDS", "HIDDEN_ROW_LABELS", "SnapshotError", "sanitize_snapshot",
+    "T_CMD", "T_RESULT", "CAP_CMD", "COMMAND_VERSION", "REMOTE_COMMANDS", "LOCAL_ONLY", "ENABLED_COMMANDS",
+    "CMD_TIMEOUT", "cmd_timeout", "MAX_CMD_BYTES", "MAX_CMD_DATA", "MAX_RESULT_BYTES", "MAX_CAPS", "CMD_ID_RE",
+    "RESULT_CODES", "LOAD_REASONS", "MAX_RESULT_MSG", "SIMBRIEF_RE", "FIELD_KEYS", "PLAN_RESET", "CLR_KEYS", "CLR_MAX",
+    "MODES", "CL_MODES", "CommandError", "validate_command", "sanitize_result", "parse_caps",
 ]
 
 PROTOCOL_VERSION = 1
@@ -43,6 +54,7 @@ CLOSE_RESTART = 4005      # reserved: uvicorn closes with 1012 on a restart; the
 
 T_WELCOME, T_HELLO, T_PING, T_PONG, T_BYE = "welcome", "hello", "ping", "pong", "bye"
 T_SNAPSHOT = "snapshot"
+T_CMD, T_RESULT = "cmd", "result"
 
 SNAPSHOT_VERSION = 1
 SUPPORTED_SNAPSHOT_VERSIONS = frozenset({1})
@@ -213,4 +225,198 @@ def _monitor(raw):
         out.append([name, rows])
     if rows_total > MAX_MONITOR_ROWS:
         raise SnapshotError("monitor: too many rows")
+    return out
+
+
+# ---------------------------------------------------------------- remote commands (U3)
+
+CAP_CMD = "cmd"          # capability announced in the hello: the program accepts remote commands
+COMMAND_VERSION = 1      # "cv" of the hello (no PROTOCOL_VERSION bump)
+
+# Commands a browser may ever send through the server, and the ones switched on today (a subset).
+REMOTE_COMMANDS = ("fields", "clearance", "checklist-phase", "load-plan", "phase", "sim-retry")
+# Commands that touch the local machine: they stay on the PC for good, the server answers 404.
+LOCAL_ONLY = ("simdll-fetch", "thrust-cal")
+ENABLED_COMMANDS = ("fields", "clearance", "checklist-phase", "phase", "load-plan", "sim-retry")
+
+CMD_TIMEOUT = {"default": 8.0, "load-plan": 20.0}   # seconds the server waits for the result
+MAX_CMD_BYTES = 4096      # a whole cmd message
+MAX_CMD_DATA = 2048       # the "d" of a command
+MAX_RESULT_BYTES = 1024   # a whole result message
+MAX_RESULT_MSG = 120
+MAX_CAPS, MAX_CAP_LEN = 8, 16
+CMD_ID_RE = re.compile(r"[0-9a-f]{32}")  # always used with fullmatch (a "$" would accept a trailing newline)
+RESULT_CODES = ("invalid", "busy", "failed", "disabled")
+LOAD_REASONS = ("network", "not_found", "bad_plan")  # fixed vocabulary for a failed load-plan
+
+# SimBrief Pilot ID or username (shared with the account settings).
+SIMBRIEF_RE = re.compile(r"[A-Za-z0-9 ._-]{1,40}", re.ASCII)
+
+# Copies of the State constants (state.py is not importable by the server): test_wire checks they are identical.
+FIELD_KEYS = ("origin", "destination", "dep_time", "runway", "ta", "thr_red_agl", "accel_agl", "v1", "vr", "v2", "flap",
+              "fob", "zfw", "zfwcg", "taxiway", "atis_letter", "atis_rwy", "atis_wind", "atis_qnh", "atis_tl",
+              "datis_letter", "datis_rwy", "datis_wind", "datis_qnh")
+PLAN_RESET = ("runway", "ta", "v1", "vr", "v2", "flap", "fob", "zfw")
+CLR_KEYS = ("c", "w", "r", "a", "f", "t")
+CLR_MAX = {"c": 40, "w": 12, "r": 400, "a": 20, "f": 20, "t": 4}
+MODES = ("normal", "training")
+CL_MODES = ("complete", "simplified")
+_FIELD_MAX = 40
+_PHASE_MAX = 96
+
+
+def cmd_timeout(name: str) -> float:
+    return CMD_TIMEOUT.get(name, CMD_TIMEOUT["default"])
+
+
+class CommandError(ValueError):
+    """The command does not match its schema (fixed, short messages: safe to show)."""
+
+
+def _text(v, limit: int, what: str) -> str:
+    if not isinstance(v, str):
+        raise CommandError(f"{what}: expected text")
+    if len(v) > limit:
+        raise CommandError(f"{what}: text too long")
+    if _CONTROL.search(v):
+        raise CommandError(f"{what}: invalid characters")
+    return v
+
+
+def _only(data: dict, allowed) -> None:
+    for k in data:
+        if k not in allowed:
+            raise CommandError("unknown field")
+
+
+def _v_fields(d: dict) -> dict:
+    out: dict = {}
+    for k, v in d.items():
+        if k in FIELD_KEYS:
+            out[k] = _text(v, _FIELD_MAX, k)
+        elif k == "mode":
+            if v not in MODES or not isinstance(v, str):
+                raise CommandError("mode: not allowed")
+            out[k] = v
+        elif k == "checklist_mode":
+            if v not in CL_MODES or not isinstance(v, str):
+                raise CommandError("checklist_mode: not allowed")
+            out[k] = v
+        elif k == "reset":
+            if not isinstance(v, list) or len(v) > 8 or any(not isinstance(x, str) or x not in PLAN_RESET for x in v):
+                raise CommandError("reset: not allowed")
+            out[k] = list(v)
+        else:
+            raise CommandError("unknown field")
+    return out
+
+
+def _v_clearance(d: dict) -> dict:
+    if "reset" in d:
+        if d != {"reset": True} or d["reset"] is not True:
+            raise CommandError("reset must be alone and true")
+        return {"reset": True}
+    if not d:
+        raise CommandError("nothing to change")
+    out = {}
+    for k, v in d.items():
+        if k not in CLR_KEYS:
+            raise CommandError("unknown field")
+        out[k] = _text(v, CLR_MAX[k], k)
+        if k == "t" and not re.fullmatch(r"[0-7]{0,4}", out[k]):
+            raise CommandError("squawk must be up to 4 digits 0-7")
+    return out
+
+
+def _v_cl_phase(d: dict) -> dict:
+    if len(d) != 1:
+        raise CommandError("exactly one of phase or step")
+    if "phase" in d:
+        return {"phase": _text(d["phase"], _PHASE_MAX, "phase")}
+    if "step" in d:
+        v = d["step"]
+        if isinstance(v, bool) or not isinstance(v, int) or v not in (1, -1):
+            raise CommandError("step must be 1 or -1")
+        return {"step": v}
+    raise CommandError("unknown field")
+
+
+def _v_phase(d: dict) -> dict:
+    if d == {"phase": "flying"} and d["phase"] == "flying":
+        return {"phase": "flying"}
+    if len(d) == 2 and d.get("phase") == "briefing" and d.get("confirm") is True:
+        return {"phase": "briefing", "confirm": True}
+    raise CommandError("phase not allowed")
+
+
+def _v_load_plan(d: dict) -> dict:
+    _only(d, ("simbrief",))
+    if "simbrief" not in d:
+        return {}
+    v = d["simbrief"]
+    if (not isinstance(v, str) or not SIMBRIEF_RE.fullmatch(v) or not v.strip()
+            or not SIMBRIEF_RE.fullmatch(v.strip())):  # load_plan strips: a blank value would erase the saved ID
+        raise CommandError("simbrief: not allowed")
+    return {"simbrief": v}
+
+
+def _v_empty(d: dict) -> dict:
+    if d:
+        raise CommandError("no data expected")
+    return {}
+
+
+_VALIDATORS = {"fields": _v_fields, "clearance": _v_clearance, "checklist-phase": _v_cl_phase, "phase": _v_phase,
+               "load-plan": _v_load_plan, "sim-retry": _v_empty}
+
+
+def validate_command(name, data) -> dict:
+    """Clean copy of the command data, or CommandError. Pure and stdlib only: used by the server AND by the program
+    (which never trusts the server). Unknown keys are errors, types are exact (a bool is not an int)."""
+    if not isinstance(name, str) or name not in ENABLED_COMMANDS:
+        raise CommandError("unknown command")
+    if not isinstance(data, dict):
+        raise CommandError("data must be an object")
+    try:
+        size = len(json.dumps(data, separators=(",", ":")).encode("utf-8"))
+    except (TypeError, ValueError, RecursionError):
+        raise CommandError("data not serialisable") from None
+    if size > MAX_CMD_DATA:
+        raise CommandError("data too big")
+    return _VALIDATORS[name](data)
+
+
+def parse_caps(data) -> tuple:
+    """Capabilities of a hello (list of up to 8 short texts); anything else counts as none."""
+    caps = data.get("caps") if isinstance(data, dict) else None
+    if (not isinstance(caps, list) or len(caps) > MAX_CAPS
+            or any(not isinstance(c, str) or not 1 <= len(c) <= MAX_CAP_LEN for c in caps)):
+        return ()
+    return tuple(caps)
+
+
+def sanitize_result(data, expected_id=None):
+    """Clean result from the program, or None when malformed. Only the fixed vocabulary survives (code, reason);
+    `msg` is kept (<=120 characters) but the server never forwards it."""
+    if not isinstance(data, dict) or data.get("t") != T_RESULT:
+        return None
+    rid = data.get("id")
+    if not isinstance(rid, str) or not CMD_ID_RE.fullmatch(rid) or (expected_id is not None and rid != expected_id):
+        return None
+    ok = data.get("ok")
+    if not isinstance(ok, bool):
+        return None
+    out: dict = {"id": rid, "ok": ok}
+    if ok:
+        return out
+    code = data.get("code")
+    if not isinstance(code, str) or code not in RESULT_CODES:
+        return None
+    out["code"] = code
+    msg = data.get("msg")
+    if isinstance(msg, str) and len(msg) <= MAX_RESULT_MSG:
+        out["msg"] = _CONTROL.sub(" ", msg)
+    reason = data.get("reason")
+    if isinstance(reason, str) and reason in LOAD_REASONS:
+        out["reason"] = reason
     return out

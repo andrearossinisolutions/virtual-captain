@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import commands
 from state import State
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -93,47 +94,27 @@ def make_handler(st: State):
                 data = json.loads(self.rfile.read(n) or b"{}")
             except (ValueError, OSError):
                 return self._send(400, b"bad request", "text/plain")
+            name = self.path[len("/api/"):] if self.path.startswith("/api/") else ""
             try:
-                if self.path == "/api/fields":
-                    st.update(data)
-                elif self.path == "/api/load-plan":
-                    st.load_plan(str(data.get("simbrief", "")))
-                elif self.path == "/api/simdll-fetch":
+                if name == "simdll-fetch":
                     if not (isinstance(data, dict) and data.get("confirm") is True):
                         return self._send(400, b"confirmation required", "text/plain")
                     try:
                         st.fetch_dll()
                     except ValueError as e:
                         return self._send(400, str(e).encode(), "text/plain")
-                elif self.path == "/api/sim-retry":
-                    st.sim_retry()
-                elif self.path == "/api/checklist-phase":
-                    try:
-                        if not isinstance(data, dict):
-                            raise ValueError("body must be an object")
-                        if "phase" in data:
-                            st.set_cl_phase(data["phase"] if isinstance(data["phase"], str) else None)
-                        else:
-                            st.set_cl_phase(data.get("step"))
-                    except ValueError as e:
-                        return self._send(400, str(e).encode(), "text/plain")
-                elif self.path == "/api/clearance":
-                    try:
-                        if data.get("reset") is True:
-                            st.reset_clearance()
-                        else:
-                            st.set_clearance(data)
-                    except (ValueError, AttributeError) as e:
-                        return self._send(400, str(e).encode(), "text/plain")
-                elif self.path == "/api/thrust-cal":
+                elif name == "thrust-cal":
                     try:
                         if not isinstance(data, dict):
                             raise ValueError("body must be an object")
                         st.calib_action(data.get("action"))
                     except ValueError as e:
                         return self._send(400, str(e).encode(), "text/plain")
-                elif self.path == "/api/phase":
-                    st.set_phase(data.get("phase", ""))
+                elif name in commands.COMMANDS:
+                    try:
+                        commands.run_command(st, name, data)
+                    except commands.BadRequest as e:
+                        return self._send(400, str(e).encode(), "text/plain")
                 else:
                     return self._send(404, b"not found", "text/plain")
             except Exception as e:  # noqa: BLE001

@@ -3,7 +3,6 @@ No HTTP here (see api_auth.py). Nothing sensitive is ever logged."""
 from __future__ import annotations
 
 import logging
-import re
 import sqlite3
 from typing import Callable, Optional
 
@@ -11,6 +10,7 @@ from server import mail_templates as tpl
 from server.config import AppConfig
 from server.db import Database
 from server.ratelimit import DAY, RateLimiter
+from server.wire import SIMBRIEF_RE  # one definition for the accounts and the remote load-plan command
 from server.security import (hash_password, is_token_shaped, new_token, normalize_email,
                              normalize_login_password, normalize_password, same, token_hash,
                              verify_dummy, verify_password)
@@ -25,7 +25,6 @@ SESSION_TOUCH_EVERY = 60.0  # last_seen is refreshed at most once a minute (the 
 MAX_SESSIONS = 10
 CLEANUP_EVERY = 600.0
 ROTATED_KEEP = 7 * DAY
-SIMBRIEF_RE = re.compile(r"[A-Za-z0-9 ._-]{1,40}", re.ASCII)  # Pilot ID or username
 
 
 def normalize_simbrief(value) -> Optional[str]:

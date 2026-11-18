@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlparse
 
+import commands
 import protocol
 import snapshot
 from secure_store import TokenStore, default_dir
@@ -339,13 +340,16 @@ class Uplink:
                  wait: Optional[Callable[[float], bool]] = None, wall: Callable[[], float] = time.time,
                  mono: Callable[[], float] = time.monotonic, rng: Callable[[], float] = random.random,
                  force_link: bool = False, lock: Optional[InstanceLock] = None,
-                 snapshot_source: Optional[Callable[[], Optional[dict]]] = None):
+                 snapshot_source: Optional[Callable[[], Optional[dict]]] = None,
+                 command_target=None, remote_commands: bool = True):
         self.base_url = check_base_url(base_url)
         self.store, self.http = store, http or UrllibHttp()
         self.connect = connect or websockets_connect
         self.say, self.show_login = say, show_login or (lambda info: None)
         self.wall, self.mono, self.force_link, self.lock = wall, mono, force_link, lock
         self.snapshot_source = snapshot_source  # iniettata da main: vista remota (gia' filtrata) dello State; mai SimConnect o voce
+        self.command_target = command_target  # lo State su cui si eseguono i comandi del sito (None: nessun comando remoto)
+        self.remote_commands = remote_commands  # --no-remote-commands / uplink.json: il sito non puo' comandare nulla
         self._stop = threading.Event()
         self._wait = wait or self._stop.wait
         self.backoff = Backoff(rng)
@@ -499,7 +503,7 @@ class Uplink:
 
     def _session(self, ws):
         """Una connessione: ("stop"|"closed"|"error"|"bad", codice). Chiude sempre il socket."""
-        snap = None
+        snap, worker = None, None
         try:
             deadline = self.mono() + protocol.HELLO_TIMEOUT + 2
             msg = None
@@ -515,8 +519,16 @@ class Uplink:
                 return "bad", None
             beat = data.get("heartbeat")
             beat = float(beat) if isinstance(beat, (int, float)) and not isinstance(beat, bool) and 1 <= beat <= 30 else float(protocol.HEARTBEAT)
-            ws.send(json.dumps({"t": protocol.T_HELLO, "v": protocol.PROTOCOL_VERSION,
-                                "app": f"virtual-captain/{APP_VERSION}", "platform": sys.platform}))
+            hello = {"t": protocol.T_HELLO, "v": protocol.PROTOCOL_VERSION,
+                     "app": f"virtual-captain/{APP_VERSION}", "platform": sys.platform}
+            if self.command_target is not None:
+                if self.remote_commands:
+                    hello["caps"] = [protocol.CAP_CMD]   # senza il cap il sito non invia comandi (409 al browser)
+                hello["cv"] = protocol.COMMAND_VERSION
+            ws.send(json.dumps(hello))
+            if self.command_target is not None:
+                worker = commands.CommandWorker(self.command_target, enabled=self.remote_commands, mono=self.mono)
+                worker.start()
             self._set(CONNECTED, "collegato al server")
             now = self.mono()
             next_ping, last_rx = now + beat, now
@@ -529,9 +541,21 @@ class Uplink:
                     except (ConnClosed, ConnError):
                         pass
                     return "stop", None
-                if ws.recv(RECV_TICK) is not None:
+                msg = ws.recv(RECV_TICK)
+                if msg is not None:
                     last_rx = self.mono()
+                    if worker is not None and msg:
+                        self._on_message(worker, msg)
                 now = self.mono()
+                if worker is not None:
+                    for res in worker.drain():
+                        # prima lo snapshot aggiornato, poi il risultato: la pagina, ricevuto l'esito, trova gia' lo stato reale
+                        text = snap.next_message()
+                        if text is not None:
+                            ws.send(text)
+                            next_snap = self.mono() + SNAPSHOT_EVERY
+                        ws.send(json.dumps(res, separators=(",", ":")))
+                    now = self.mono()
                 if now - last_rx > protocol.STALE_AFTER:
                     return "error", None
                 if now >= next_ping:
@@ -550,7 +574,18 @@ class Uplink:
         except ConnError:
             return "error", None
         finally:
+            if worker is not None:
+                worker.close()
             ws.close()
+
+    @staticmethod
+    def _on_message(worker, msg: str) -> None:
+        """Messaggio del server: solo `cmd` (al resto basta il keep-alive). Mai il contenuto in console."""
+        if len(msg.encode("utf-8", "replace")) > protocol.MAX_CMD_BYTES:
+            return
+        data = _parse(msg)
+        if data.get("t") == protocol.T_CMD:
+            worker.submit(data.get("id"), data.get("name"), data.get("d"))
 
 
 class _SnapshotSender:
@@ -592,7 +627,7 @@ def _parse(text) -> dict:
 # ---------------------------------------------------------------- configurazione e avvio da riga di comando
 
 def load_config(directory: Path) -> dict:
-    cfg = {"enabled": True, "base_url": DEFAULT_SERVER_URL}
+    cfg = {"enabled": True, "base_url": DEFAULT_SERVER_URL}  # "remote_commands" (opzionale, default acceso) c'e' solo se il file lo dice
     try:
         data = json.loads((Path(directory) / CONFIG_NAME).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -602,6 +637,8 @@ def load_config(directory: Path) -> dict:
             cfg["enabled"] = data["enabled"]
         if isinstance(data.get("base_url"), str) and data["base_url"]:
             cfg["base_url"] = data["base_url"]
+        if isinstance(data.get("remote_commands"), bool):
+            cfg["remote_commands"] = data["remote_commands"]
     return cfg
 
 
@@ -610,7 +647,10 @@ def save_config(directory: Path, cfg: dict) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / CONFIG_NAME
     tmp = path.with_name(CONFIG_NAME + ".tmp")
-    tmp.write_text(json.dumps({"enabled": bool(cfg["enabled"]), "base_url": cfg["base_url"]}), encoding="utf-8")
+    out = {"enabled": bool(cfg["enabled"]), "base_url": cfg["base_url"]}
+    if "remote_commands" in cfg:
+        out["remote_commands"] = bool(cfg["remote_commands"])  # chiave scelta da Andrea nel file: si conserva
+    tmp.write_text(json.dumps(out), encoding="utf-8")
     os.replace(tmp, path)
 
 
@@ -621,6 +661,7 @@ class Options:
     link: bool = False
     unlink: bool = False
     error: str = ""
+    remote_commands: bool = True
 
 
 def parse_options(argv: list, config: dict, save: Callable[[dict], None] = lambda cfg: None) -> Options:
@@ -644,10 +685,12 @@ def parse_options(argv: list, config: dict, save: Callable[[dict], None] = lambd
         return Options(False, DEFAULT_SERVER_URL, error=str(e))
     if changed:
         try:
-            save({"enabled": cfg["enabled"], "base_url": base})
+            save({"enabled": cfg["enabled"], "base_url": base,
+                  **({"remote_commands": cfg["remote_commands"]} if "remote_commands" in cfg else {})})
         except OSError:
             pass
-    return Options(enabled, base, link="--link" in argv, unlink="--unlink" in argv)
+    remote = bool(cfg.get("remote_commands", True)) and "--no-remote-commands" not in argv  # come --no-server: vale per questa esecuzione
+    return Options(enabled, base, link="--link" in argv, unlink="--unlink" in argv, remote_commands=remote)
 
 
 def unlink_cli(argv: list, say: Callable[[str], None] = print, store: Optional[TokenStore] = None,
@@ -668,7 +711,8 @@ def unlink_cli(argv: list, say: Callable[[str], None] = print, store: Optional[T
 
 def launch(argv: list, show_login: Callable[[dict], None], say: Callable[[str], None] = print,
            store: Optional[TokenStore] = None, directory: Optional[Path] = None,
-           http=None, connect=None, snapshot_source: Optional[Callable[[], Optional[dict]]] = None) -> Optional[Uplink]:
+           http=None, connect=None, snapshot_source: Optional[Callable[[], Optional[dict]]] = None,
+           command_target=None) -> Optional[Uplink]:
     """Avvia l'uplink in un thread daemon (None se disattivato o se un'altra istanza lo ha gia')."""
     directory = Path(directory) if directory else default_dir()
     opts = parse_options(argv, load_config(directory), lambda cfg: save_config(directory, cfg))
@@ -683,6 +727,9 @@ def launch(argv: list, show_login: Callable[[dict], None], say: Callable[[str], 
         say("[uplink] un'altra istanza di Virtual Captain ha gia' il collegamento al server: questa parte senza.")
         return None
     up = Uplink(opts.base_url, store or TokenStore(directory), http=http, connect=connect, say=say,
-                show_login=show_login, force_link=opts.link, lock=lock, snapshot_source=snapshot_source)
+                show_login=show_login, force_link=opts.link, lock=lock, snapshot_source=snapshot_source,
+                command_target=command_target, remote_commands=opts.remote_commands)
+    if command_target is not None and not opts.remote_commands:
+        say("[uplink] comandi dal sito disattivati (--no-remote-commands / uplink.json): il sito mostra solo lo stato.")
     up.start()
     return up

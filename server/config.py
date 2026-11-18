@@ -113,6 +113,7 @@ class AppConfig:
     agent_hello_timeout: float = 5.0
     agent_family_recheck: float = 10.0
     agent_max_lifetime: float = 86400.0
+    remote_commands: bool = True         # VC_REMOTE_COMMANDS=off: kill switch, the command route answers 503
 
 
 def _int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -184,4 +185,5 @@ def load_app_config(env: Mapping[str, str] = os.environ) -> AppConfig:
         agent_hello_timeout=float(_int(env, "AGENT_HELLO_TIMEOUT_SECONDS", 5)),
         agent_family_recheck=float(_int(env, "AGENT_FAMILY_RECHECK_SECONDS", 10)),
         agent_max_lifetime=float(_int(env, "AGENT_MAX_LIFETIME_SECONDS", 86400)),
+        remote_commands=(env.get("VC_REMOTE_COMMANDS") or "").strip().lower() != "off",
     )

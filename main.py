@@ -1,12 +1,13 @@
 """Virtual Captain. Uso: python main.py [--sim] [--test-links] [--port 8080] [--host IP] [--no-firewall] [--simconnect-dll PERCORSO]
-                          [--server | --no-server | --local] [--server-url URL] [--link] [--unlink]
+                          [--server | --no-server | --local] [--server-url URL] [--link] [--unlink] [--no-remote-commands]
 
 Avvia la pagina web del briefing (raggiungibile dal tablet via Tailscale) e il lettore SimConnect (sola lettura,
 all'apertura del programma); quando dal tablet si preme "Briefing complete" il capitano legge il simulatore e parla.
 --sim = volo simulato, senza SimConnect. Diagnosi: python simconnect_backend.py --probe
 Collegamento al server pubblico (uplink): ACCESO di default; al primo avvio stampa il codice da approvare sul sito e
 resta utilizzabile in locale. --no-server / --local lo escludono per questa esecuzione, --server lo riabilita e salva,
---server-url cambia indirizzo (salvato), --link forza un nuovo collegamento, --unlink revoca sul server e cancella i token.
+--server-url cambia indirizzo (salvato), --no-remote-commands (o "remote_commands": false in uplink.json) impedisce al sito
+di comandare il programma (solo stato), --link forza un nuovo collegamento, --unlink revoca sul server e cancella i token.
 """
 import logging
 import sys
@@ -109,7 +110,8 @@ def main():
     print(f"\nVirtual Captain — apri dal tablet:  {url}\n", flush=True)
     show_qr(url)
 
-    up = uplink.launch(sys.argv, show_login, snapshot_source=lambda: snapshot.remote_view(st.snapshot()))  # thread daemon: legge solo lo State (con lock), non tocca SimConnect ne' la voce
+    up = uplink.launch(sys.argv, show_login, snapshot_source=lambda: snapshot.remote_view(st.snapshot()),
+                    command_target=st)  # thread daemon: legge solo lo State (con lock), non tocca SimConnect ne' la voce
 
     def speak(text, shown=None):
         say(text, on_start=st.add_log, shown=shown)  # nel log (e in grande nella pagina) solo quando inizia la lettura

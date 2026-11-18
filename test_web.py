@@ -947,12 +947,16 @@ def test_index_has_no_inline_code():
 
 def test_protocol_covers_routes():
     import re
+    import commands
     import protocol
     src = pathlib.Path(web.__file__).read_text(encoding="utf-8")
-    posts = set(re.findall(r'self\.path == "/api/([a-z-]+)"', src)) - {"state"}
+    local = set(re.findall(r'name == "([a-z-]+)"', src))  # le route che web.py gestisce da se' (le altre passano da commands)
     assert protocol.PROTOCOL_VERSION == 1
-    assert posts == set(protocol.REMOTE_COMMANDS) | set(protocol.LOCAL_ONLY)
+    assert local == set(protocol.LOCAL_ONLY)
+    assert set(commands.COMMANDS) == set(protocol.REMOTE_COMMANDS)
+    assert local | set(commands.COMMANDS) == set(protocol.REMOTE_COMMANDS) | set(protocol.LOCAL_ONLY)
     assert not set(protocol.REMOTE_COMMANDS) & set(protocol.LOCAL_ONLY)
+    assert set(protocol.ENABLED_COMMANDS) <= set(protocol.REMOTE_COMMANDS)
 
 
 if __name__ == "__main__":

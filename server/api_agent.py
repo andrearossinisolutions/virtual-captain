@@ -60,6 +60,14 @@ SNAP_MAX_PER_WINDOW, SNAP_WINDOW = 4, 2.0
 SNAP_MAX_BYTES, SNAP_BYTES_WINDOW = 1 << 20, 10.0
 SNAP_MAX_INVALID = 5          # consecutive invalid snapshots before the connection is closed (1008)
 FLIGHT_PER_USER_MINUTE, FLIGHT_PER_IP_MINUTE = 120, 600   # polling of /api/flight/state, RAM only
+# POST /api/flight/cmd/<name>: per account, per IP and per command per minute (RAM only, nothing written to the DB)
+CMD_PER_USER_MINUTE, CMD_PER_IP_MINUTE, CMD_PER_NAME_MINUTE = 30, 120, 20
+CMD_PER_NAME_SPECIAL = {"load-plan": 3, "sim-retry": 3}
+CMD_RETRY_AFTER = "15"
+CMD_HEADERS = {"Vary": "Cookie", "Cache-Control": "no-store"}
+# Fixed texts for the program's answers: nothing the program wrote reaches the browser.
+CMD_STATUS_ERRORS = {"offline": (409, "program_offline"), "unsupported": (409, "commands_unsupported"),
+                     "disabled": (409, "commands_disabled"), "busy": (409, "busy"), "timeout": (504, "timeout")}
 
 SEND_TIMEOUT = 5.0  # a peer that does not read must not hold a handler (or the loop) hostage
 
@@ -103,31 +111,34 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
         size = len(payload.encode("utf-8", "replace")) if payload is not None else len(msg.get("bytes") or b"")
         return size > wire.MAX_MSG
 
-    async def hello(ws: WebSocket) -> bool:
-        """Waits for the hello; closes the socket and returns False on any problem."""
+    async def hello(ws: WebSocket) -> Optional[tuple]:
+        """Waits for the hello; returns (caps, cv) or None (the socket is closed) on any problem."""
         msg = await recv(ws, cfg.agent_hello_timeout)
         if msg is None:
             await _close(ws, 1008)
-            return False
+            return None
         if too_big(msg):
             await _close(ws, wire.CLOSE_TOO_BIG)
-            return False
+            return None
         data = parse(msg)
         if data is None or data["t"] != wire.T_HELLO:
             await _close(ws, 1008)
-            return False
+            return None
         version = data.get("v")
         if isinstance(version, bool) or version not in wire.SUPPORTED_VERSIONS:
             await _close(ws, wire.CLOSE_BAD_VERSION)
-            return False
-        return True
+            return None
+        cv = data.get("cv")
+        return wire.parse_caps(data), (cv if isinstance(cv, int) and not isinstance(cv, bool) and 0 < cv < 100 else 0)
 
-    async def run(ws: WebSocket, user_id: int, family_id: str) -> None:
+    async def run(ws: WebSocket, user_id: int, family_id: str, caps: tuple = (), cv: int = 0) -> None:
         conn = hub.new_conn(ws, family_id)
+        conn.caps, conn.cmd_version = caps, cv
         old = hub.register(user_id, conn)
         log.info("agent connected (%d online)", hub.count())
         try:
             if old is not None:  # bounded: an unresponsive old socket must not stall the new one
+                hub.drop_pending(old)  # whoever waits for a result of the replaced program gets "offline" right away
                 await _close(old.websocket, wire.CLOSE_REPLACED, 2.0)
             mono = hub.monotonic
             started = mono()
@@ -171,7 +182,8 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
                     return
                 hub.touch(conn)
                 if data["t"] == wire.T_PING:
-                    await asyncio.wait_for(ws.send_text(json.dumps({"t": wire.T_PONG})), SEND_TIMEOUT)
+                    async with conn.send_lock():
+                        await asyncio.wait_for(ws.send_text(json.dumps({"t": wire.T_PONG})), SEND_TIMEOUT)
                 elif data["t"] == wire.T_BYE:
                     await _close(ws, 1000)
                     return
@@ -202,8 +214,12 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
                     else:
                         invalid = 0
                         hub.store_snapshot(conn, seq, view)
+                elif data["t"] == wire.T_RESULT:
+                    # only the pending command of THIS connection (id equal); anything else is ignored
+                    hub.resolve_result(conn, wire.sanitize_result(data) if len(msg["text"].encode("utf-8", "replace")) <= wire.MAX_RESULT_BYTES else None)
                 # pong, repeated hello and unknown types: only keep-alive (forward compatible)
         finally:
+            hub.drop_pending(conn)
             hub.unregister(user_id, conn)
             log.info("agent disconnected (%d online)", hub.count())
 
@@ -226,8 +242,9 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
         await websocket.accept()
         try:
             await asyncio.wait_for(websocket.send_text(json.dumps(wire.welcome_message())), SEND_TIMEOUT)
-            if await hello(websocket):
-                await run(websocket, user_id, family_id)
+            hi = await hello(websocket)
+            if hi is not None:
+                await run(websocket, user_id, family_id, *hi)
         except _Gone:
             pass
         except Exception:  # noqa: BLE001  (peer vanished mid-send, etc.): never log the content
@@ -275,7 +292,73 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
         else:
             snap = state["text"]
         unchanged = ',"unchanged":true' if state["text"] is not None and same else ""
-        body = '{"connected":true,"seq":%d,"epoch":%d,"age":%s,"spoke_ago":%s,"snapshot":%s%s}' % (state["seq"], state["epoch"], age, ago, snap, unchanged)
+        cmd = "true" if state.get("cmd") else "false"  # the program accepts commands from the site
+        body = '{"connected":true,"seq":%d,"epoch":%d,"age":%s,"spoke_ago":%s,"cmd":%s,"snapshot":%s%s}' % (state["seq"], state["epoch"], age, ago, cmd, snap, unchanged)
         return Response(body, media_type="application/json", headers=headers)
+
+    async def read_cmd_body(request: Request) -> Optional[dict]:
+        """JSON object of at most MAX_CMD_DATA bytes with a JSON content type, else None (never read more than the cap)."""
+        if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
+            return None
+        declared = request.headers.get("content-length")
+        if declared is not None and (not declared.isdigit() or int(declared) > wire.MAX_CMD_DATA):
+            return None
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw += chunk
+            if len(raw) > wire.MAX_CMD_DATA:
+                return None
+        try:
+            data = json.loads(bytes(raw) or b"{}")
+        except (ValueError, RecursionError):
+            return None
+        return data if isinstance(data, dict) else None
+
+    def cmd_error(status: int, code: str, **extra) -> JSONResponse:
+        headers = dict(CMD_HEADERS)
+        if status == 429:
+            headers["Retry-After"] = CMD_RETRY_AFTER
+        return JSONResponse({"error": code, **extra}, status_code=status, headers=headers)
+
+    @router.post("/api/flight/cmd/{name}", include_in_schema=False)
+    async def flight_command(name: str, request: Request):
+        """A command of the signed-in account's browser, forwarded to ITS program (the hub key is the session's user id).
+        Order: session + CSRF/Origin (401/403), enabled name (404 also for local-only and unknown), kill switch (503),
+        rate limits (429), body (400), live program with the capability (409), result or timeout (504)."""
+        try:
+            sess = current_session(accounts, request, True)
+        except AccountError as e:
+            return _fail(e.status, e.code)
+        if name not in wire.ENABLED_COMMANDS:
+            return cmd_error(404, "not_found")
+        if not cfg.remote_commands:
+            return cmd_error(503, "commands_off")
+        uid = str(sess["uid"])
+        if (not mem.allow("cmd_user", uid, CMD_PER_USER_MINUTE, 60.0)
+                or not mem.allow("cmd_ip", client_key(request), CMD_PER_IP_MINUTE, 60.0)
+                or not mem.allow("cmd_name", uid + ":" + name, CMD_PER_NAME_SPECIAL.get(name, CMD_PER_NAME_MINUTE), 60.0)):
+            return cmd_error(429, "rate_limited")
+        data = await read_cmd_body(request)
+        if data is None:
+            return cmd_error(400, "invalid_request")
+        try:
+            clean = wire.validate_command(name, data)
+        except wire.CommandError:
+            return cmd_error(400, "invalid_request")
+        status, res = await hub.send_command(sess["uid"], name, clean, wire.cmd_timeout(name))
+        if status in CMD_STATUS_ERRORS:
+            return cmd_error(*CMD_STATUS_ERRORS[status])
+        if res.get("ok"):
+            return JSONResponse({"ok": True}, headers=CMD_HEADERS)
+        code = res.get("code")
+        if code == "invalid":
+            return cmd_error(400, "invalid_request")
+        if code == "busy":
+            return cmd_error(409, "busy")
+        if code == "disabled":
+            return cmd_error(409, "commands_disabled")
+        if name == "load-plan" and res.get("reason") in wire.LOAD_REASONS:
+            return cmd_error(502, "command_failed", reason=res["reason"])
+        return cmd_error(502, "command_failed")
 
     return router

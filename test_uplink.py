@@ -629,7 +629,7 @@ def test_uplink_module_never_touches_simconnect_or_voice():
             imported.add((n.module or "").split(".")[0])
     assert not imported & {"simconnect_backend", "speak", "state", "web", "pyttsx3", "monitor", "brain"}
     assert imported <= {"__future__", "json", "os", "random", "socket", "sys", "threading", "time", "urllib", "dataclasses",
-                        "pathlib", "typing", "protocol", "secure_store", "websockets", "msvcrt", "fcntl", "hashlib", "snapshot"}
+                        "pathlib", "typing", "protocol", "secure_store", "websockets", "msvcrt", "fcntl", "hashlib", "snapshot", "commands"}
 
 
 # ---------------------------------------------------------------- snapshot del volo (U2)

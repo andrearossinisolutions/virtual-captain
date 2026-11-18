@@ -184,7 +184,7 @@ def test_stale_program_is_not_connected_and_age_follows_the_heartbeat():
     hub = Hub(stale_after=12, monotonic=lambda: t["now"])
     conn = hub.new_conn(object(), "fam")
     hub.register(7, conn)
-    assert hub.flight_state(7) == {"seq": 0, "epoch": conn.epoch, "age": None, "spoke_ago": None, "text": None}
+    assert hub.flight_state(7) == {"seq": 0, "epoch": conn.epoch, "age": None, "spoke_ago": None, "text": None, "cmd": False}
     t["now"] = 103.0
     hub.store_snapshot(conn, 4, {"phase": "flying", "spoke_n": 1})
     t["now"] = 110.0

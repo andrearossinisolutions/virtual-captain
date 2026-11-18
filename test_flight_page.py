@@ -33,8 +33,8 @@ def js_ids():
 LOCAL_ONLY = {"apt", "clmode", "cfg", "deploc", "edit", "end", "end2", "go", "grid", "info", "load", "mode", "plancfg",
               "simbrief", "simdll", "simmsg", "simretry", "simstat", "tech", "thrback", "thrcal", "thrcard", "thrclear",
               "thrclose", "threrr", "threrr", "thrmsg", "thrnext", "thrsum", "thrsumtxt", "thrskip", "thrcancel",
-              "thrstart", "thrst", "thrtab", "thrtext", "thrtitle", "thrwarn", "thrbtns", "banner", "rdata"}
-REMOTE_ONLY = {"banner", "rdata"}
+              "thrstart", "thrst", "thrtab", "thrtext", "thrtitle", "thrwarn", "thrbtns", "banner", "rdata", "rerr"}
+REMOTE_ONLY = {"banner", "rdata", "rerr"}
 
 
 def test_every_id_used_by_app_js_is_in_flight_html_or_declared_local_only():
@@ -69,11 +69,12 @@ def test_app_js_never_builds_html_from_data_and_has_no_inline_style():
     assert "http://" not in JS and "https://" not in JS
 
 
-def test_remote_mode_is_read_only():
-    assert 'if(REMOTE&&body)throw new Error("Read-only")' in JS
-    for fn in ("function sqkStart(){if(sqkEdit||REMOTE)return;", "function fStart(el,sel){if(REMOTE||"):
+def test_remote_controls_are_on_unless_the_pc_refuses_commands():
+    assert "if(REMOTE&&body)return remoteApi(path,body)" in JS and "Read-only" not in JS
+    for fn in ("function sqkStart(){if(sqkEdit||RO())return;", "function fStart(el,sel){if(RO()||"):
         assert fn in JS, fn
-    assert "i.disabled=REMOTE" in JS and "b.disabled=REMOTE" in JS and "nb.hidden=REMOTE||!nx" in JS
+    assert "i.disabled=RO()" in JS and "b.disabled=RO()" in JS and "nb.hidden=RO()||!nx" in JS and "REMOTE||" not in JS.replace("view=REMOTE||s.phase", "")
+    assert "const RO=()=>REMOTE&&!rCmd" in JS and "rCmd=d.cmd!==false" in JS and "Remote control is off on the PC" in JS
 
 
 def test_polling_is_one_second_in_flight_and_three_when_not_connected_with_backoff_on_429():
