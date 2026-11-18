@@ -25,6 +25,19 @@ Scheda e decisioni nel second brain: `life/virtual-captain/progetto.md`.
 - Diagnosi in sola lettura: `python simconnect_backend.py --probe [--simconnect-dll PERCORSO]` stampa i valori letti (0 = assente o sconosciuta).
 - Rimossi `--aao`, `CAPTAIN_AAO_URL` e l'indirizzo AAO nella pagina; il vecchio `aao_url` in `~/.virtual-captain.json` viene ignorato. Ritorno alla versione con AAO: tag `v0.1.0`.
 
+## Collegamento al server pubblico (uplink, U1)
+
+Il programma si collega da solo al server pubblico (`https://virtualcaptain.rossinisolutions.com`, sovrascrivibile con `--server-url`): e' **acceso di default**. La pagina locale resta sempre attiva e SimConnect e la voce non dipendono mai dal collegamento (nessun blocco se il server e' irraggiungibile).
+
+- **Nuova dipendenza**: `websockets` (fissata in `requirements.txt`). Dopo un aggiornamento, **a mano**: `pip install -r requirements.txt` (il launcher non installa nulla). Senza la libreria il programma parte lo stesso e lo scrive in console.
+- Al primo avvio, senza token, la console mostra un **codice** (e un QR): apri il link, accedi al sito, controlla il codice e digita gli ultimi 4 caratteri; poi la pagina `/waiting` diventa "Program connected".
+- Opzioni: `--server` (abilita e salva), `--no-server` o `--local` (nessun uplink in questa esecuzione), `--server-url URL` (salvato; http solo su localhost), `--link` (nuovo collegamento), `--unlink` (revoca sul server e cancella i token, poi esce; se il server non risponde i token restano per riprovare).
+- I token sono salvati in `%APPDATA%\VirtualCaptain\link.dat` (cifrati con DPAPI, legati all'utente di Windows e a questo PC; se `LOCALAPPDATA` manca si usa `APPDATA`); su altri sistemi in `~/.config/virtual-captain/link.dat` con permessi 0600, **non cifrati** (avviso in console). Accanto, `uplink.json` (acceso/spento, indirizzo) e il lock di istanza: una seconda istanza parte senza uplink.
+- Stati ed errori dell'uplink solo in console (mai token ne' codici nei log). Se un'altra istanza prende il collegamento (altro PC, stesso account) questa non si riconnette; se l'autorizzazione e' revocata si riavvia il programma o si usa `--link`.
+- **Cartella `server/`**: il programma richiede `server/wire.py` accanto a `protocol.py` (`protocol.py` lo importa). Si aggiorna con `git pull` (launcher), mai copiando a mano singoli file.
+- `--link`: i vecchi token restano finche' il nuovo collegamento non riesce; poi i nuovi li sostituiscono e si tenta (best effort, 3 s) di revocare la famiglia vecchia.
+- Test: `python3 -m pytest test_secure_store.py test_uplink.py`.
+
 ## Anti-Ice dinamico (Engine Anti-Ice)
 
 Le voci anti-ice della checklist mostrano un testo calcolato al posto di "AS REQUIRED"; sul sim si fa solo lettura.

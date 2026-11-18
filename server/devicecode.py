@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 import secrets
 import sqlite3
-from typing import Optional
+from typing import Optional, Tuple
 
 from server.accounts import LOCKED, AccountError, Accounts
 from server.ratelimit import DAY
@@ -212,6 +212,33 @@ class DeviceCodes:
             with self.db.tx() as c:
                 c.execute("UPDATE device_tokens SET last_used_at=? WHERE id=?", (now, row["id"]))
         return row["user_id"]
+
+    def verify_access(self, token) -> Optional[Tuple[int, str]]:
+        """(user_id, family_id) for a valid access token, else None. Used by the uplink handshake;
+        same checks as verify_access_token. Blocking (SQLite): call it in a thread pool."""
+        if not is_token_shaped(token):
+            return None
+        now = self.clock()
+        with self.db.read() as c:
+            row = c.execute("SELECT id, user_id, family_id, access_expires_at, expires_at, "
+                            "revoked_at, last_used_at FROM device_tokens WHERE access_hash=?",
+                            (token_hash(token),)).fetchone()
+        if (row is None or row["revoked_at"] is not None or row["access_expires_at"] <= now
+                or row["expires_at"] <= now):
+            return None
+        if row["last_used_at"] is None or now - row["last_used_at"] >= LAST_USED_EVERY:
+            with self.db.tx() as c:
+                c.execute("UPDATE device_tokens SET last_used_at=? WHERE id=?", (now, row["id"]))
+        return row["user_id"], row["family_id"]
+
+    def family_active(self, family_id: str) -> bool:
+        """True while the family still has a usable (not revoked, not expired) token: rotation
+        keeps one live row, revoke / reuse / password change / account deletion leave none."""
+        now = self.clock()
+        with self.db.read() as c:
+            row = c.execute("SELECT 1 FROM device_tokens WHERE family_id=? AND revoked_at IS NULL "
+                            "AND expires_at>? LIMIT 1", (family_id, now)).fetchone()
+        return row is not None
 
     # ---- website side (signed in) ----
     def _keys(self, sess: dict, ip: str) -> list:

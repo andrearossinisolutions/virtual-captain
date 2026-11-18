@@ -48,6 +48,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .msg.ok { color: var(--ok); }
 .status { display: flex; align-items: center; gap: .6rem; font-weight: 600; margin-bottom: .75rem; }
 .dot { width: .8rem; height: .8rem; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.on { background: var(--ok); }
 .value { font-weight: 600; color: var(--text); word-break: break-all; }
 @media (min-width: 40rem) {
   main { padding-top: 3rem; }

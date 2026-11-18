@@ -17,17 +17,20 @@ MAX_BODY = 8192
 OK = {"ok": True}
 
 
-def client_ip(request: Request) -> str:
-    """X-Forwarded-For is trusted only when the request comes from the local Apache,
+def client_ip_from(peer: str, headers) -> str:
+    """X-Forwarded-For is trusted only when the connection comes from the local Apache,
     and only its LAST value (the one Apache appended; earlier ones are client-controlled).
     A value that is not an IP address is ignored. IPv6 is grouped by /64."""
-    peer = request.client.host if request.client else ""
     if peer in LOOPBACK:
-        parts = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",")]
+        parts = [p.strip() for p in headers.get("x-forwarded-for", "").split(",")]
         parts = [p for p in parts if p]
         if parts and is_ip(parts[-1]):
             return group_ip(parts[-1])
     return group_ip(peer) if peer else "unknown"
+
+
+def client_ip(request: Request) -> str:
+    return client_ip_from(request.client.host if request.client else "", request.headers)
 
 
 def _fail(status: int, code: str) -> JSONResponse:

@@ -291,3 +291,86 @@ def test_stashed_link_code_expires_and_is_cleared_in_node(tmp_path):
 def test_link_code_cleared_at_logout_and_registration():
     assert "clearLinkCode();" in (PUBLIC_DIR / "common.js").read_text(encoding="utf-8")
     assert "VC.clearLinkCode()" in (PUBLIC_DIR / "register.js").read_text(encoding="utf-8")
+
+
+# ---------- waiting page: Program connected (step U1) ----------
+
+def test_waiting_page_polls_the_agent_status_with_text_only():
+    js = (PUBLIC_DIR / "waiting.js").read_text(encoding="utf-8")
+    html = (PUBLIC_DIR / "waiting.html").read_text(encoding="utf-8")
+    assert "/api/agent/status" in js and "3000" in js
+    assert "Program connected" in js and "Program not connected" in js and "Program not connected" in html
+    assert "Connected. The flight view arrives in the next step." in js
+    assert "textContent" in js
+    for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "location.search",
+                "sessionStorage", "localStorage", "WebSocket", "EventSource"):
+        assert bad not in js, bad
+    for ident in ('id="title"', 'id="state"', 'id="dot"', 'id="start"', 'id="note"'):
+        assert ident in html
+    assert re.search(r'<button[^>]*id="start"[^>]*\bdisabled\b', html)  # off until the program is connected
+    assert not re.search(r"<script(?![^>]*\bsrc=)", html) and not re.search(r"\son\w+=|style=", html)
+
+
+WAITING_HARNESS = r"""
+const fs = require("fs"), vm = require("vm");
+const [common, waiting] = [process.argv[2], process.argv[3]];
+const answers = JSON.parse(process.argv[4]);   // scripted /api/agent/status replies: [status, body]
+const els = {}, timers = [], replaced = [], calls = [];
+function el(id) { return els[id] = els[id] || { id, textContent: "", className: "", disabled: false, handlers: {},
+  addEventListener(t, f) { this.handlers[t] = f; } }; }
+["title", "state", "dot", "start", "note", "who", "logout"].forEach(el);
+els.title.textContent = "Program not connected"; els.start.disabled = true;
+const window = { location: { hash: "", pathname: "/waiting", replace: (p) => replaced.push(p) },
+                 history: { replaceState() {} }, setTimeout: (f, ms) => { timers.push([f, ms]); return timers.length; } };
+let n = 0;
+const fetch = (url) => {
+  calls.push(url);
+  if (url === "/api/auth/me") return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ email: "a@b.c", csrf_token: "t" }) });
+  const [status, body] = answers[Math.min(n++, answers.length - 1)];
+  return Promise.resolve({ ok: status === 200, status, json: () => Promise.resolve(body) });
+};
+const ctx = vm.createContext({ window, document: { getElementById: (id) => els[id] }, Promise, JSON, fetch, Date });
+vm.runInContext(fs.readFileSync(common, "utf8"), ctx);
+vm.runInContext(fs.readFileSync(waiting, "utf8"), ctx);
+const tick = () => new Promise((r) => setImmediate(r));
+(async () => {
+  const out = [];
+  const snap = () => out.push([els.title.textContent, els.state.textContent, els.dot.className, els.start.disabled, els.note.textContent]);
+  await tick(); await tick(); snap();
+  for (let i = 1; i < answers.length; i++) {
+    const [f] = timers.shift(); f(); await tick(); await tick();
+    if (i === 1) { els.start.handlers.click(); }
+    snap();
+  }
+  console.log(JSON.stringify({ out, replaced, ms: timers.map((t) => t[1]), calls }));
+})();
+"""
+
+
+def run_waiting(tmp_path, answers):
+    import json
+    script = tmp_path / "w.js"
+    script.write_text(WAITING_HARNESS, encoding="utf-8")
+    res = subprocess.run([NODE, str(script), str(PUBLIC_DIR / "common.js"), str(PUBLIC_DIR / "waiting.js"),
+                          json.dumps(answers)], capture_output=True, text=True, timeout=20)
+    assert res.returncode == 0, res.stderr
+    return json.loads(res.stdout.strip().splitlines()[-1])
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_waiting_page_follows_the_status_in_node(tmp_path):
+    r = run_waiting(tmp_path, [[200, {"connected": False}], [200, {"connected": True}],
+                               [200, {"connected": False}]])
+    off = ["Program not connected", "Waiting for the Virtual Captain program", "dot", True, ""]
+    on = ["Program connected", "The Virtual Captain program is connected", "dot on", False,
+          "Connected. The flight view arrives in the next step."]
+    assert r["out"] == [off, on, off]  # connected: enabled, click shows only the text; offline: back, note cleared
+    assert r["ms"] == [3000] and r["replaced"] == []
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_waiting_page_error_and_401_in_node(tmp_path):
+    r = run_waiting(tmp_path, [[200, {"connected": True}], [500, {}]])
+    assert r["out"][0][0] == "Program connected" and r["out"][1][0] == "Program not connected"
+    assert r["out"][1][3] is True
+    assert run_waiting(tmp_path, [[401, {"error": "unauthenticated"}]])["replaced"] == ["/login"]

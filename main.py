@@ -1,14 +1,19 @@
 """Virtual Captain. Uso: python main.py [--sim] [--test-links] [--port 8080] [--host IP] [--no-firewall] [--simconnect-dll PERCORSO]
+                          [--server | --no-server | --local] [--server-url URL] [--link] [--unlink]
 
 Avvia la pagina web del briefing (raggiungibile dal tablet via Tailscale) e il lettore SimConnect (sola lettura,
 all'apertura del programma); quando dal tablet si preme "Briefing complete" il capitano legge il simulatore e parla.
 --sim = volo simulato, senza SimConnect. Diagnosi: python simconnect_backend.py --probe
+Collegamento al server pubblico (uplink): ACCESO di default; al primo avvio stampa il codice da approvare sul sito e
+resta utilizzabile in locale. --no-server / --local lo escludono per questa esecuzione, --server lo riabilita e salva,
+--server-url cambia indirizzo (salvato), --link forza un nuovo collegamento, --unlink revoca sul server e cancella i token.
 """
 import logging
 import sys
 import time
 
 import firewall
+import uplink
 import web
 from brain import Brain, parse_dep, readout_pair
 from simconnect_backend import BackendError, SimConnectBackend
@@ -62,12 +67,24 @@ def show_qr(url):
         print("(per il QR: pip install qrcode)")
 
 
+def show_login(info):
+    """Codice da approvare sul sito, con link e QR (solo console: mai in file di log)."""
+    print("\nCollega il programma al tuo account Virtual Captain:")
+    print(f"  1. apri  {info.get('verification_uri_complete') or info['verification_uri']}")
+    print(f"  2. controlla che il codice sia  {info['user_code']}  e digita gli ultimi 4 caratteri  ({info['user_code'][-4:]})")
+    print("  Nel frattempo il programma resta utilizzabile in locale.\n", flush=True)
+    if info.get("verification_uri_complete"):
+        show_qr(info["verification_uri_complete"])
+
+
 def arg(name, default=None):
     return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if "--unlink" in sys.argv:
+        sys.exit(uplink.unlink_cli(sys.argv))
     sim = "--sim" in sys.argv
     port = int(arg("--port", 8080))
     host = arg("--host") or web.tailscale_ip()
@@ -90,6 +107,8 @@ def main():
     url = f"http://{host}:{port}"
     print(f"\nVirtual Captain — apri dal tablet:  {url}\n", flush=True)
     show_qr(url)
+
+    up = uplink.launch(sys.argv, show_login)  # thread daemon: non tocca SimConnect ne' la voce
 
     def speak(text, shown=None):
         say(text, on_start=st.add_log, shown=shown)  # nel log (e in grande nella pagina) solo quando inizia la lettura
@@ -164,6 +183,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        if up is not None:
+            up.stop()
         if backend is not None:
             backend.stop()
         srv.shutdown()

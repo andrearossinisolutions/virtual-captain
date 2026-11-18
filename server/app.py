@@ -1,6 +1,6 @@
 """Virtual Captain public server: skeleton, account API (2b-1) and account pages (2b-2).
 
-Placeholder page, health check, /api/auth/*, /api/device/* and, with the API, the pages in public/.
+Placeholder page, health check, /api/auth/*, /api/device/*, /api/agent/status, WS /ws/agent and, with the API, the pages in public/.
 No docs. It does NOT serve web/ and does NOT import protocol.py yet. Nothing touches the DB until first use.
 """
 from __future__ import annotations
@@ -85,16 +85,21 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
         from server.api_device import build_device_router
         from server.devicecode import DeviceCodes
         devices = DeviceCodes(accounts)
-        app.state.devices = devices  # devices.verify_access_token(): for the future uplink
+        app.state.devices = devices
+        from server.api_agent import build_agent_router
+        from server.hub import Hub
+        hub = Hub(stale_after=config.agent_stale_after)  # in RAM: --workers 1 is mandatory
+        app.state.hub = hub
         app.include_router(build_router(accounts))
         app.include_router(build_device_router(accounts, devices))
+        app.include_router(build_agent_router(accounts, devices, hub))
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
             response.headers[name] = value
-        if request.url.path.startswith(("/api/auth/", "/api/device/")):
+        if request.url.path.startswith(("/api/auth/", "/api/device/", "/api/agent/")):
             response.headers["Cache-Control"] = "no-store"
         return response
 

@@ -11,10 +11,11 @@
 <main>
 <p class="brand">Virtual Captain</p>
 <div class="card">
-<h1>Program not connected</h1>
-<div class="status"><span class="dot"></span><span>Waiting for the Virtual Captain program</span></div>
+<h1 id="title">Program not connected</h1>
+<div class="status"><span class="dot" id="dot"></span><span id="state">Waiting for the Virtual Captain program</span></div>
 <p>Flight data appears here once the Virtual Captain program is running on your PC and signed in to your account. No flight data is shown while it is not connected.</p>
 <button type="button" id="start" disabled>Start flight</button>
+<p class="msg" id="note"></p>
 <p class="hint">Signed in as <span class="value" id="who"></span></p>
 </div>
 <p class="links"><a href="/link">Link a program</a><a href="/account">Account settings</a><button type="button" id="logout" class="secondary">Sign out</button></p>

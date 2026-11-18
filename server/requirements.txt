@@ -17,3 +17,5 @@ argon2-cffi==25.1.0
 argon2-cffi-bindings==25.1.0
 cffi==2.0.0
 pycparser==2.23
+# uplink of the PC program (step U1): pure Python wheel, no compiler needed; uvicorn (without [standard]) finds it for the WebSocket
+websockets==15.0.1

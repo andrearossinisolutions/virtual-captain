@@ -106,6 +106,13 @@ class AppConfig:
     device_refresh_ttl: int = 90 * 86400
     device_lookup_max_failures: int = 5
     device_lookup_lock_seconds: int = 900
+    agent_max: int = 50                  # connected programs at once (RAM)
+    agent_ip_per_minute: int = 30        # handshakes per IP per minute
+    agent_msgs_per_second: int = 20      # messages per second per connection
+    agent_stale_after: float = 12.0
+    agent_hello_timeout: float = 5.0
+    agent_family_recheck: float = 10.0
+    agent_max_lifetime: float = 86400.0
 
 
 def _int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -170,4 +177,11 @@ def load_app_config(env: Mapping[str, str] = os.environ) -> AppConfig:
         device_refresh_ttl=_int(env, "DEVICE_REFRESH_TTL_DAYS", 90) * 86400,
         device_lookup_max_failures=_int(env, "DEVICE_LOOKUP_MAX_FAILURES", 5),
         device_lookup_lock_seconds=_int(env, "DEVICE_LOOKUP_LOCK_MINUTES", 15) * 60,
+        agent_max=_int(env, "AGENT_MAX", 50),
+        agent_ip_per_minute=_int(env, "RATE_AGENT_IP_MINUTE", 30),
+        agent_msgs_per_second=_int(env, "AGENT_MSGS_PER_SECOND", 20),
+        agent_stale_after=float(_int(env, "AGENT_STALE_SECONDS", 12)),
+        agent_hello_timeout=float(_int(env, "AGENT_HELLO_TIMEOUT_SECONDS", 5)),
+        agent_family_recheck=float(_int(env, "AGENT_FAMILY_RECHECK_SECONDS", 10)),
+        agent_max_lifetime=float(_int(env, "AGENT_MAX_LIFETIME_SECONDS", 86400)),
     )

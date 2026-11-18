@@ -281,3 +281,41 @@ Il poll risponde `{"error":"authorization_pending",...}`. Apri nel browser, gia'
 - **Righe ruotate (m4)**: restano 7 giorni per riconoscere il riuso; oltre, un refresh vecchio da' solo `invalid_grant` senza revocare la famiglia. Il cambio email non revoca i token.
 - `verify_access_token` legge con una connessione in sola lettura e aggiorna `last_used_at` al massimo una volta al minuto. La migrazione 4 aggiunge `looked_up_by` a `device_codes`.
 - Il codice conservato nella scheda durante il login (`sessionStorage`) scade dopo 10 minuti e si cancella al logout e alla registrazione.
+
+## Uplink del programma (passo U1)
+
+Il programma sul PC, collegato col device-code, apre `wss://<dominio>/ws/agent`; la pagina `/waiting` mostra **Program connected** e abilita **Start flight** (per ora senza dati di volo né destinazione).
+
+### Endpoint e protocollo
+
+- `WS /ws/agent`: header `Authorization: Bearer <access token>` (**mai nella query string**: un token in query vale come assente). Il rifiuto avviene **prima** dell'accept, con status HTTP: 403 se c'e' un qualsiasi header `Origin` (i browser non possono aprirlo), 429 troppi tentativi dallo stesso IP (30/minuto), 503 troppi programmi collegati (50), 401 token assente, scaduto, revocato o errato.
+- `GET /api/agent/status`: cookie di sessione, `{"connected": true|false}`, `Cache-Control: no-store`, 401 senza sessione. La pagina `/waiting` lo interroga ogni 3 secondi.
+- Messaggi JSON con campo `t`: il server manda `welcome` (`v`, `heartbeat`, `max_msg`); il programma risponde con `hello` (`v`, `app`, `platform`) entro 5 s, poi `ping` ogni 5 s (risposta `pong`); `bye` per chiudere. Il contratto sta in `server/wire.py` (la root lo riesporta in `protocol.py`).
+- Codici di chiusura: 4001 sostituito da un'altra istanza dello stesso account; 4002 versione del protocollo non supportata; 4003 autorizzazione revocata o scaduta; 4004 messaggio troppo grande o troppo frequente (max 256 KiB, 20 al secondo); 4005 riservato (al riavvio del server uvicorn chiude con 1012: il programma si ricollega con qualunque chiusura diversa da 4001/4002/4003).
+- Limiti: un solo programma per account; silenzio oltre 12 s = connessione chiusa e `connected:false`; la famiglia di token viene riletta ogni 10 s (la revoca da cancellazione account, cambio/reset password, `/api/device/revoke` o nuovo codice chiude il collegamento entro ~10 s); ogni collegamento dura al massimo 24 ore, poi il programma si ricollega da solo. Variabili opzionali (solo nomi in `env.example`): `AGENT_MAX`, `RATE_AGENT_IP_MINUTE`, `AGENT_MSGS_PER_SECOND`, `AGENT_STALE_SECONDS`, `AGENT_HELLO_TIMEOUT_SECONDS`, `AGENT_FAMILY_RECHECK_SECONDS`, `AGENT_MAX_LIFETIME_SECONDS`.
+- Nei log: solo "agent connected/disconnected (N online)". Mai token, indirizzi o dati utente.
+
+### Cosa fa Andrea sul VPS (a mano, deploy.sh e workflow non cambiano)
+
+1. Dopo il deploy del codice (che porta anche `websockets==15.0.1` nel venv con `pip install -r`), aggiorna il service con le due nuove opzioni di uvicorn (`--ws-max-size 262144 --timeout-graceful-shutdown 5`): copia `server/deploy/virtual-captain.service` (ricordando di rimettere il tuo `User=`/`Group=`) oppure aggiungi le due opzioni alla riga `ExecStart` del file gia' installato:
+```
+$ sudo cp server/deploy/virtual-captain.service /etc/systemd/system/virtual-captain.service   # poi correggi User/Group
+$ sudo systemctl daemon-reload
+$ sudo systemctl restart virtual-captain
+```
+2. Controlla il journal: **non** deve comparire `No supported WebSocket library detected` (uvicorn senza `[standard]` usa la libreria `websockets` installata dal requirements): `journalctl -u virtual-captain -e --no-pager | grep -i websocket`.
+3. Apache **invariato**: il vhost SSL ha gia' `ProxyPass /ws/` verso `ws://127.0.0.1:8100/ws/` (serve `proxy_wstunnel`, gia' nell'elenco dei moduli).
+4. **`--workers 1` e' obbligatorio**: l'elenco dei programmi collegati (l'Hub) sta nella RAM del processo; con piu' worker due collegamenti dello stesso account potrebbero finire in processi diversi.
+
+**Ritorno indietro**: rimetti il service precedente (senza le due opzioni), `daemon-reload` e `restart`; senza le opzioni il limite dei messaggi WebSocket e' 1 MiB (il server rifiuta comunque oltre 256 KiB) e l'arresto puo' attendere i collegamenti aperti.
+
+### Come provarlo (U1)
+
+Con il programma sul PC avviato (`python main.py`, di default collega al server) e un account verificato: al primo avvio la console mostra il codice (e un QR); approvalo da `/link` (ultimi 4 caratteri), poi apri `/waiting` da loggato: dopo pochi secondi il titolo diventa **Program connected** e **Start flight** si abilita (mostra solo un messaggio). Chiudi il programma: entro ~12 secondi torna **Program not connected**.
+
+### Note dopo la review (U1)
+
+- Prova manuale del rifiuto: `curl -i -N -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' https://<dominio>/ws/agent` (senza token) deve rispondere **HTTP 401**; con `-H 'Origin: https://x.example'` risponde 403. Con uvicorn reale (implementazione legacy di websockets) i rifiuti arrivano come status HTTP 401/403, coperti da un test su loopback.
+- Le chiusure e gli invii lato server hanno un tempo massimo (5 s; 2 s per chiudere la vecchia connessione sostituita): un socket che non risponde non blocca le altre.
+- Dopo `invalid_grant`, 4003 o 3 rifiuti 401 di fila su token appena rinnovati il programma NON chiede da solo un nuovo codice: resta in "relink_needed" e dice di riavviare o usare `--link`. Un nuovo codice automatico e' da valutare in un passo successivo.
+- Sul PC Windows i token stanno in `%LOCALAPPDATA%\VirtualCaptain\` (non roaming).
