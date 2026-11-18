@@ -121,3 +121,58 @@ Gli header di sicurezza non vengono aggiunti alle risposte 500 non gestite (limi
 ## Log
 
 `journalctl -u virtual-captain -e`, `sudo tail /var/log/apache2/virtual-captain-error.log`.
+
+## Email (passo 2a: prova di invio)
+
+Il server non importa ancora il modulo mail: questo passo serve solo a provare che l'invio funziona. **Non** serve un deploy per cambiare le variabili, ma il codice (`server/mail.py`, `mailtest.py`) deve essere gia' arrivato in `/var/www/virtual-captain/current` col deploy normale.
+
+### Variabili
+
+In `/etc/virtual-captain/env` (root, 600), **NOME=valore, una per riga, senza spazi attorno a `=`**:
+```
+SMTP_HOST=<server SMTP del provider>
+SMTP_PORT=587
+SMTP_USER=<casella principale autenticata>
+SMTP_PASSWORD=<password della casella>
+MAIL_FROM=<indirizzo mittente (alias)>
+MAIL_FROM_NAME=Virtual Captain          (opzionale)
+SMTP_TIMEOUT=15                         (opzionale)
+MAIL_ENVELOPE_FROM=<casella principale> (opzionale, vedi "Alias rifiutato")
+```
+Scrivile a mano: `sudo nano /etc/virtual-captain/env`. **La password mai in chat, mai in un comando che resta nella history.** Alternativa che non lascia traccia nella history:
+```
+$ [ -e /etc/virtual-captain/env ] || sudo install -m 600 -o root -g root /dev/null /etc/virtual-captain/env
+$ read -rs -p "Password: " P; echo
+$ printf '\nSMTP_PASSWORD=%s\n' "$P" | sudo tee -a /etc/virtual-captain/env > /dev/null; unset P
+```
+`read -rs -p` funziona in **bash** (sul VPS); in zsh `-p` significa altro (coprocess). Il `\n` iniziale evita che la riga si attacchi all'ultima se il file non finisce con un a-capo (lascia al massimo una riga vuota).
+Attenzione: il file e' letto da systemd, non da una shell. **Niente virgolette se non servono**. Rischi reali di `EnvironmentFile`: un backslash finale (continua la riga), spazi iniziali/finali tolti, virgolette ai due lati interpretate (e tolte); `$` e `%` nei valori non quotati **non** vengono espansi; un `#` a meta' riga **non** e' un commento. Se l'autenticazione fallisce senza motivo, prova una password senza questi caratteri. La password deve essere ASCII semplice (senza accenti) e su una sola riga.
+L'utente del servizio non legge il file, ma systemd si': `-p EnvironmentFile=` con `sudo systemd-run` funziona anche con il file root 600.
+**Verifica**: `sudo ls -l /etc/virtual-captain/env` -> `-rw------- root root` (mai `cat` del file in chat).
+**Ritorno indietro**: togli la riga con `sudo nano` (se una variabile e' duplicata vale l'ultima).
+
+### Prova
+
+Prima solo connessione e login (non invia nulla):
+```
+$ sudo systemd-run --quiet --wait --pipe --collect -p User=<UTENTE_VPS> -p WorkingDirectory=/var/www/virtual-captain/current -p EnvironmentFile=/etc/virtual-captain/env /var/www/virtual-captain/venv/bin/python -m server.mailtest --check
+```
+Poi l'invio vero (stesso comando, `--check` sostituito dal destinatario):
+```
+$ sudo systemd-run --quiet --wait --pipe --collect -p User=<UTENTE_VPS> -p WorkingDirectory=/var/www/virtual-captain/current -p EnvironmentFile=/etc/virtual-captain/env /var/www/virtual-captain/venv/bin/python -m server.mailtest <destinatario>
+```
+Esito: `OK`, oppure `ERROR <tipo>` con tipo `config` (variabile mancante o non valida: ne indica il nome; destinatario non valido), `auth` (utente/password), `tls` (STARTTLS assente o certificato non valido), `timeout`, `connection`, `sender` (mittente rifiutato), `recipient` (destinatario rifiutato), `internal` (errore imprevisto, nessun dettaglio). Exit code diverso da 0 in errore (2 per config o uso sbagliato del comando, 3 per gli altri). Il destinatario e' un indirizzo semplice ASCII, senza nome ne' liste.
+Fai **due prove**: una su una casella Gmail e una su una casella del dominio.
+
+### Controlli di consegna (SPF/DKIM/DMARC)
+
+```
+$ dig +short TXT <dominio-mittente>                      # record SPF (v=spf1 ...)
+$ dig +short TXT <selettore>._domainkey.<dominio-mittente>   # DKIM (selettore indicato dal provider)
+$ dig +short TXT _dmarc.<dominio-mittente>               # DMARC
+```
+Poi apri la mail ricevuta (Gmail: tre puntini > "Mostra originale") e controlla `Authentication-Results`: servono `spf=pass`, `dkim=pass` e la mail in **inbox** (non spam). **Non si passa al passo 2b finche' non e' cosi'.**
+
+### Alias rifiutato
+
+Se il server rifiuta il mittente (errore di tipo `sender`), prova a impostare `MAIL_ENVELOPE_FROM=<casella principale>`: la mail parte con quell'indirizzo come mittente di busta, il `From` resta l'alias e viene aggiunto `Reply-To` con l'alias. Si puo' provare anche da riga di comando: `... -m server.mailtest <destinatario> --envelope-from <casella principale>`. Ultima spiaggia: `MAIL_FROM` = casella principale.
