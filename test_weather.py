@@ -42,6 +42,43 @@ def test_metar_parsing():
     assert metar_from_json([]) == {} and metar_from_json(None) == {} and metar_from_json([{}]) == {}
 
 
+def test_metar_wx_clouds_vis():
+    m = metar_from_raw("LIML 181550Z 20004KT 0800 BR BKN002 03/03 Q1022")
+    assert m["wx"] == ["BR"] and m["clouds"] == [{"cover": "BKN", "base_ft": 200, "type": None}] and W.vis_m(m["vis"]) == 800
+    m = metar_from_raw("EDDF 141050Z 27012G25KT 9999 -SHRA FEW020 SCT040CB 12/08 Q1013")
+    assert m["wx"] == ["RA"] and [(c["cover"], c["type"]) for c in m["clouds"]] == [("FEW", None), ("SCT", "CB")]
+    m = metar_from_raw("LIPZ 101050Z 00000KT 4000 +TSRA FZFG BKN015TCU VV002 RMK BR OVC010")
+    assert m["wx"] == ["TS", "RA", "FG"] and [(c["cover"], c["type"]) for c in m["clouds"]] == [("BKN", "TCU"), ("VV", None)]  # dopo RMK niente
+    m = metar_from_raw("LIRF 141050Z VCSH 00000KT CAVOK 18/10 Q1009 TEMPO RA")
+    assert "wx" not in m and "clouds" not in m  # VC e trend non contano
+    m = metar_from_raw("KJFK 121251Z 18010KT 1 1/2SM -SN VV003 M02/M04 A2992")
+    assert m["vis"] == "1 1/2 SM" and m["wx"] == ["SN"] and m["clouds"][0]["cover"] == "VV" and m["temp"] == -2
+    assert "wx" not in metar_from_raw("LIRF 141050Z 27012KT 9999 NSC 12/08 Q1013") and "clouds" not in metar_from_raw("LIRF 141050Z 27012KT 9999 NSC 12/08 Q1013")
+    assert metar_from_raw("LIRF 141050Z 27012KT 9999 HZ FU 12/08 Q1013")["wx"] == ["HZ", "FU"]  # parsati (l'esclusione e' in icing.py)
+    v = W.vis_m
+    assert v("CAVOK") == 10000 and v("9999") == 9999 and v("0800") == 800 and abs(v("10 SM") - 16093.4) < 0.01 and abs(v("1/2 SM") - 804.67) < 0.01
+    assert abs(v("1 1/2 SM") - 2414.01) < 0.01 and abs(v("6+ SM") - 9656.04) < 0.01 and v("") is None and v(None) is None and v("foo") is None
+    j = metar_from_json([{"altim": 1000, "visib": "6+", "rawOb": "KXXX 121251Z 18010KT RA 10/08"}])
+    assert j["wx"] == ["RA"] and j["vis"] == "6+ SM"
+
+
+def test_seed_wx_not_merged_with_fresh_online():
+    t = [1000.0]
+    online = metar_from_raw("LIML 181650Z 20004KT CAVOK 08/03 Q1022")  # online: cielo sereno, nessun wx/clouds
+    w = Weather(fetch=lambda i: online, now=lambda: t[0], log=lambda s: None)
+    w.seed("LIML", "LIML 181350Z 20004KT 0800 RA BKN002 03/03 Q1022")
+    assert w.get_metar("LIML")["wx"] == ["RA"]  # online non ancora arrivato: ripiego del piano
+    w.refresh("LIML")
+    m = w.get_metar("LIML")
+    assert "wx" not in m and "clouds" not in m and m["vis"] == "CAVOK" and m["temp"] == 8  # online unico dato
+    t[0] += 4000  # online scaduto: torna il piano
+    w.fetch = None
+    assert w.get_metar("LIML")["wx"] == ["RA"]
+    # corpo: vis dopo RMK/TEMPO non conta
+    assert metar_from_raw("LIML 181650Z 20004KT 9999 08/03 Q1022 TEMPO 0800")["vis"] == "9999"
+    assert "vis" not in metar_from_raw("LIML 181650Z 20004KT 08/03 Q1022 RMK 0800")
+
+
 def test_format_metar():
     f = format_metar("EDDF", metar_from_raw(RAW))
     assert f == {"icao": "EDDF", "line": "Wind 270/12G25 \u00b7 QNH 1013 \u00b7 Vis 9999 \u00b7 Temp 12/08", "raw": RAW}
@@ -142,6 +179,8 @@ def test_no_real_network():
 if __name__ == "__main__":
     test_parsing()
     test_metar_parsing()
+    test_metar_wx_clouds_vis()
+    test_seed_wx_not_merged_with_fresh_online()
     test_format_metar()
     test_get_metar_cache_and_fallback()
     test_invalid_icao_and_no_fetch()

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import pathlib
 
+import icing
 import monitor as mon
 import thrust
 from checklist_eval import BY_KEY, REFS, _refs, evaluate, qnh_actual
@@ -29,6 +30,10 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
         keys = check["gsx"]
         if inner or not set(check) <= {"gsx", "set"} or check.get("set", "active") not in mon.GSX_SETS or not isinstance(keys, list) or not keys or any(k not in BY_KEY or BY_KEY[k].kind != "gsx" for k in keys):
             raise ValueError(f"{where}: 'gsx' non valido")
+        return
+    if "ai" in check:  # anti-ice dinamico: solo da solo (mai dentro 'all'), regola nota
+        if inner or set(check) != {"ai"} or check["ai"] not in icing.RULES:
+            raise ValueError(f"{where}: 'ai' non valido")
         return
     if "detent" in check:
         d = check["detent"]
@@ -116,6 +121,8 @@ def check_keys(check: dict) -> list:
         return list(dict.fromkeys(check["gsx"]))
     if "detent" in check:
         return ["thr_det_l", "thr_det_r"]
+    if "ai" in check:
+        return ["eng1_ai", "eng2_ai", "sat", "tat", "gnd"]
     if "qnh" in check or "std" in check:
         return ["baro_std", "baro_hpa", "baro_inch"]
     subs = check.get("all") or [check]
@@ -211,10 +218,11 @@ class Checklist:
         return self.phases[self.ids.index(phase_id)]
 
     def evaluate_phase(self, phase_id: str, labels: dict, demo: bool = False, simplified: bool = False, raw: dict | None = None,
-                       expected: dict | None = None) -> dict:
+                       expected: dict | None = None, wx: dict | None = None) -> dict:
         """Sottofasi e voci della fase con status/detail; "bad" = numero di voci rosse (solo quelle visibili). demo=True tratta i link come verificati.
         raw (solo --test-links): aggiunge a ogni voce con link "raw" = [[variabile, grezzo], ...].
         expected: valori attesi {riferimento: testo} per i link eq_ref/show_ref (da state.snapshot).
+        wx: {"dep": METAR, "dest": METAR} dei dati parsati (da state.snapshot), per i check "ai" (anti-ice dinamico).
         simplified=True salta le voci escluse prima della valutazione e scarta le sottofasi rimaste vuote."""
         ph, bad, subs = self.phase(phase_id), 0, []
         for sp in ph["subphases"]:
@@ -223,14 +231,20 @@ class Checklist:
                 if simplified and it["id"] in self.excluded:
                     continue
                 link = self.links.get(it["id"])
-                res = evaluate(link["check"], labels, demo or link["verified"], link.get("optional", False), expected) if link else evaluate(None, labels)
+                exp, ai = expected, None
+                if link and "ai" in link["check"]:  # anti-ice dinamico: testo e richiesta ON dalla regola (METAR, SAT, TAT)
+                    ai = icing.ai_rule(link["check"]["ai"], labels, wx)
+                    exp = {**(expected or {}), "ai.on": "1" if ai["on"] else "", "ai.text": ai["text"]}
+                res = evaluate(link["check"], labels, demo or link["verified"], link.get("optional", False), exp) if link else evaluate(None, labels)
                 bad += res["status"] == "bad"
                 row = {"id": it["id"], "text": it["text"], "response": it["response"], "type": it["type"],
                        "live": live_values(link["check"], labels) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
-                if link and ("show" in link["check"] or ("detent" in link["check"] and res["status"] == "none") or (_refs(link["check"]) and res["status"] == "none")):
+                if link and ("show" in link["check"] or ("detent" in link["check"] and res["status"] == "none") or (_refs(link["check"]) and res["status"] == "none") or (ai is not None and res["status"] == "none")):
                     row["show"] = True  # solo da mostrare: la pagina scrive sempre "NOW: <valore>"
                 refs = ([link["check"]["show_ref"]] if "show_ref" in link["check"] else _refs(link["check"])) if link else []
-                if refs:
+                if ai is not None:
+                    row["expected"] = ai["text"]  # al posto di AS REQUIRED: la pagina scrive il testo dinamico
+                elif refs:
                     row["expected"] = " / ".join(str((expected or {}).get(r, "")) for r in refs) if len(refs) > 1 else (expected or {}).get(refs[0], "")  # la pagina scrive "Expected: <valore>" se non vuoto
                 if it["type"] == "craft":
                     row["fields"] = it["fields"]

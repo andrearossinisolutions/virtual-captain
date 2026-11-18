@@ -1,6 +1,6 @@
 """Confronto puro tra uno stato atteso della checklist e le etichette lette dal cockpit (sola lettura, nessun I/O).
 
-check: {"key": k, "eq": "ON" | ["ON", "OFF"]}, {"all": [check, ...]}, {"detent": "IDLE" | ["FLX", "TOGA"]} (entrambe le leve nel detent, valori virtuali thr_det_l/thr_det_r; senza calibrazione "none") {"key": k, "lt": soglia} (numerico stretto, es. VS < 0; non leggibile "na"), oppure {"show": [chiavi]} (solo mostrare: nessun esito).
+check: {"key": k, "eq": "ON" | ["ON", "OFF"]}, {"all": [check, ...]}, {"ai": "ground|takeoff|climb|descent"} (anti-ice dinamico: attivo, eng1_ai e eng2_ai ON, solo se "ai.on" in expected; altrimenti "none"), {"detent": "IDLE" | ["FLX", "TOGA"]} (entrambe le leve nel detent, valori virtuali thr_det_l/thr_det_r; senza calibrazione "none") {"key": k, "lt": soglia} (numerico stretto, es. VS < 0; non leggibile "na"), oppure {"show": [chiavi]} (solo mostrare: nessun esito).
 Valore atteso da un riferimento chiuso (REFS): {"key": k, "eq_ref": "clr.t"} (kind con mappa di etichette ammessi solo se l'atteso normalizzato e' un'etichetta valida, altrimenti "none"; ammesso dentro "all", dove i riferimenti con atteso vuoto sono saltati)
 e {"show_ref": "clr.a"} (solo atteso, nessun esito). expected: {riferimento: testo}; atteso vuoto => "none" (si mostra solo NOW).
 optional (campo del link): se la voce non e' conforme l'esito e' "opt" (neutro, non conta come bad) invece di "bad".
@@ -140,6 +140,11 @@ def gsx_all(check: dict) -> dict:
     return {"all": [{"key": k, "eq": list(states)} for k in check["gsx"]]}
 
 
+def ai_all(check: dict) -> dict:
+    """(ignora `check`: la regola e' gia' stata valutata in evaluate_phase e arriva come "ai.on" in expected.) {"ai": regola} (richiesta ON attiva) -> {"all": [eng1_ai eq ON, eng2_ai eq ON]}."""
+    return {"all": [{"key": "eng1_ai", "eq": "ON"}, {"key": "eng2_ai", "eq": "ON"}]}
+
+
 def _refs(check: dict) -> list:
     """Riferimenti eq_ref di un check (singolo o composto); {"qnh": ref} -> [ref]."""
     if "qnh" in check:
@@ -212,6 +217,9 @@ def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: 
     if "detent" in check:
         if not _want(expected, "cal.thrust"):
             return _res("none")  # non calibrato: si mostra solo NOW
+    elif "ai" in check:
+        if not _want(expected, "ai.on"):
+            return _res("none")  # regola non attiva (promemoria, METAR assente, niente icing): solo testo e NOW
     elif "qnh" in check:
         if not _want(expected, check["qnh"]):
             return _res("none")
@@ -236,6 +244,8 @@ def _evaluate(check: dict, labels: dict, verified: bool, expected: dict | None =
         check = detent_all(check)
     if "gsx" in check:
         check = gsx_all(check)
+    if "ai" in check:
+        check = ai_all(check)
     if "std" in check:
         if _num(labels.get("baro_std")) is None:
             return _res("na", UNREADABLE, "unreadable")

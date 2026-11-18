@@ -303,7 +303,7 @@ class State:
         with self.lock:
             live = raw is not None and self.phase == "flying"
             if live:
-                raw = {**raw, **thrust.annotate(raw, self.thrust_cal), **mon.weight_annotate(raw), **mon.vs_annotate(raw, self.core), **mon.autobrake_state(raw)}
+                raw = {**raw, **thrust.annotate(raw, self.thrust_cal), **mon.weight_annotate(raw), **mon.vs_annotate(raw, self.core), **mon.autobrake_state(raw), **mon.gnd_annotate(raw, self.core)}
                 self.set_calib_raw(raw)
             self.monitor = mon.build(raw) if live else []
             self.labels = mon.clean_labels(raw) if live else {}
@@ -541,6 +541,15 @@ class State:
         icao = parse_dep(self.fields.get(field, ""))[0]
         return format_metar(icao, self.weather.get_metar(icao)) if icao else None
 
+    def _wx_data(self) -> dict:
+        """METAR (dati parsati, vuoti se assenti) di partenza e destinazione per i controlli dinamici (anti-ice); non blocca; lock preso."""
+        out = {}
+        for key, field in (("dep", "origin"), ("dest", "destination")):
+            icao = parse_dep(self.fields.get(field, ""))[0]
+            out[key] = dict(self.weather.get_metar(icao)) if icao else {}
+            out[key]["icao"] = icao or ""
+        return out
+
     def _rwy_bad(self) -> dict:
         """{"atis": bool, "datis": bool}: pista annotata nell'ATIS diversa da quella del piano (partenza: runway/origin; arrivo: pista in destination, se c'e'); solo avviso."""
         dep_rwy = self.fields.get("runway") or parse_dep(self.fields.get("origin", ""))[1]
@@ -571,6 +580,6 @@ class State:
                     "cl_phase": self.cl_phase,
                     "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo or self.cl_trust_links,
                                                        self.checklist_mode == "simplified",
-                                                       self.raw if self.cl_trust_links else None, self._expected()),
+                                                       self.raw if self.cl_trust_links else None, self._expected(), self._wx_data()),
                     "test_links": self.cl_trust_links, "clearance": dict(self.clearance),
                     "thr_cal": self._thr_cal_view(), "calib": self._calib_view()}

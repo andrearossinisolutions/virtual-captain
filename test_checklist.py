@@ -4,6 +4,7 @@ import sys
 import tempfile
 
 import checklist as C
+import icing
 from checklist_eval import REFS
 import monitor as mon
 from state import State
@@ -46,6 +47,8 @@ def test_links_reference_real_things():
                 assert c["detent"]
             elif "std" in c:
                 assert c["std"] is True
+            elif "ai" in c:
+                assert c["ai"] in icing.RULES
             elif "gsx" in c:
                 assert all(k in keys for k in c["gsx"])
             else:
@@ -212,6 +215,23 @@ def test_snapshot_uses_live_labels_and_demo():
     assert snap["bad"] >= 2
     st.set_phase("briefing")
     assert st.labels == {}
+
+
+def test_snapshot_ai_with_metar():
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    st.fields["origin"], st.fields["destination"] = "LIML", "LIPZ"
+    st.weather.seed("LIML", "LIML 181550Z 20004KT 0800 BR BKN002 03/03 Q1022")
+    st.set_phase("flying")
+    st.set_core({"on_ground": 1})
+    st.set_cl_phase("after-engine-startup")
+    st.set_monitor({"eng1_ai": 0, "eng2_ai": 0, "sat": 4, "tat": 0})
+    assert st.labels["gnd"] == "1" and st.raw["gnd"] == 1
+    r = {i["id"]: i for s in st.snapshot()["checklist"]["subphases"] for i in s["items"]}["after-engine-startup.engine-and-wing-anti-ice-pb"]
+    assert r["status"] == "bad" and r["expected"].startswith("LIML: BR, vis 800 m, T 3") and r["response"] == "AS REQUIRED"
+    st.set_cl_phase("descent-preparation")
+    st.set_monitor({"eng1_ai": 0, "eng2_ai": 0, "sat": -20, "tat": 5})  # METAR di LIPZ assente
+    r = {i["id"]: i for s in st.snapshot()["checklist"]["subphases"] for i in s["items"]}["descent-preparation.engine-anti-ice"]
+    assert r["status"] == "none" and r["expected"] == "no METAR, check manually"
 
 
 def test_trust_links_and_raw():
@@ -457,7 +477,7 @@ def test_qnh_links():
     for iid, ref in (("fmgs-performance-glareshield.barometric-reference", "wx.qnh_dep"), ("descent-checklist.barometric-reference", "wx.qnh_dest")):
         assert cl.links[iid]["check"] == ({"qnh": ref, "gate_tl": True} if ref == "wx.qnh_dest" else {"qnh": ref}) and cl.links[iid]["verified"] is True
     assert cl.links["climb.barometric-reference"] == {"check": {"std": True}, "verified": True}
-    assert cl.links["climb.engine-anti-ice"] == {"check": {"show": ["eng1_ai", "eng2_ai"]}, "verified": True}
+    assert cl.links["climb.engine-anti-ice"] == {"check": {"ai": "climb"}, "verified": True}
     assert C.check_keys({"std": True}) == ["baro_std", "baro_hpa", "baro_inch"]
     from checklist_eval import evaluate as _ev
     assert _ev({"std": True}, {"baro_std": "1", "baro_hpa": "1013", "baro_inch": None}, True)["status"] == "ok"
@@ -765,7 +785,8 @@ def test_new_links_wellformed():
     assert r["status"] == "none" and r["show"] is True and r["live"] == [["Autobrake selected (from lamps)", "MED"]]
     assert cl.links["taxi-checklist.autobrake-pb"]["check"] == {"key": "autobrake_max", "eq": "ON"}
     r = [i for sp in cl.evaluate_phase("descent-preparation", {"eng1_ai": "ON", "eng2_ai": "OFF", "sat": "-45"})["subphases"] for i in sp["items"] if i["id"] == "descent-preparation.engine-anti-ice"][0]
-    assert r["status"] == "none" and r["show"] is True and [v[1] for v in r["live"]] == ["ON", "OFF", "-45"]
+    assert r["status"] == "bad" and "Engine 2 anti-ice sw" in r["detail"] and [v[1] for v in r["live"]][:3] == ["ON", "OFF", "-45"]  # attivo: SAT < -40 -> ON richiesto
+    assert cl.links["descent-preparation.engine-anti-ice"] == {"check": {"ai": "descent"}, "verified": True}
     ai = cl.links["parking.anti-ice"]["check"]
     assert "all" in ai and [(c["key"], c["eq"]) for c in ai["all"]] == [("eng1_ai", "OFF"), ("eng2_ai", "OFF")]
     assert C.evaluate(ai, {"eng1_ai": "OFF", "eng2_ai": "OFF"})["status"] == "ok"
@@ -795,6 +816,53 @@ def test_new_links_wellformed():
     assert res("parking.exterior-lights", {**allon, "navlogo": "NAV"}) == "ok"
     assert res("taxi-checklist.radar", {"wx_sys": "SYS 2"}) == "ok" and res("taxi-checklist.radar", {"wx_sys": "OFF"}) == "bad"
     assert res("landing.ground-spoilers", {"spoilers": "FULL"}) == "ok" and res("landing.ground-spoilers", {"spoilers": "ARM"}) == "bad"
+
+
+def test_ai_links():
+    cl = C.load()
+    for iid, rule in (("after-engine-startup.engine-and-wing-anti-ice-pb", "ground"), ("after-takeoff.anti-ice-protection", "takeoff"),
+                      ("climb.engine-anti-ice", "climb"), ("descent-preparation.engine-anti-ice", "descent")):
+        assert cl.links[iid] == {"check": {"ai": rule}, "verified": True}, iid
+    assert C.check_keys({"ai": "descent"}) == ["eng1_ai", "eng2_ai", "sat", "tat", "gnd"]
+    # validazione: 'ai' solo da solo, regola nota, mai dentro 'all'
+    for bad in ({"ai": "xx"}, {"ai": "ground", "x": 1}, {"all": [{"ai": "ground"}]}, {"all": [{"key": "eng1_ai", "eq": "ON"}, {"ai": "ground"}]}):
+        try:
+            C._check_keys(bad, "x"); assert False, bad
+        except ValueError:
+            pass
+    C._check_keys({"ai": "ground"}, "x")
+
+    def row(phase, iid, lab, wx=None):
+        return [i for sp in cl.evaluate_phase(phase, lab, wx=wx)["subphases"] for i in sp["items"] if i["id"] == iid][0]
+    desc = "descent-preparation.engine-anti-ice"
+    ON, OFF = {"eng1_ai": "ON", "eng2_ai": "ON"}, {"eng1_ai": "OFF", "eng2_ai": "OFF"}
+    r = row("descent-preparation", desc, {**ON, "sat": "-45"})
+    assert r["status"] == "ok" and "below -40" in r["expected"]
+    r = row("descent-preparation", desc, {**OFF, "sat": "-45"}, {"dest": {"raw": "x", "temp": 20}})  # indipendente dal METAR
+    assert r["status"] == "bad"
+    r = row("descent-preparation", desc, {**OFF, "sat": "-30", "tat": "5"})  # SAT >= -40, METAR assente: nessun esito
+    assert r["status"] == "none" and r["expected"] == "no METAR, check manually" and r["show"] is True
+    r = row("descent-preparation", desc, {**OFF, "sat": "0"}, {"dest": {}})
+    assert r["status"] == "none"
+    dest = {"dest": {"icao": "LIPZ", "raw": "x", "temp": 3, "wx": ["RA"]}}
+    r = row("descent-preparation", desc, {**OFF, "sat": "-20", "tat": "5"}, dest)
+    assert r["status"] == "bad" and "LIPZ: RA, T 5" in r["expected"]
+    assert row("descent-preparation", desc, {**ON, "sat": "-20", "tat": "5"}, dest)["status"] == "ok"
+    assert row("descent-preparation", desc, {**OFF, "sat": "-20", "tat": "11"}, dest)["status"] == "none"  # TAT > 10: not required
+    # a terra: METAR di partenza; ripiego SAT con gnd=1
+    g = "after-engine-startup.engine-and-wing-anti-ice-pb"
+    dep = {"dep": {"icao": "LIML", "raw": "x", "temp": 3, "vis": "0800", "wx": ["BR"]}}
+    r = row("after-engine-startup", g, OFF, dep)
+    assert r["status"] == "bad" and r["expected"] == "LIML: BR, vis 800 m, T 3 \u00b0C: icing conditions, ON"
+    assert row("after-engine-startup", g, ON, dep)["status"] == "ok"
+    assert row("after-engine-startup", g, OFF)["status"] == "none" and row("after-engine-startup", g, OFF)["expected"] == "no METAR, check manually"
+    # promemoria: mai colorati
+    for ph, iid in (("after-takeoff", "after-takeoff.anti-ice-protection"), ("climb", "climb.engine-anti-ice")):
+        for lab in (OFF, ON, {**OFF, "sat": "-50", "tat": "-30"}):
+            r = row(ph, iid, lab, {**dep, **dest})
+            assert r["status"] == "none" and r["show"] is True and r["expected"], (iid, lab)
+    # Simplified: le voci non sono escluse (comportamento invariato)
+    assert not any(i.startswith(("climb.engine-anti-ice", "descent-preparation.engine-anti-ice")) for i in cl.excluded)
 
 
 if __name__ == "__main__":
@@ -888,4 +956,6 @@ if __name__ == "__main__":
     test_tcas_links()
     test_cabin_fuel_links()
     test_gsx_links()
+    test_ai_links()
+    test_snapshot_ai_with_metar()
     print("ok tcas/cabin")

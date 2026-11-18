@@ -240,6 +240,17 @@ def test_gsx():
     assert all(evaluate(d, {"gsx_board": st})["status"] == "bad" for st in mon.GSX_STATES.values() if st not in mon.GSX_DONE)  # anche PERFORMING
     assert evaluate(d, {"gsx_board": None})["status"] == "na" and evaluate(d, {})["status"] == "na"
 
+def test_ai():
+    c = {"ai": "descent"}
+    ON, OFF = {"eng1_ai": "ON", "eng2_ai": "ON"}, {"eng1_ai": "OFF", "eng2_ai": "ON"}
+    assert evaluate(c, OFF)["status"] == "none" and evaluate(c, OFF, expected={"ai.on": ""})["status"] == "none"  # non attivo: nessun esito
+    assert evaluate(c, ON, expected={"ai.on": "1"})["status"] == "ok"
+    r = evaluate(c, OFF, expected={"ai.on": "1"})
+    assert r["status"] == "bad" and "Engine 1 anti-ice sw" in r["detail"]
+    assert evaluate(c, {}, expected={"ai.on": "1"})["status"] == "na" and evaluate(c, ON, verified=False, expected={"ai.on": "1"})["kind"] == "unverified"
+    assert evaluate(c, OFF, optional=True, expected={"ai.on": "1"})["status"] == "opt"
+
+
 if __name__ == "__main__":
     test_qnh_gated_by_transition_level()
     test_qnh_source_in_detail()
@@ -257,4 +268,5 @@ if __name__ == "__main__":
     test_clean_label()
     test_qnh()
     test_gsx()
+    test_ai()
     print("ok")

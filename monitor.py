@@ -9,6 +9,17 @@ import math
 from dataclasses import dataclass, field
 
 NA = "n/d"
+
+# Anti-ice dinamico (icing.py): soglie e fenomeni in un solo posto. Fonti: PPRuNe, guide FlyByWire, flashcards (NON il FCOM Fenix): da verificare sul FCOM Fenix.
+AI_ICING_TEMP_MAX = 10  # gradi C: icing conditions con temperatura (OAT a terra, TAT in volo) <= 10 e umidita' visibile; da verificare sul FCOM Fenix
+AI_VIS_MAX_M = 1600  # visibilita' <= 1600 m conta come umidita' visibile (anche senza codice) e rende contabile BR; da verificare sul FCOM Fenix
+AI_CRZ_SAT_MIN = -40  # climb: sotto questa SAT l'anti-ice puo' restare OFF (ON solo in Cb / ICE DETECTED); da verificare sul FCOM Fenix
+AI_DESC_SAT_MAX = -40  # descent preparation: sotto questa SAT l'anti-ice va ON (indipendente dal METAR); da verificare sul FCOM Fenix
+AI_WX_ALWAYS = ("RA", "DZ", "SN", "SG", "PL", "GR", "GS", "UP", "FG", "TS")  # fenomeni METAR che contano sempre; da verificare sul FCOM Fenix
+AI_WX_VIS = ("BR",)  # fenomeni che contano solo se vis <= AI_VIS_MAX_M
+AI_CLOUD_TYPES = ("CB", "TCU")  # nuvole che contano sempre
+AI_CLOUD_COVERS_ALWAYS = ("VV",)  # coperture che contano sempre
+AI_CLOUD_COVERS_AIR = ("BKN", "OVC")  # coperture che contano solo in volo (FEW/SCT escluse)
 FLIGHT_GROUP = "Flight data"  # voci cinematiche: solo nella card Flight data (restano nella richiesta SimConnect)
 
 # Stati GSX (FSDT_GSX_*_STATE): IPOTESI dalla documentazione GSX, da verificare dal vivo col grezzo (--test-links) e correggere qui.
@@ -121,6 +132,8 @@ ITEMS: list[Item] = [
     Item("athr", "Glareshield", "Autothrust", "onoff", {}, None, "I_FCU_ATHR"),
     Item("appr", "Glareshield", "APPR button", "onoff", {}, None, "I_FCU_APPR"),  # lampada, da verificare dal vivo
     Item("sat", "Anti-ice", "SAT (C)", "numeric", {}, "(A:AMBIENT TEMPERATURE, Celsius)"),  # SimVar standard, solo da mostrare (se non risponde: n/d)
+    Item("tat", "Anti-ice", "TAT (C)", "numeric", {}, "(A:TOTAL AIR TEMPERATURE, Celsius)"),  # SimVar standard (da verificare sul Fenix: prova 1 sul Shadow); assente = 0
+    Item("gnd", "Anti-ice", "On ground (virtual)", "numeric"),  # virtuale: SIM ON GROUND del core (1 a terra, 0 in volo)
     Item("eng1_ai", "Anti-ice", "Engine 1 anti-ice sw", "onoff", {}, None, "S_OH_PNEUMATIC_ENG1_ANTI_ICE"),  # da verificare dal vivo
     Item("eng2_ai", "Anti-ice", "Engine 2 anti-ice sw", "onoff", {}, None, "S_OH_PNEUMATIC_ENG2_ANTI_ICE"),
     # LO/MED: nomi L-var IPOTIZZATI per analogia con MAX, NON verificati dal vivo (se non rispondono: ripiego, vedi autobrake_state)
@@ -209,6 +222,12 @@ def weight_annotate(raw: dict | None) -> dict:
 def vs_annotate(raw: dict | None, core: dict | None) -> dict:
     """Valore virtuale vs_fpm = VS del core (fpm); None se non leggibile."""
     return {"vs_fpm": to_number((core or {}).get("vs"))}
+
+
+def gnd_annotate(raw: dict | None, core: dict | None) -> dict:
+    """Valore virtuale gnd = on_ground del core (1 a terra, 0 in volo); None se non leggibile."""
+    v = to_number((core or {}).get("on_ground"))
+    return {"gnd": None if v is None else (1 if v >= 0.5 else 0)}
 
 
 def autobrake_state(raw: dict | None) -> dict:

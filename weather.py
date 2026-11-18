@@ -18,6 +18,13 @@ _A = re.compile(r"(?:^|\s)A(\d{4})(?=\s|$)")
 _WIND = re.compile(r"(?:^|\s)(VRB|\d{3})(\d{2,3})(?:G(\d{2,3}))?KT(?=\s|$)")
 _VIS = re.compile(r"(?:^|\s)(CAVOK|\d{4})(?=\s|$)")
 _TEMP = re.compile(r"(?:^|\s)(M?\d{2})/(M?\d{2})(?=\s|$)")
+_VIS_SM = re.compile(r"(?:^|\s)[PM]?(\d+ \d/\d|\d+/\d+|\d+)SM(?=\s|$)")  # visibilita' US in miglia: "10SM", "1/2SM", "1 1/2SM", "P6SM"
+_VIS_SM_TXT = re.compile(r"^[PM]?\s*(\d+ \d/\d|\d+/\d+|\d+(?:\.\d+)?)\+?\s*SM$")  # testo di vis: "10 SM", "6+ SM", "1/2 SM"
+M_PER_SM = 1609.34
+_WX_TOKEN = re.compile(r"^(?:[-+])?(?:MI|PR|BC|DR|BL|SH|TS|FZ)*(?:DZ|RA|SN|SG|PL|GR|GS|UP|BR|FG|FU|VA|DU|SA|HZ|PY|PO|SQ|FC|SS|DS|IC)+$")
+_WX_CODE = re.compile(r"DZ|RA|SN|SG|PL|GR|GS|UP|BR|FG|FU|VA|DU|SA|HZ|PY|PO|SQ|FC|SS|DS|IC|TS")
+_CLOUD = re.compile(r"^(FEW|SCT|BKN|OVC)(\d{3}|///)(CB|TCU|///)?$")
+_VV = re.compile(r"^VV(\d{3}|///)$")
 
 
 def inhg_to_hpa(v) -> float | None:
@@ -66,9 +73,75 @@ def _t(s: str) -> int:
     return -int(s[1:]) if s.startswith("M") else int(s)
 
 
+def vis_m(vis) -> float | None:
+    """Visibilita' in metri da un testo di `vis`: CAVOK = 10000, "9999"/"0800" metri, "n SM" (anche "1/2 SM", "1 1/2 SM", "6+ SM") x 1609; altro -> None."""
+    s = str(vis or "").strip().upper()
+    if s == "CAVOK":
+        return 10000.0
+    if re.fullmatch(r"\d{4}", s):
+        return float(int(s))
+    m = _VIS_SM_TXT.match(s)
+    if not m:
+        return None
+    t, total = m.group(1), 0.0
+    try:
+        for part in t.split():
+            if "/" in part:
+                a, b = part.split("/")
+                total += int(a) / int(b)
+            else:
+                total += float(part)
+    except (ValueError, ZeroDivisionError):
+        return None
+    return total * M_PER_SM
+
+
+_END = ("RMK", "TEMPO", "BECMG", "NOSIG", "PROB30", "PROB40")
+
+
+def _body(s: str) -> list:
+    """Gruppi del corpo del METAR: dopo il gruppo orario (ddhhmmZ, se c'e') e fino a RMK/TEMPO/BECMG/NOSIG/PROBnn (esclusi)."""
+    toks = s.split()
+    start = next((i + 1 for i, t in enumerate(toks) if re.fullmatch(r"\d{6}Z", t)), 0)
+    out = []
+    for t in toks[start:]:
+        if t in _END:
+            break
+        out.append(t)
+    return out
+
+
+def wx_from_raw(s: str) -> list:
+    """Fenomeni significativi del METAR (codici senza intensita' ne' descrittori: TSRA -> TS, RA; -SHRA -> RA), nell'ordine, senza doppioni.
+    Solo il corpo (fermo a RMK/TEMPO/BECMG/NOSIG, dopo il gruppo orario); le "vicinanze" (VC...) non contano."""
+    out: list = []
+    for t in _body(s):
+        if t.startswith("VC") or not _WX_TOKEN.match(t):
+            continue
+        for c in _WX_CODE.findall(t.lstrip("+-")):
+            if c not in out:
+                out.append(c)
+    return out
+
+
+def clouds_from_raw(s: str) -> list:
+    """Nuvole del METAR: [{"cover": FEW|SCT|BKN|OVC|VV, "base_ft": int|None, "type": CB|TCU|None}, ...] (stesso limite di wx_from_raw)."""
+    out: list = []
+    for t in _body(s):
+        m = _CLOUD.match(t)
+        if m:
+            base = None if m.group(2) == "///" else int(m.group(2)) * 100
+            out.append({"cover": m.group(1), "base_ft": base, "type": m.group(3) if m.group(3) in ("CB", "TCU") else None})
+            continue
+        m = _VV.match(t)
+        if m:
+            out.append({"cover": "VV", "base_ft": None if m.group(1) == "///" else int(m.group(1)) * 100, "type": None})
+    return out
+
+
 def metar_from_raw(raw) -> dict:
     """Dati dal METAR grezzo (parsing puro). Chiavi: qnh (hPa), wdir (int|"VRB"), wspd, wgust (kt), vis (testo: metri o CAVOK),
-    temp, dewp (gradi), raw. Solo quelle trovate (dizionario vuoto se il testo e' vuoto)."""
+    temp, dewp (gradi), wx (lista di codici fenomeno), clouds (lista di {cover, base_ft, type}), raw. Solo quelle trovate (dizionario vuoto se il testo e' vuoto)."""
     s = " ".join(str(raw or "").split())
     out: dict = {}
     q = qnh_from_raw(s)
@@ -80,12 +153,22 @@ def metar_from_raw(raw) -> dict:
         out["wspd"] = int(m.group(2))
         if m.group(3):
             out["wgust"] = int(m.group(3))
-    m = _VIS.search(s)
+    body = " ".join(_body(s))
+    m = _VIS.search(body)
     if m:
         out["vis"] = m.group(1)
+    else:
+        m = _VIS_SM.search(body)
+        if m:
+            out["vis"] = f"{m.group(1)} SM"
     m = _TEMP.search(s)
     if m:
         out["temp"], out["dewp"] = _t(m.group(1)), _t(m.group(2))
+    wx, cl = wx_from_raw(s), clouds_from_raw(s)
+    if wx:
+        out["wx"] = wx
+    if cl:
+        out["clouds"] = cl
     if s:
         out["raw"] = s
     return out
@@ -172,12 +255,13 @@ class Weather:
                 self._seed[icao] = m
 
     def _value(self, icao) -> dict:
-        """Dati METAR: ripiego del piano, sovrascritto dai campi dell'online se non scaduto."""
-        out = dict(self._seed.get(icao) or {})
+        """Dati METAR: l'online non scaduto e' l'UNICO dato (nessuna fusione per chiave: un campo assente, es. wx/clouds a cielo sereno,
+        non va riempito da un METAR del piano piu' vecchio); il ripiego del piano vale solo se l'online manca o e' scaduto
+        (il METAR del piano non ha altra scadenza)."""
         o = self._online.get(icao)
         if o and self.now() - o[1] <= self.stale:
-            out.update({k: v for k, v in o[0].items() if v is not None})
-        return out
+            return {k: v for k, v in o[0].items() if v is not None}
+        return dict(self._seed.get(icao) or {})
 
     def get(self, icao) -> float | None:
         """QNH in hPa dalla cache (o dal ripiego); non blocca mai. Rinfresca in background se serve."""

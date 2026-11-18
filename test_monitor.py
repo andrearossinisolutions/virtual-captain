@@ -36,7 +36,7 @@ def test_items_are_valid():
     assert len(keys) == len(set(keys))
     for it in ITEMS:
         assert it.group and it.name and it.kind in MAPS, it.key
-        assert it.std or it.lvar or it.kind == "detent" or it.key in ("zfw_calc", "fob_now", "vs_fpm", "autobrake_sel"), it.key  # detent e zfw_calc: virtuali
+        assert it.std or it.lvar or it.kind == "detent" or it.key in ("zfw_calc", "fob_now", "vs_fpm", "autobrake_sel", "gnd"), it.key  # detent e zfw_calc: virtuali
         assert it.std_fallback is False or (it.std and it.lvar) or it.key == "gear"
         for v in it.expected.values():
             assert v
@@ -54,6 +54,16 @@ def test_items_are_valid():
     for k in ("apu_master", "apu_bleed", "pack1", "pack2", "landing_l", "landing_r", "nose", "strobe", "beacon",
               "navlogo", "rwy_turnoff", "seatbelt", "flap", "spoilers", "gear", "engmode", "eng1", "eng2", "parking"):
         assert k in keys, k
+
+
+def test_tat_gnd_and_ai_constants():
+    assert BY["tat"].std == "(A:TOTAL AIR TEMPERATURE, Celsius)" and BY["tat"].lvar is None and BY["tat"].group == "Anti-ice" and BY["sat"].group == "Anti-ice"
+    from simvars import MONITOR, default_monitor
+    assert MONITOR["tat"] == BY["tat"].std and MONITOR["gnd"] is None and default_monitor()["tat"] == 0.0 and default_monitor()["gnd"] is None  # tat assente = 0, gnd virtuale
+    g = monitor.gnd_annotate
+    assert g({}, {"on_ground": 1}) == {"gnd": 1} and g({}, {"on_ground": 0.0}) == {"gnd": 0} and g({}, {}) == {"gnd": None} and g(None, None) == {"gnd": None}
+    assert (monitor.AI_ICING_TEMP_MAX, monitor.AI_VIS_MAX_M, monitor.AI_CRZ_SAT_MIN, monitor.AI_DESC_SAT_MAX) == (10, 1600, -40, -40)
+    assert set(monitor.AI_WX_ALWAYS) >= {"RA", "SN", "FG", "TS"} and "BR" in monitor.AI_WX_VIS and "BR" not in monitor.AI_WX_ALWAYS
 
 
 def test_weight_items_and_zfw_calc():
@@ -172,4 +182,5 @@ if __name__ == "__main__":
     test_items_are_valid()
     test_build_groups()
     test_gsx_states()
+    test_tat_gnd_and_ai_constants()
     print("ok")

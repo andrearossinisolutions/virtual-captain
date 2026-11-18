@@ -1052,10 +1052,7 @@
  },
  "climb.engine-anti-ice": {
   "check": {
-   "show": [
-    "eng1_ai",
-    "eng2_ai"
-   ]
+   "ai": "climb"
   },
   "verified": true
  },
@@ -1357,11 +1354,7 @@
  },
  "descent-preparation.engine-anti-ice": {
   "check": {
-   "show": [
-    "eng1_ai",
-    "eng2_ai",
-    "sat"
-   ]
+   "ai": "descent"
   },
   "verified": true
  },
@@ -1405,6 +1398,18 @@
     "gsx_refuel"
    ],
    "set": "done"
+  },
+  "verified": true
+ },
+ "after-engine-startup.engine-and-wing-anti-ice-pb": {
+  "check": {
+   "ai": "ground"
+  },
+  "verified": true
+ },
+ "after-takeoff.anti-ice-protection": {
+  "check": {
+   "ai": "takeoff"
   },
   "verified": true
  }
