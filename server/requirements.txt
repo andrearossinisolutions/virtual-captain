@@ -12,3 +12,8 @@ annotated-types==0.7.0
 annotated-doc==0.0.5
 typing-extensions==4.16.0
 typing-inspection==0.4.2
+# accounts (step 2b-1): wheels manylinux for Python 3.12, no compiler needed on the VPS
+argon2-cffi==25.1.0
+argon2-cffi-bindings==25.1.0
+cffi==2.0.0
+pycparser==2.23

@@ -1,16 +1,22 @@
-"""Virtual Captain public server: skeleton (step 1).
+"""Virtual Captain public server: skeleton plus the account API (step 2b-1).
 
-Serves a placeholder page and a health check. No API, no docs, no state.
-It does NOT serve web/ and does NOT import protocol.py yet.
+Placeholder page, health check and /api/auth/*. No docs. It does NOT serve web/
+and does NOT import protocol.py yet. Nothing touches the DB until first use.
 """
 from __future__ import annotations
 
+import logging
 import os
+import time
 from pathlib import Path
+from typing import Callable, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 
+from server.config import AppConfig, check_secret, load_app_config, load_smtp_config
+
+log = logging.getLogger("virtual_captain")
 BASE_DIR = Path(__file__).resolve().parent
 PUBLIC_DIR = BASE_DIR / "public"
 # deploy.sh writes the commit sha here (current/REVISION, next to server/)
@@ -42,8 +48,27 @@ def read_revision(path: Path | None = None) -> str:
     return rev[:64] or "unknown"
 
 
-def create_app() -> FastAPI:
+def smtp_mailer(env=os.environ) -> Callable[[str, str, str], None]:
+    """Default mailer: reads the SMTP settings when a mail is sent."""
+    def send(to: str, subject: str, body: str) -> None:
+        from server.mail import send_mail
+        send_mail(load_smtp_config(env), to, subject, body)
+    return send
+
+
+def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
+               clock: Callable[[], float] = time.time) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    config = config if config is not None else load_app_config()
+    check_secret(config.public_base_url, config.secret_key)
+    if not config.public_base_url:
+        log.warning("PUBLIC_BASE_URL is not set: the account API /api/auth/* is NOT mounted")
+    else:  # without it the account API stays off (no safe link/Origin)
+        from server.accounts import Accounts
+        from server.api_auth import build_router
+        from server.db import Database
+        accounts = Accounts(config, db or Database(config.db_path), mailer or smtp_mailer(), clock)
+        app.include_router(build_router(accounts))
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):

@@ -6,6 +6,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from typing import Mapping
+from urllib.parse import urlparse
 
 
 ADDR_RE = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
@@ -73,3 +74,78 @@ def load_smtp_config(env: Mapping[str, str] = os.environ) -> SmtpConfig:
     if not ADDR_RE.match(cfg.mail_from) or (cfg.envelope_from and not ADDR_RE.match(cfg.envelope_from)):
         raise MailConfigError("MAIL_FROM / MAIL_ENVELOPE_FROM must be plain addresses")
     return cfg
+
+
+DEFAULT_DB_PATH = "/var/www/virtual-captain/shared/virtual-captain.db"
+
+
+class AppConfigError(Exception):
+    """Invalid application configuration. Names variables, never values."""
+
+
+@dataclass(frozen=True)
+class AppConfig:
+    public_base_url: str = ""
+    db_path: str = DEFAULT_DB_PATH
+    secret_key: str = field(default="", repr=False)
+    ip_hourly: int = 5
+    ip_daily: int = 20
+    mail_addr_hourly: int = 3
+    mail_daily: int = 200
+    login_max_failures: int = 5
+    lockout_seconds: int = 900
+    login_ip_per_15min: int = 30
+
+
+def _int(env: Mapping[str, str], name: str, default: int) -> int:
+    raw = (env.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        raise AppConfigError(f"{name} must be a number") from None
+    if value < 1:
+        raise AppConfigError(f"{name} must be positive")
+    return value
+
+
+def check_base_url(base: str) -> None:
+    if _has_newline(base) or "#" in base or "?" in base or base.count("/") != 2:
+        raise AppConfigError("PUBLIC_BASE_URL must be an origin (scheme and host only)")
+    try:
+        parts = urlparse(base)
+        host = parts.hostname
+    except ValueError:
+        raise AppConfigError("PUBLIC_BASE_URL is not a valid URL") from None
+    local = parts.scheme == "http" and host in ("localhost", "127.0.0.1", "::1")
+    if not (parts.scheme == "https" and host) and not local:
+        raise AppConfigError("PUBLIC_BASE_URL must be an https origin")
+
+
+def check_secret(base: str, secret: str) -> None:
+    if base and not secret:
+        raise AppConfigError("SECRET_KEY is required when PUBLIC_BASE_URL is set "
+                             "(set SECRET_KEY first, then PUBLIC_BASE_URL)")
+    if secret and len(secret) < 32:
+        raise AppConfigError("SECRET_KEY too short (min 32 characters)")
+
+
+def load_app_config(env: Mapping[str, str] = os.environ) -> AppConfig:
+    base = (env.get("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+    secret = (env.get("SECRET_KEY") or "").strip()
+    if base:
+        check_base_url(base)
+    check_secret(base, secret)
+    return AppConfig(
+        public_base_url=base,
+        db_path=(env.get("DB_PATH") or "").strip() or DEFAULT_DB_PATH,
+        secret_key=secret,
+        ip_hourly=_int(env, "RATE_IP_HOURLY", 5),
+        ip_daily=_int(env, "RATE_IP_DAILY", 20),
+        mail_addr_hourly=_int(env, "RATE_MAIL_ADDR_HOURLY", 3),
+        mail_daily=_int(env, "RATE_MAIL_DAILY", 200),
+        login_max_failures=_int(env, "LOGIN_MAX_FAILURES", 5),
+        lockout_seconds=_int(env, "LOCKOUT_MINUTES", 15) * 60,
+        login_ip_per_15min=_int(env, "RATE_LOGIN_IP_15MIN", 30),
+    )

@@ -176,3 +176,34 @@ Poi apri la mail ricevuta (Gmail: tre puntini > "Mostra originale") e controlla 
 ### Alias rifiutato
 
 Se il server rifiuta il mittente (errore di tipo `sender`), prova a impostare `MAIL_ENVELOPE_FROM=<casella principale>`: la mail parte con quell'indirizzo come mittente di busta, il `From` resta l'alias e viene aggiunto `Reply-To` con l'alias. Si puo' provare anche da riga di comando: `... -m server.mailtest <destinatario> --envelope-from <casella principale>`. Ultima spiaggia: `MAIL_FROM` = casella principale.
+
+## Account (passo 2b-1: API, senza pagine)
+
+Nuove variabili in `/etc/virtual-captain/env` (NOME=valore, una per riga; i valori non vanno in repo ne' in chat):
+
+- `SECRET_KEY` (**obbligatoria se imposti `PUBLIC_BASE_URL`**, min 32 caratteri): sale degli hash di IP e indirizzi nei limiti di frequenza. Generala a mano sul VPS: `python3 -c "import secrets; print(secrets.token_urlsafe(48))"` e incolla il risultato con `sudo nano /etc/virtual-captain/env`. Se la cambi, i contatori dei limiti si azzerano. **Impostala PRIMA di `PUBLIC_BASE_URL`**: con `PUBLIC_BASE_URL` e senza `SECRET_KEY` il servizio rifiuta di partire (messaggio chiaro nel journal).
+- `PUBLIC_BASE_URL`: origine pubblica https senza slash finale e senza percorso (`http` ammesso solo per localhost/127.0.0.1/::1). Serve per i link nelle mail e per il controllo `Origin`. Se manca, l'API `/api/auth/*` **non viene montata** e nel journal compare un warning ("NOT mounted").
+- `DB_PATH` (facoltativa): file SQLite. Default `/var/www/virtual-captain/shared/virtual-captain.db`. Viene creato col primo uso, permessi 600 (anche `-wal`/`-shm`); la cartella `shared` deve essere scrivibile dall'utente del servizio.
+- Limiti (facoltative, default tra parentesi): `RATE_IP_HOURLY` (5), `RATE_IP_DAILY` (20), `RATE_MAIL_ADDR_HOURLY` (3), `RATE_MAIL_DAILY` (200, **per tipo di mail**: verifica, reset, altre), `LOGIN_MAX_FAILURES` (5), `LOCKOUT_MINUTES` (15), `RATE_LOGIN_IP_15MIN` (30). I limiti per IP valgono separatamente per registrazione/forgot, reset e verifica; gli IPv6 sono raggruppati per /64.
+
+### X-Forwarded-For
+
+L'IP del client si legge da `X-Forwarded-For` **solo** se la richiesta arriva da 127.0.0.1 (Apache), e si usa l'**ultimo** valore, se e' un indirizzo IP valido (i precedenti li puo' falsificare il client; un valore non valido si ignora e vale l'IP della connessione). Il vhost deve quindi passare `X-Forwarded-For` (lo fa `ProxyPass`) e il servizio deve ascoltare solo su 127.0.0.1.
+
+### Token e query string
+
+Nessun token viaggia in query string: i link nelle mail usano il frammento (`/verify#<token>`, `/reset#<token>`, che non arriva al server) e la pagina li manda in POST nel corpo JSON (`/api/auth/verify/preview` per la sola anteprima, che non consuma; `/api/auth/verify` consuma).
+
+### Dimensione delle richieste
+
+L'app legge il corpo a blocchi con tetto di 8 KB (413 oltre; Content-Length non fidato). **Da applicare da Andrea** nel vhost SSL, dentro il blocco che fa il proxy: `LimitRequestBody 16384`, cosi' Apache scarta i corpi enormi prima dell'app.
+
+### Compromessi noti (decisioni consapevoli)
+
+- **Pre-hijack**: chi registra per primo l'indirizzo di un'altra persona fissa la password dell'account non verificato. Se la vittima poi si registra, l'ultima registrazione vince (la password viene sostituita e parte un nuovo link), ma prima di allora vale quella dell'attaccante. Mitigazione prevista per 2b-2: impostare la password al momento della verifica, non della registrazione.
+- **Lockout dell'account**: dopo N tentativi falliti l'indirizzo e' bloccato per 15 minuti anche per il proprietario (chi conosce un indirizzo puo' quindi bloccarlo a ripetizione); il controllo del blocco e la registrazione del fallimento non sono un'unica operazione atomica, quindi tentativi paralleli possono superare di poco la soglia. Reset password e lockout: il reset azzera i fallimenti.
+- **Quota mail per indirizzo** (3/ora): un attaccante puo' esaurirla per ritardare una mail legittima verso quell'indirizzo fino a un'ora. Quando una mail viene soppressa dai limiti, il link gia' emesso resta valido (non viene sostituito).
+- Cambio password e cambio email confermato invalidano i token di reset gia' emessi.
+- Pulizia automatica (sessioni scadute, token usati/scaduti, eventi vecchi) al primo uso e al massimo ogni 10 minuti; massimo 10 sessioni per utente (le piu' vecchie vengono revocate).
+
+I backup del DB non ci sono ancora (previsto `sqlite3 .backup` con timer piu' avanti).
