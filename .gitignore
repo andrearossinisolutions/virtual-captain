@@ -4,3 +4,4 @@ __pycache__/
 .pytest_cache/
 vendor/
 *.part
+.requirements.sha256
