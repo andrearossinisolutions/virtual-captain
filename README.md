@@ -43,3 +43,9 @@ Regole e soglie vengono da PPRuNe, guide FlyByWire e flashcards, non dal FCOM Fe
 ## Pagina web
 
 La pagina vive in `web/` (`index.html`, `app.css`, `app.js`). `web.py` la assembla in una sola pagina con CSS e JS inline (`build_page()`, servita su `/`) e serve `/app.css` e `/app.js` da una whitelist. `protocol.py` elenca i comandi remoti e quelli solo locali.
+
+## Server pubblico
+
+Cartella `server/` (FastAPI + uvicorn, dietro Apache): al passo 1 serve solo una pagina segnaposto e `/healthz` (con lo sha del deploy), nessuna API, nessun legame col programma sul PC; non serve ancora `web/`. Il deploy e' automatico: un push su `main` che tocca `server/` (escluse `server/deploy/` e i `.md`), `web/` o il workflow lancia `.github/workflows/deploy-server.yml` sul runner del VPS. **La repo e' pubblica: nessun segreto nei file.** Preparazione del VPS (passi A-I, verifiche e ritorni indietro): `server/DEPLOY.md`.
+
+Prova locale (venv fuori dalla repo): `pip install -r server/requirements-dev.txt`, poi `python -m pytest server/test_server.py` (senza fastapi i test del server vengono saltati) e `uvicorn server.app:app --host 127.0.0.1 --port 8100`.

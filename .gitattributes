@@ -1,2 +1,5 @@
 *.bat text eol=crlf
 web/* text eol=lf
+*.sh text eol=lf
+server/** text eol=lf
+.github/** text eol=lf

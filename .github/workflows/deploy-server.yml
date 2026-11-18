@@ -1,0 +1,40 @@
+name: Deploy server
+
+# SECURITY: the repository is PUBLIC and this job runs on a self-hosted runner.
+# Only push to main and manual runs. NEVER add pull_request / pull_request_target.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'server/**'
+      - '!server/deploy/**'
+      - '!server/**/*.md'
+      - '!server/**/test_*.py'
+      - '!server/requirements-dev.txt'
+      - '!server/env.example'
+      - 'web/**'
+      - '.github/workflows/deploy-server.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: virtual-captain-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # workflow_dispatch can be started from any branch: deploy production only from main
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Deploy locally on server
+        run: /var/www/virtual-captain/scripts/deploy.sh

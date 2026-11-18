@@ -1,0 +1,3 @@
+# Replace 'arossini' with your own VPS user.
+# Install with: sudo visudo -f /etc/sudoers.d/virtual-captain  (mode 440, root:root)
+arossini ALL=(root) NOPASSWD: /usr/bin/systemctl restart virtual-captain

@@ -1,0 +1,27 @@
+# Replace User/Group (arossini) with your own VPS user before installing.
+[Unit]
+Description=Virtual Captain public server
+After=network.target
+
+[Service]
+Type=simple
+User=arossini
+Group=arossini
+WorkingDirectory=/var/www/virtual-captain/current
+EnvironmentFile=-/etc/virtual-captain/env
+ExecStart=/var/www/virtual-captain/venv/bin/uvicorn server.app:app --host 127.0.0.1 --port 8100 --workers 1 --no-server-header
+Restart=on-failure
+RestartSec=3
+MemoryMax=300M
+NoNewPrivileges=true
+PrivateDevices=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_INET AF_UNIX AF_INET6
+Environment=PYTHONDONTWRITEBYTECODE=1
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/virtual-captain/shared
+
+[Install]
+WantedBy=multi-user.target

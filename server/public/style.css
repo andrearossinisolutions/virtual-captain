@@ -1,0 +1,9 @@
+html, body { height: 100%; margin: 0; }
+body {
+  display: flex; align-items: center; justify-content: center;
+  background: #0b1220; color: #e6edf7;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  text-align: center;
+}
+h1 { font-size: 2rem; margin: 0 0 .5rem; }
+p { margin: 0; color: #9fb0c8; }
