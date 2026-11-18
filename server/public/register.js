@@ -3,6 +3,7 @@
   var msg = VC.$("msg");
   VC.redirectIfSignedIn();
   VC.onSubmit(VC.$("form"), function () {
+    VC.clearLinkCode();
     return VC.api("/api/auth/register", {
       email: VC.$("email").value, simbrief_id: VC.$("simbrief").value
     }).then(function (r) {

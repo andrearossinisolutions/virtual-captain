@@ -23,6 +23,7 @@ SESSION_ABSOLUTE = 30 * DAY
 SESSION_IDLE = 7 * DAY
 MAX_SESSIONS = 10
 CLEANUP_EVERY = 600.0
+ROTATED_KEEP = 7 * DAY
 SIMBRIEF_RE = re.compile(r"[A-Za-z0-9 ._-]{1,40}", re.ASCII)  # Pilot ID or username
 
 
@@ -68,7 +69,21 @@ class Accounts:
             c.execute("DELETE FROM sessions WHERE created_at < ? OR last_seen < ?",
                       (now - SESSION_ABSOLUTE, now - SESSION_IDLE))
             c.execute("DELETE FROM email_tokens WHERE used_at IS NOT NULL OR expires_at < ?", (now,))
+            c.execute("UPDATE device_codes SET request_ip='', request_ua='' WHERE expires_at < ?",
+                      (now,))  # explicit, then the rows go
+            c.execute("DELETE FROM device_codes WHERE expires_at < ?", (now,))
+            # rotated/revoked refresh tokens are kept a while for reuse detection
+            c.execute("DELETE FROM device_tokens WHERE expires_at < ? OR revoked_at < ?",
+                      (now, now - ROTATED_KEEP))
         self.limiter.purge()
+
+    @staticmethod
+    def _revoke_devices(c, user_id: int, now: float) -> None:
+        """Every device token of the account stops working; codes approved but not yet
+        collected are dropped (rows stay a while so a replayed refresh token is detected)."""
+        c.execute("UPDATE device_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL",
+                  (now, user_id))
+        c.execute("DELETE FROM device_codes WHERE user_id=?", (user_id,))
 
     # ---- mail ----
     def deliver(self, mail: Mail) -> None:
@@ -287,6 +302,7 @@ class Accounts:
         with self.db.tx() as c:
             c.execute("UPDATE users SET pw_hash=? WHERE id=?", (new_hash, sess["uid"]))
             c.execute("DELETE FROM sessions WHERE user_id=? AND id<>?", (sess["uid"], sess["sid"]))
+            self._revoke_devices(c, sess["uid"], self.clock())
             c.execute("DELETE FROM email_tokens WHERE user_id=? AND kind='reset'", (sess["uid"],))
 
     async def change_email(self, sess: dict, new_email, password) -> Optional[Mail]:
@@ -315,6 +331,8 @@ class Accounts:
         await self._confirm(sess, password)
         key = self.limiter.key(sess["email"])
         with self.db.tx() as c:
+            self._revoke_devices(c, sess["uid"], self.clock())
+            c.execute("DELETE FROM device_tokens WHERE user_id=?", (sess["uid"],))
             c.execute("DELETE FROM users WHERE id=?", (sess["uid"],))  # cascades
             c.execute("DELETE FROM login_failures WHERE key=?", (key,))
             c.execute("DELETE FROM rate_events WHERE key=?", (key,))
@@ -351,5 +369,6 @@ class Accounts:
             email = c.execute("SELECT email FROM users WHERE id=?", (uid,)).fetchone()["email"]
             c.execute("UPDATE users SET pw_hash=?, verified=1 WHERE id=?", (new_hash, uid))
             c.execute("DELETE FROM sessions WHERE user_id=?", (uid,))
+            self._revoke_devices(c, uid, self.clock())
             c.execute("DELETE FROM email_tokens WHERE user_id=?", (uid,))
             c.execute("DELETE FROM login_failures WHERE key=?", (self.limiter.key(email),))

@@ -1,6 +1,6 @@
 """Virtual Captain public server: skeleton, account API (2b-1) and account pages (2b-2).
 
-Placeholder page, health check, /api/auth/* and, with the API, the pages in public/.
+Placeholder page, health check, /api/auth/*, /api/device/* and, with the API, the pages in public/.
 No docs. It does NOT serve web/ and does NOT import protocol.py yet. Nothing touches the DB until first use.
 """
 from __future__ import annotations
@@ -39,12 +39,13 @@ SECURITY_HEADERS = {
 ACCOUNT_PAGES = {
     "/": "home.html", "/register": "register.html", "/login": "login.html",
     "/verify": "verify.html", "/forgot": "forgot.html", "/reset": "reset.html",
-    "/account": "account.html", "/waiting": "waiting.html",
+    "/account": "account.html", "/waiting": "waiting.html", "/link": "link.html",
 }
 ACCOUNT_SCRIPTS = {
     "/common.js": "common.js", "/register.js": "register.js", "/login.js": "login.js",
     "/verify.js": "verify.js", "/forgot.js": "forgot.js", "/reset.js": "reset.js",
     "/account.js": "account.js", "/waiting.js": "waiting.js",
+    "/link.js": "link.js",
 }
 
 # Known limit: the middleware does not add these headers to unhandled 500 errors
@@ -81,14 +82,19 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
         from server.api_auth import build_router
         from server.db import Database
         accounts = Accounts(config, db or Database(config.db_path), mailer or smtp_mailer(), clock)
+        from server.api_device import build_device_router
+        from server.devicecode import DeviceCodes
+        devices = DeviceCodes(accounts)
+        app.state.devices = devices  # devices.verify_access_token(): for the future uplink
         app.include_router(build_router(accounts))
+        app.include_router(build_device_router(accounts, devices))
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
             response.headers[name] = value
-        if request.url.path.startswith("/api/auth/"):
+        if request.url.path.startswith(("/api/auth/", "/api/device/")):
             response.headers["Cache-Control"] = "no-store"
         return response
 

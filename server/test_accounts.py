@@ -161,7 +161,7 @@ def test_db_file_mode_wal_and_migrations(env):
     c = sqlite3.connect(path)
     try:
         assert c.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
-        assert c.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert c.execute("PRAGMA user_version").fetchone()[0] == 4
     finally:
         c.close()
     Database(str(path))._prepare()  # re-opening an migrated DB is a no-op
@@ -963,5 +963,5 @@ def test_migration_idempotent_under_reopen(tmp_path):
     other = Database(str(tmp_path / "m.db"))
     other._prepare()
     c = sqlite3.connect(tmp_path / "m.db")
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert c.execute("PRAGMA user_version").fetchone()[0] == 4
     c.close()

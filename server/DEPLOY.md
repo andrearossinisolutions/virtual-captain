@@ -237,3 +237,47 @@ Sul vhost SSL ricorda `LimitRequestBody 16384` (vedi sopra).
 Dopo il deploy imposta `SECRET_KEY` e poi `PUBLIC_BASE_URL` in `/etc/virtual-captain/env` (prima i limiti SMTP gia' presenti), riavvia il servizio e apri `https://<tuo dominio>/`: devono comparire i link. Crea un account, apri il link ricevuto per mail, scegli la password, arrivi su `/waiting`.
 
 Le risposte di `/api/auth/*` hanno `Cache-Control: no-store`.
+
+## Collegamento del programma sul PC: device-code (passo 2c)
+
+Nessuna variabile obbligatoria nuova e nessun cambio al deploy: le route `/api/device/*` e la pagina `/link` si montano insieme all'API account (cioe' solo con `PUBLIC_BASE_URL`). La migrazione 3 del DB (tabelle `device_codes` e `device_tokens`) parte da sola al primo uso. Le risposte di `/api/device/*` hanno `Cache-Control: no-store`.
+
+Variabili facoltative (default tra parentesi): `RATE_DEVICE_START_IP_HOURLY` (10) e `RATE_DEVICE_START_IP_DAILY` (30), `RATE_DEVICE_POLL_IP_MINUTE` (60), `RATE_DEVICE_TOKEN_IP_MINUTE` (30, refresh e revoca), `DEVICE_CODE_TTL_SECONDS` (600), `DEVICE_POLL_INTERVAL_SECONDS` (5), `DEVICE_ACCESS_TTL_SECONDS` (600), `DEVICE_REFRESH_TTL_DAYS` (90), `DEVICE_LOOKUP_MAX_FAILURES` (5), `DEVICE_LOOKUP_LOCK_MINUTES` (15).
+
+### Flusso
+
+1. Il programma chiama `POST /api/device/start` (JSON, senza login): riceve `device_code` (segreto, solo per il programma), `user_code` `ABCD-EFGH` (8 caratteri, senza 0/O/1/I/L), `verification_uri` (`<PUBLIC_BASE_URL>/link`), `verification_uri_complete` (con il codice nel **frammento**: `/link#ABCD-EFGH`, non in query), `expires_in` (600) e `interval` (5).
+2. L'utente apre `/link` (o il link completo/QR), accede se serve (dopo il login si torna sempre a `/link`, il codice resta solo nella memoria della scheda), vede IP, ora e user agent della richiesta e l'avviso "Only approve if you started this on your own PC", poi preme **Approve** o **Deny**.
+3. Il programma fa polling di `POST /api/device/poll` `{device_code}` ogni `interval` secondi: `authorization_pending`, `slow_down` (troppo frequente: l'intervallo sale di 5 s, max 60), `expired_token` (scaduto, sconosciuto o gia' ritirato), `access_denied`. Appena approvato, **una sola** risposta contiene `access_token` (opaco, 10 minuti) e `refresh_token` (90 giorni); il codice passa a `consumed` e il poll successivo fallisce.
+4. `POST /api/device/token` `{grant_type: "refresh_token", refresh_token}`: ruota la coppia (il vecchio refresh si invalida). Un refresh gia' ruotato presentato di nuovo **revoca l'intera famiglia** (puo' essere rubato; se la risposta di rotazione si perde per rete, serve un nuovo collegamento). `POST /api/device/revoke` `{token}` (refresh o access): idempotente, risposta sempre `{"ok": true}`, revoca tutta l'autorizzazione del programma.
+
+Lato server `DeviceCodes.verify_access_token(token)` (in `app.state.devices`) restituisce lo `user_id` di un access token valido: serve al futuro uplink, non e' una route. Il token vale solo per l'account che ha approvato.
+
+### Regole
+
+- **Un solo programma attivo per account**: quando un nuovo codice viene ritirato col poll, i token precedenti dell'account vengono revocati (l'ultimo sostituisce).
+- Cambio password, reset password e cancellazione account revocano **tutti** i token del programma (e scartano i codici approvati e non ancora ritirati). Il cambio email no.
+- `lookup`, `approve`, `deny` richiedono sessione, CSRF e Origin. **Anti-phishing**: `approve` e' accettato solo se lo stesso utente ha fatto prima la `lookup` del codice e se il corpo contiene `confirm` = gli **ultimi 4 caratteri** del codice, digitati a mano nella pagina (campo separato, mai precompilato, anche se il codice arriva da `/link#CODE`; confronto a tempo costante); senza lookup o con `confirm` errato la richiesta e' rifiutata e **conta come tentativo errato**. La pagina mostra il codice in grande, tiene il bottone Approve disattivato finche' i 4 caratteri non coincidono e presenta nome, IP, ora e user agent come dati dichiarati dal richiedente, non verificati (il nome, solo lettere/cifre/spazio/punto/trattino, max 40, e' sempre testo in un riquadro a parte, mai titolo). `deny` non richiede ne' lookup ne' conferma.
+
+Tentativi: massimo 5 codici errati per sessione, per IP e per account (blocco 15 minuti); codice inesistente, scaduto o gia' usato danno la stessa risposta `invalid_code`. Il fallimento non si azzera col successo (un codice proprio valido non resetta il conteggio).
+- Nel DB solo hash SHA-256 di `device_code`, access e refresh token. L'IP della richiesta (gli IPv6 gia' raggruppati per /64) e lo user agent (200 caratteri) restano nella riga solo finche' il codice e' in attesa, per mostrarli nella pagina di approvazione: si azzerano a decisione (approvazione o rifiuto), al ritiro o alla prima pulizia dopo la scadenza (che cancella la riga intera; fino ad allora, al massimo ~10 minuti oltre la scadenza se nessuno usa il sito). Mai nei log.
+- Pulizia (stessa cadenza di 10 minuti): codici scaduti; token scaduti; token ruotati o revocati dopo 7 giorni (fino ad allora servono a riconoscere un refresh riusato).
+- Limiti: al massimo 5000 codici in attesa (un DoS solo teorico: riempirli richiede migliaia di IP, perché `/start` è limitato per IP, e i codici scadono in 10 minuti).
+
+### Come provarlo
+
+Da Mac (sostituisci il dominio; nulla di segreto nei comandi):
+
+```
+curl -s -X POST https://<dominio>/api/device/start -H 'Content-Type: application/json' -d '{"device_name":"Mac test"}'
+curl -s -X POST https://<dominio>/api/device/poll -H 'Content-Type: application/json' -d '{"device_code":"<device_code ricevuto>"}'
+```
+
+Il poll risponde `{"error":"authorization_pending",...}`. Apri nel browser, gia' loggato, `https://<dominio>/link#<user_code>` (o `/link` e digita il codice), controlla IP e ora, premi **Approve**. Ripeti il poll: restituisce `access_token` e `refresh_token` **una volta sola** (non incollarli in chat ne' in file); un secondo poll deve rispondere `expired_token`. Con `/waiting` -> "Link a program" si arriva alla stessa pagina.
+
+### Note e compromessi (passo 2c)
+
+- **Retry del refresh (m6)**: nessuna finestra di tolleranza. Se il programma ripresenta lo stesso refresh (risposta persa, o due richieste in parallelo) la famiglia viene revocata e serve un nuovo collegamento; con due `/token` simultanei sullo stesso refresh il primo ruota e il secondo e' trattato come riuso (coperto da test con thread). Da valutare nel client dell'uplink: serializzare i refresh e, se serve, una breve tolleranza lato server.
+- **Righe ruotate (m4)**: restano 7 giorni per riconoscere il riuso; oltre, un refresh vecchio da' solo `invalid_grant` senza revocare la famiglia. Il cambio email non revoca i token.
+- `verify_access_token` legge con una connessione in sola lettura e aggiorna `last_used_at` al massimo una volta al minuto. La migrazione 4 aggiunge `looked_up_by` a `device_codes`.
+- Il codice conservato nella scheda durante il login (`sessionStorage`) scade dopo 10 minuti e si cancella al logout e alla registrazione.

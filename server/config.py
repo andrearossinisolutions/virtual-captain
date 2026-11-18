@@ -96,6 +96,16 @@ class AppConfig:
     lockout_seconds: int = 900
     login_ip_per_15min: int = 30
     preview_ip_hourly: int = 20
+    device_start_hourly: int = 10
+    device_start_daily: int = 30
+    device_poll_ip_minute: int = 60
+    device_token_ip_minute: int = 30
+    device_code_ttl: int = 600
+    device_interval: int = 5
+    device_access_ttl: int = 600
+    device_refresh_ttl: int = 90 * 86400
+    device_lookup_max_failures: int = 5
+    device_lookup_lock_seconds: int = 900
 
 
 def _int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -150,4 +160,14 @@ def load_app_config(env: Mapping[str, str] = os.environ) -> AppConfig:
         lockout_seconds=_int(env, "LOCKOUT_MINUTES", 15) * 60,
         login_ip_per_15min=_int(env, "RATE_LOGIN_IP_15MIN", 30),
         preview_ip_hourly=_int(env, "RATE_PREVIEW_IP_HOURLY", 20),
+        device_start_hourly=_int(env, "RATE_DEVICE_START_IP_HOURLY", 10),
+        device_start_daily=_int(env, "RATE_DEVICE_START_IP_DAILY", 30),
+        device_poll_ip_minute=_int(env, "RATE_DEVICE_POLL_IP_MINUTE", 60),
+        device_token_ip_minute=_int(env, "RATE_DEVICE_TOKEN_IP_MINUTE", 30),
+        device_code_ttl=_int(env, "DEVICE_CODE_TTL_SECONDS", 600),
+        device_interval=_int(env, "DEVICE_POLL_INTERVAL_SECONDS", 5),
+        device_access_ttl=_int(env, "DEVICE_ACCESS_TTL_SECONDS", 600),
+        device_refresh_ttl=_int(env, "DEVICE_REFRESH_TTL_DAYS", 90) * 86400,
+        device_lookup_max_failures=_int(env, "DEVICE_LOOKUP_MAX_FAILURES", 5),
+        device_lookup_lock_seconds=_int(env, "DEVICE_LOOKUP_LOCK_MINUTES", 15) * 60,
     )

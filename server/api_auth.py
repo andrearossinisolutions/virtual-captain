@@ -58,28 +58,36 @@ async def _body(request: Request) -> dict:
     return data
 
 
+def origin_check(base: str, request: Request) -> None:
+    site = request.headers.get("sec-fetch-site")
+    if site is not None and site != "same-origin":
+        raise AccountError(403, "forbidden")
+    origin = request.headers.get("origin")
+    if origin is not None and origin != base:
+        raise AccountError(403, "forbidden")
+
+
+def current_session(accounts: Accounts, request: Request, need_csrf: bool) -> dict:
+    sess = accounts.session(request.cookies.get(COOKIE))
+    if sess is None:
+        raise AccountError(401, "unauthenticated")
+    if need_csrf:
+        origin_check(accounts.cfg.public_base_url, request)
+        sent = request.headers.get("x-csrf-token") or ""
+        if not sent or not same(sent, sess["csrf"]):
+            raise AccountError(403, "forbidden")
+    return sess
+
+
 def build_router(accounts: Accounts) -> APIRouter:
     router = APIRouter(prefix="/api/auth")
     base = accounts.cfg.public_base_url
 
     def check_origin(request: Request) -> None:
-        site = request.headers.get("sec-fetch-site")
-        if site is not None and site != "same-origin":
-            raise AccountError(403, "forbidden")
-        origin = request.headers.get("origin")
-        if origin is not None and origin != base:
-            raise AccountError(403, "forbidden")
+        origin_check(base, request)
 
     def current(request: Request, need_csrf: bool) -> dict:
-        sess = accounts.session(request.cookies.get(COOKIE))
-        if sess is None:
-            raise AccountError(401, "unauthenticated")
-        if need_csrf:
-            check_origin(request)
-            sent = request.headers.get("x-csrf-token") or ""
-            if not sent or not same(sent, sess["csrf"]):
-                raise AccountError(403, "forbidden")
-        return sess
+        return current_session(accounts, request, need_csrf)
 
     def set_cookie(resp: JSONResponse, token: str) -> None:
         resp.set_cookie(COOKIE, token, max_age=int(SESSION_ABSOLUTE), path="/",

@@ -52,6 +52,42 @@ MIGRATIONS = [
         "CREATE INDEX sessions_seen ON sessions(last_seen)",
         "CREATE INDEX email_tokens_expires ON email_tokens(expires_at)",
     ],
+    [  # 3: device-code login of the PC program (step 2c)
+        """CREATE TABLE device_codes (
+            device_code_hash TEXT PRIMARY KEY,
+            user_code TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL,
+            user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            created_at REAL NOT NULL,
+            expires_at REAL NOT NULL,
+            interval INTEGER NOT NULL,
+            last_poll_at REAL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            request_ip TEXT NOT NULL DEFAULT '',
+            request_ua TEXT NOT NULL DEFAULT '',
+            device_name TEXT NOT NULL DEFAULT '')""",
+        "CREATE INDEX device_codes_expires ON device_codes(expires_at)",
+        "CREATE INDEX device_codes_user ON device_codes(user_id)",
+        """CREATE TABLE device_tokens (
+            id INTEGER PRIMARY KEY,
+            refresh_hash TEXT NOT NULL UNIQUE,
+            access_hash TEXT NOT NULL,
+            access_expires_at REAL NOT NULL,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            device_name TEXT NOT NULL DEFAULT '',
+            created_at REAL NOT NULL,
+            last_used_at REAL,
+            expires_at REAL NOT NULL,
+            revoked_at REAL,
+            family_id TEXT NOT NULL)""",
+        "CREATE INDEX device_tokens_access ON device_tokens(access_hash)",
+        "CREATE INDEX device_tokens_user ON device_tokens(user_id)",
+        "CREATE INDEX device_tokens_family ON device_tokens(family_id)",
+        "CREATE INDEX device_tokens_expires ON device_tokens(expires_at)",
+    ],
+    [  # 4: the user who looked the code up (approve needs it)
+        "ALTER TABLE device_codes ADD COLUMN looked_up_by INTEGER",
+    ],
 ]
 
 
@@ -101,6 +137,16 @@ class Database:
             finally:
                 conn.close()
             self._ready = True
+
+    @contextmanager
+    def read(self):
+        """Read-only use: a plain connection, no write lock."""
+        self._prepare()
+        conn = self._connect()
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     @contextmanager
     def tx(self):

@@ -21,7 +21,7 @@ from server.app import ACCOUNT_PAGES, ACCOUNT_SCRIPTS, CSP, PUBLIC_DIR, create_a
 from server.config import AppConfig  # noqa: E402
 
 BASE = "https://vc.example.test"
-PAGES = ["/", "/register", "/login", "/verify", "/forgot", "/reset", "/account", "/waiting"]
+PAGES = ["/", "/register", "/login", "/verify", "/forgot", "/reset", "/account", "/waiting", "/link"]
 
 
 def mounted(tmp_path):
@@ -97,7 +97,8 @@ def test_protected_pages_check_session_and_redirect_to_login():
         assert ("requireSession" in js) is needs
         assert ("redirectIfSignedIn" in js) is (not needs)
     common = (PUBLIC_DIR / "common.js").read_text(encoding="utf-8")
-    assert '/api/auth/me' in common and 'go("/login")' in common and 'go("/waiting")' in common
+    assert '/api/auth/me' in common and 'go("/login")' in common and 'go("/waiting")' in common.replace('go(hasStashedLinkCode() ? "/link" : "/waiting")', 'go("/waiting")')
+    assert 'go(hasStashedLinkCode() ? "/link" : "/waiting")' in common
     assert "X-CSRF-Token" in common
 
 
@@ -139,6 +140,8 @@ def test_js_never_uses_innerhtml_or_dynamic_code():
         text = f.read_text(encoding="utf-8")
         for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(",
                     "new Function", "localStorage", "sessionStorage", "document.cookie"):
+            if bad == "sessionStorage" and f.name == "common.js":
+                continue  # only the helpers that keep the link code while signing in
             assert bad not in text, (f.name, bad)
         assert "http://" not in text and "https://" not in text, f.name
 
@@ -216,3 +219,75 @@ def test_redirects_for_real_in_node(tmp_path):
     assert run_harness(tmp_path, 200, "protected") == "[]"           # with a session they stay
     assert run_harness(tmp_path, 200, "guest") == '["/waiting"]'     # /login, /register when signed in
     assert run_harness(tmp_path, 401, "guest") == "[]"
+
+
+# ---------- /link page (step 2c) ----------
+
+def test_link_page_content_and_scripts():
+    html = (PUBLIC_DIR / "link.html").read_text(encoding="utf-8")
+    assert "Only approve if you started this on your own PC" in html
+    for ident in ('id="approve"', 'id="deny"', 'id="code"', 'id="d-ip"', 'id="d-ua"'):
+        assert ident in html
+    js = (PUBLIC_DIR / "link.js").read_text(encoding="utf-8")
+    common = (PUBLIC_DIR / "common.js").read_text(encoding="utf-8")
+    assert "takeFragmentCode" in js and "history.replaceState" in common
+    assert "location.search" not in js and "?next" not in js + common
+    assert 'VC.go("/login")' in js and "/api/device/lookup" in js
+    assert "textContent" in js and "innerHTML" not in js
+    # the return page after the sign-in is the fixed /link, never a parameter
+    assert 'go(hasStashedLinkCode() ? "/link" : "/waiting")' in common
+    assert 'href="/link"' in (PUBLIC_DIR / "waiting.html").read_text(encoding="utf-8")
+    assert not re.search(r"\bVC\b\s*=|\bapp\.", js)
+
+
+def test_sessionstorage_only_in_common_js():
+    users = [f.name for f in public_files() if f.suffix == ".js"
+             and "sessionStorage" in f.read_text(encoding="utf-8")]
+    assert users == ["common.js"]
+
+
+def test_link_approve_stays_disabled_until_the_last_four_are_typed():
+    html = (PUBLIC_DIR / "link.html").read_text(encoding="utf-8")
+    assert re.search(r'<button[^>]*id="approve"[^>]*\bdisabled\b', html)
+    assert 'id="last4"' in html and "Name provided by the program (unverified)" in html
+    assert "Details declared by the requester, not verified" in html
+    assert "the code shown there matches" in html
+    js = (PUBLIC_DIR / "link.js").read_text(encoding="utf-8")
+    assert "function confirmed()" in js and "typed === active.slice(5)" in js
+    assert 'if (!confirmed()) { return; }' in js and "confirm:" in js
+    assert 'VC.$("last4").value = ""' in js  # never pre-filled from the fragment
+
+
+STASH_HARNESS = r"""
+const fs = require("fs"), vm = require("vm");
+let now = 1000000; const store = {};
+const window = { location: { hash: "", pathname: "/x" }, history: { replaceState() {} },
+  sessionStorage: { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = v; },
+                    removeItem: (k) => { delete store[k]; } } };
+const ctx = vm.createContext({ window, document: {}, Promise, JSON, fetch: () => Promise.resolve({}),
+  Date: { now: () => now } });
+vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), ctx);
+const VC = vm.runInContext("VC", ctx), out = [];
+VC.stashLinkCode("ABCD-EFGH"); out.push(VC.takeStashedLinkCode(), VC.takeStashedLinkCode());
+VC.stashLinkCode("ABCD-EFGH"); now += 9 * 60000; out.push(VC.afterLogin === undefined);
+out.push(VC.takeStashedLinkCode());
+VC.stashLinkCode("ABCD-EFGH"); now += 11 * 60000; out.push(VC.takeStashedLinkCode());
+VC.stashLinkCode("ABCD-EFGH"); VC.clearLinkCode(); out.push(VC.takeStashedLinkCode());
+store["vc_link_code"] = "garbage"; out.push(VC.takeStashedLinkCode());
+console.log(JSON.stringify(out));
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_stashed_link_code_expires_and_is_cleared_in_node(tmp_path):
+    script = tmp_path / "s.js"
+    script.write_text(STASH_HARNESS, encoding="utf-8")
+    res = subprocess.run([NODE, str(script), str(PUBLIC_DIR / "common.js")],
+                         capture_output=True, text=True, timeout=20)
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.strip() == '["ABCD-EFGH","",false,"ABCD-EFGH","","",""]'
+
+
+def test_link_code_cleared_at_logout_and_registration():
+    assert "clearLinkCode();" in (PUBLIC_DIR / "common.js").read_text(encoding="utf-8")
+    assert "VC.clearLinkCode()" in (PUBLIC_DIR / "register.js").read_text(encoding="utf-8")

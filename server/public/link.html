@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Link a program - Virtual Captain</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+<p class="brand">Virtual Captain</p>
+<div class="card">
+<h1>Link a program</h1>
+<form id="form" method="post" novalidate>
+<p>Enter the code shown by the Virtual Captain program on your PC.</p>
+<label for="code">Code</label>
+<input id="code" name="code" type="text" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="ABCD-EFGH" required>
+<button type="submit">Continue</button>
+</form>
+<div id="confirm" hidden>
+<p class="warn">Only approve if you started this on your own PC and the code shown there matches.</p>
+<p class="hint">Code to check</p>
+<p class="bigcode" id="d-code"></p>
+<form id="confirmform" method="post" novalidate>
+<label for="last4">Type the last 4 characters of the code shown on your PC</label>
+<input id="last4" name="last4" type="text" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="4" placeholder="EFGH">
+</form>
+<div class="untrusted">
+<p class="hint">Details declared by the requester, not verified</p>
+<dl class="details">
+<dt>Name provided by the program (unverified)</dt><dd id="d-name"></dd>
+<dt>Requested from</dt><dd id="d-ip"></dd>
+<dt>Requested at</dt><dd id="d-time"></dd>
+<dt>Browser or tool</dt><dd id="d-ua"></dd>
+</dl>
+</div>
+<p class="hint">If you did not request this, choose Deny.</p>
+<button type="button" id="approve" disabled>Approve</button>
+<button type="button" id="deny" class="secondary">Deny</button>
+</div>
+<p class="msg" id="msg" role="status" aria-live="polite"></p>
+</div>
+<p class="links"><a href="/waiting">Back</a></p>
+<noscript><p class="msg error">This page needs JavaScript.</p></noscript>
+</main>
+<script src="/common.js"></script>
+<script src="/link.js"></script>
+</body>
+</html>
