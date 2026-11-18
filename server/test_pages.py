@@ -21,7 +21,7 @@ from server.app import ACCOUNT_PAGES, ACCOUNT_SCRIPTS, CSP, PUBLIC_DIR, create_a
 from server.config import AppConfig  # noqa: E402
 
 BASE = "https://vc.example.test"
-PAGES = ["/", "/register", "/login", "/verify", "/forgot", "/reset", "/account", "/waiting", "/link"]
+PAGES = ["/", "/register", "/login", "/verify", "/forgot", "/reset", "/account", "/waiting", "/link", "/flight"]
 
 
 def mounted(tmp_path):
@@ -60,7 +60,7 @@ def test_every_html_references_only_existing_whitelisted_files(tmp_path):
         if f.suffix != ".html":
             continue
         for src in re.findall(r'(?:src|href)="(/[^"#?]*)"', f.read_text(encoding="utf-8")):
-            ok = src == "/style.css" or src in ACCOUNT_SCRIPTS or src in ACCOUNT_PAGES
+            ok = src == "/style.css" or src in ACCOUNT_SCRIPTS or src in ACCOUNT_PAGES or src in srv.WEB_FILES
             assert ok, (f.name, src)
             assert client.get(src).status_code == 200
 
@@ -70,7 +70,7 @@ def test_whitelist_covers_public_dir_and_nothing_else(tmp_path):
     assert {f.name for f in public_files()} == served
     client = mounted(tmp_path)
     for path in ("/index.html", "/home.html", "/register.html", "/account/x",
-                 "/public/login.html", "/../server/app.py", "/app.js", "/app.css", "/docs",
+                 "/public/login.html", "/../server/app.py", "/web/app.js", "/index.html", "/app.js.map", "/docs",
                  "/openapi.json", "/redoc", "/waiting.js.map"):
         assert client.get(path).status_code == 404, path
 
@@ -178,7 +178,8 @@ def test_pages_and_scripts_match_the_module_tables():
     assert srv.ACCOUNT_PAGES["/account"] == "account.html"
     assert all((PUBLIC_DIR / n).is_file() for n in
                list(ACCOUNT_PAGES.values()) + list(ACCOUNT_SCRIPTS.values()))
-    assert not Path(PUBLIC_DIR / "app.js").exists() and not (PUBLIC_DIR / "app.css").exists()
+    assert not Path(PUBLIC_DIR / "app.js").exists() and not (PUBLIC_DIR / "app.css").exists()  # they live in web/ and are whitelisted separately
+    assert set(srv.WEB_FILES) == {"/app.js", "/app.css"} and all((srv.WEB_DIR / n).is_file() for n, _ in srv.WEB_FILES.values())
 
 
 # ---------- redirects, run for real in node (skipped when node is missing) ----------
@@ -300,7 +301,7 @@ def test_waiting_page_polls_the_agent_status_with_text_only():
     html = (PUBLIC_DIR / "waiting.html").read_text(encoding="utf-8")
     assert "/api/agent/status" in js and "3000" in js
     assert "Program connected" in js and "Program not connected" in js and "Program not connected" in html
-    assert "Connected. The flight view arrives in the next step." in js
+    assert 'VC.go("/flight")' in js
     assert "textContent" in js
     for bad in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(", "location.search",
                 "sessionStorage", "localStorage", "WebSocket", "EventSource"):
@@ -362,10 +363,9 @@ def test_waiting_page_follows_the_status_in_node(tmp_path):
     r = run_waiting(tmp_path, [[200, {"connected": False}], [200, {"connected": True}],
                                [200, {"connected": False}]])
     off = ["Program not connected", "Waiting for the Virtual Captain program", "dot", True, ""]
-    on = ["Program connected", "The Virtual Captain program is connected", "dot on", False,
-          "Connected. The flight view arrives in the next step."]
-    assert r["out"] == [off, on, off]  # connected: enabled, click shows only the text; offline: back, note cleared
-    assert r["ms"] == [3000] and r["replaced"] == []
+    on = ["Program connected", "The Virtual Captain program is connected", "dot on", False, ""]
+    assert r["out"] == [off, on, off]  # connected: enabled; offline: back to disabled
+    assert r["ms"] == [3000] and r["replaced"] == ["/flight"]  # the click on "Start flight" opens the flight page
 
 
 @pytest.mark.skipif(NODE is None, reason="node is not installed")

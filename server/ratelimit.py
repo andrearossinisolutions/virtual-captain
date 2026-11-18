@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import ipaddress
-from typing import Callable, Sequence, Tuple
+import time
+from collections import deque
+from typing import Callable, Deque, Dict, Sequence, Tuple
 
 from server.db import Database
 
@@ -75,3 +77,30 @@ def is_ip(text: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+class MemoryRateLimiter:
+    """Sliding windows kept only in RAM (hot polling endpoints: nothing is written to the DB).
+    Single event loop, so no lock. Keys are never logged."""
+
+    PRUNE_ABOVE = 5000  # keys; above this the empty windows are dropped
+
+    def __init__(self, monotonic: Callable[[], float] = time.monotonic):
+        self.monotonic = monotonic
+        self._events: Dict[Tuple[str, str], Deque[float]] = {}
+
+    def allow(self, bucket: str, key: str, maximum: int, seconds: float) -> bool:
+        now = self.monotonic()
+        q = self._events.setdefault((bucket, key), deque())
+        while q and now - q[0] > seconds:
+            q.popleft()
+        if len(q) >= maximum:
+            return False
+        q.append(now)
+        if len(self._events) > self.PRUNE_ABOVE:
+            self._prune(now, seconds)
+        return True
+
+    def _prune(self, now: float, seconds: float) -> None:
+        for k in [k for k, q in self._events.items() if not q or now - q[-1] > seconds]:
+            del self._events[k]

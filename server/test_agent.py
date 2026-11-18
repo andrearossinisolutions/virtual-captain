@@ -129,7 +129,7 @@ def test_wire_is_stdlib_only():
     tree = ast.parse((pathlib.Path(wire.__file__)).read_text(encoding="utf-8"))
     mods = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
     assert mods <= {"__future__"}
-    assert not [n for n in ast.walk(tree) if isinstance(n, ast.Import)]
+    assert {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names} <= {"re"}  # stdlib only
 
 
 # ---------- hub ----------

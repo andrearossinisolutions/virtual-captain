@@ -1,11 +1,15 @@
-const $=id=>document.getElementById(id);let lastRev=-1,spN=null,spUntil=0,spExp=false,chipsKey="",csKey="",fdKey="",planKey="",clBodyKey="",timer=null,phase="briefing",view="config",shownView="config",last=null;
-async function api(path,body){const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
+const REMOTE=document.body.dataset.mode==="remote";  // pagina /flight del sito: solo lettura, dati dallo snapshot del programma
+const ghosts={};const $=id=>document.getElementById(id)||(ghosts[id]||(ghosts[id]=document.createElement("div")));  // id assente (pagina remota): elemento fantasma, mai nel DOM
+let lastRev=-1,spN=null,spUntil=0,spExp=false,chipsKey="",csKey="",fdKey="",planKey="",clBodyKey="",timer=null,phase="briefing",view="config",shownView="config",last=null;
+async function api(path,body){if(REMOTE&&body)throw new Error("Read-only");const r=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
   if(!r.ok){const t=await r.text();throw new Error(t||r.status)}return r.json()}
-function build(s){const g=$("grid");g.innerHTML="";$("apt").innerHTML="";for(const [k,l] of s.labels){const d=document.createElement("div");
-  d.innerHTML=`<label>${l}</label><input data-k="${k}" inputmode="${["origin","destination","dep_time"].includes(k)?"text":"numeric"}" autocomplete="off" enterkeyhint="next"${k==="origin"?' placeholder="LIMC/17R" autocapitalize="characters"':""}>`;(k==="origin"||k==="destination"||k==="dep_time"?$("apt"):g).appendChild(d);
-  if(k==="dep_time"){const e=document.createElement("div");e.innerHTML='<label>Local time</label><input id="deploc" disabled>';$("apt").appendChild(e)}}
-  $("mode").innerHTML=s.modes.map(m=>`<option value="${m}">${m[0].toUpperCase()+m.slice(1)}</option>`).join("");
-  $("clmode").innerHTML=s.cl_modes.map(m=>`<option value="${m}">${m[0].toUpperCase()+m.slice(1)}</option>`).join("");
+function build(s){const g=$("grid"),apt=$("apt");g.textContent="";apt.textContent="";const mk=(t,txt)=>{const e=document.createElement(t);if(txt!==undefined)e.textContent=txt;return e};
+  for(const [k,l] of s.labels){const d=mk("div"),lb=mk("label",l),i=mk("input");i.dataset.k=k;i.setAttribute("inputmode",["origin","destination","dep_time"].includes(k)?"text":"numeric");i.setAttribute("autocomplete","off");i.setAttribute("enterkeyhint","next");
+    if(k==="origin"){i.placeholder="LIMC/17R";i.setAttribute("autocapitalize","characters")}
+    d.append(lb,i);(k==="origin"||k==="destination"||k==="dep_time"?apt:g).appendChild(d);
+    if(k==="dep_time"){const e=mk("div"),l2=mk("label","Local time"),dl=mk("input");dl.id="deploc";dl.disabled=true;e.append(l2,dl);apt.appendChild(e)}}
+  const opts=(sel,list)=>{sel.textContent="";for(const m of list){const o=mk("option",m[0].toUpperCase()+m.slice(1));o.value=m;sel.appendChild(o)}};
+  opts($("mode"),s.modes);opts($("clmode"),s.cl_modes);
   document.querySelectorAll("[data-k]").forEach(i=>i.oninput=()=>{save();localTime()});$("mode").onchange=save;$("clmode").onchange=save;document.querySelectorAll("#cfg input").forEach(i=>i.onkeydown=nextField);$("simbrief").oninput=save;$("simdll").onclick=simDll;$("simretry").onclick=simRetry;
   for(const a of ["start","next","back","skip","cancel"])$("thr"+a).onclick=()=>thrAct(a);$("thrclose").onclick=()=>thrAct("cancel");
   $("thrclear").onclick=()=>{if(confirm("Clear the thrust levers calibration?"))thrAct("clear")}}
@@ -42,14 +46,14 @@ function planHtml(p,open){if(!p||!(p.route||p.waypoints&&p.waypoints.length))ret
   const head=[p.flight,p.aircraft,p.cruise_alt&&("FL"+Math.round(p.cruise_alt/100)),p.distance_nm&&(p.distance_nm+" nm"),p.ete,p.alternate&&("ALTN "+p.alternate)].filter(Boolean).join(" · ");
   const m=document.createElement("div");m.className="meta";m.textContent=head;box.appendChild(m);
   const sidstar=[p.sid&&("SID "+p.sid),p.star&&("STAR "+p.star)].filter(Boolean).join("   ");
-  if(sidstar){const d=document.createElement("div");d.textContent=sidstar;d.style.fontWeight="600";box.appendChild(d)}
+  if(sidstar){const d=document.createElement("div");d.textContent=sidstar;d.className="bold";box.appendChild(d)}
   if(p.route){const r=document.createElement("div");r.className="route";r.textContent=p.route;box.appendChild(r)}
   if(p.waypoints&&p.waypoints.length){const dt=document.createElement("details");dt.open=!!open;const sm=document.createElement("summary");sm.textContent="Waypoints ("+p.waypoints.length+")";dt.appendChild(sm);
     for(const w of p.waypoints){const row=document.createElement("div");row.className="wp";for(const v of [w.ident,w.via||"",w.alt!=null?w.alt+" ft":""]){const c=document.createElement("span");c.textContent=v;row.appendChild(c)}dt.appendChild(row)}box.appendChild(dt)}
   return box}
-function plans(s){const k=JSON.stringify(s.plan);if(k===planKey)return;planKey=k;for(const [id,open] of [["plancfg",false],["planflt",false]]){const el=$(id);const keep=el.querySelector("details")?.open;const b=planHtml(s.plan,keep||open);el.innerHTML="";if(b)el.appendChild(b)}}
-function chips(s){const f=s.fields,c=$("chips"),rb=s.rwy_bad||{},k=JSON.stringify([f,rb]);if(k===chipsKey)return;chipsKey=k;c.innerHTML="";
-  const add=(k,v,w)=>{if(v){const d=document.createElement("span");d.className="chip"+(w?" bad":"");d.innerHTML=`<b>${k}</b>`;d.append(v);c.appendChild(d)}};
+function plans(s){const k=JSON.stringify(s.plan);if(k===planKey)return;planKey=k;for(const [id,open] of [["plancfg",false],["planflt",false]]){const el=$(id);const keep=el.querySelector("details")?.open;const b=planHtml(s.plan,keep||open);el.textContent="";if(b)el.appendChild(b)}}
+function chips(s){const f=s.fields,c=$("chips"),rb=s.rwy_bad||{},k=JSON.stringify([f,rb]);if(k===chipsKey)return;chipsKey=k;c.textContent="";
+  const add=(k,v,w)=>{if(v){const d=document.createElement("span");d.className="chip"+(w?" bad":"");const b=document.createElement("b");b.textContent=k;d.append(b,v);c.appendChild(d)}};
   add("DEP",f.origin);const dr=(f.datis_rwy||"").replace(/\//g,"-");add("DEP ATIS",(f.datis_letter||"")+(f.datis_letter&&dr?" ":"")+(dr?"RWY "+dr:""),rb.datis);  // pista ATIS diversa da quella del piano: pill rossa (solo avviso)
   const rw=(f.atis_rwy||"").replace(/\//g,"-");add("ARR",f.destination?f.destination+(rw?"/"+rw:""):rw,rb.atis);  // ARR EDDF/17R-17L; senza destinazione solo le piste
   add("ARR ATIS",f.atis_letter)}
@@ -74,8 +78,8 @@ function fpills(s){const e=$("fpills"),defs=s.pill_defs||[],p=s.pills||{},k=JSON
 let clKey="",showLive=localStorage.getItem("showLive")==="1";
 $("livesw").checked=showLive;$("livesw").onchange=()=>{showLive=$("livesw").checked;localStorage.setItem("showLive",showLive?"1":"0");if(last)checklist(last)};
 let craftEl=null,clrTimer=null,sqkEdit=false,sqkVal="";
-function sqkShow(){const e=$("sqk");if(sqkEdit)return;e.className="chip sqk";e.innerHTML="<b>SQK</b>";e.append(sqkVal||"\u2014")}
-function sqkStart(){if(sqkEdit)return;sqkEdit=true;const e=$("sqk"),i=document.createElement("input");i.inputMode="numeric";i.maxLength=4;i.pattern="[0-7]*";i.value=sqkVal;
+function sqkShow(){const e=$("sqk");if(sqkEdit)return;e.className=REMOTE?"chip":"chip sqk";e.textContent="";const b=document.createElement("b");b.textContent="SQK";e.append(b,sqkVal||"\u2014")}
+function sqkStart(){if(sqkEdit||REMOTE)return;sqkEdit=true;const e=$("sqk"),i=document.createElement("input");i.inputMode="numeric";i.maxLength=4;i.pattern="[0-7]*";i.value=sqkVal;
   i.setAttribute("autocomplete","off");i.spellcheck=false;let done=false;
   const end=save=>{if(done)return;done=true;sqkEdit=false;const v=i.value;sqkShow();
     if(save&&v!==sqkVal){sqkVal=v;sqkShow();clearTimeout(clrTimer);clrTimer=null;api("/api/clearance",{t:v}).then(s=>{if(s&&s.clearance)syncCraft(s.clearance,true)}).catch(()=>{})}};
@@ -91,12 +95,12 @@ function craftNode(it){if(craftEl)return craftEl;
   const g=document.createElement("div");g.className="cf";
   for(const f of it.fields){const d=document.createElement("div");if(f.k==="r")d.className="w";else if(f.k==="c")d.className="c2";
     const lb=document.createElement("label");lb.textContent=f.label;const i=document.createElement(f.k==="r"?"textarea":"input");i.dataset.c=f.k;
-    i.setAttribute("autocomplete","off");i.setAttribute("autocapitalize",f.k==="t"?"off":"characters");i.setAttribute("autocorrect","off");i.spellcheck=false;
+    i.disabled=REMOTE;i.setAttribute("autocomplete","off");i.setAttribute("autocapitalize",f.k==="t"?"off":"characters");i.setAttribute("autocorrect","off");i.spellcheck=false;
     if(f.k==="t"){i.inputMode="numeric";i.maxLength=4;i.pattern="[0-7]*"}
     i.oninput=()=>{if(f.k==="t"){const v=i.value.replace(/[^0-7]/g,"");if(v!==i.value)i.value=v}if(f.k==="f"&&i.value.length===7){const n=craftEl.querySelector('[data-c="t"]');if(n)n.focus()}clearTimeout(clrTimer);clrTimer=setTimeout(clrSend,400)};
     i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();i.blur()}};
     d.appendChild(lb);d.appendChild(i);g.appendChild(d)}
-  el.appendChild(g);const b=document.createElement("div");b.className="cb";const rb=document.createElement("button");rb.className="ghost";rb.textContent="Reset to plan";
+  el.appendChild(g);const b=document.createElement("div");b.className="cb";const rb=document.createElement("button");rb.className="ghost";rb.disabled=REMOTE;rb.textContent="Reset to plan";
   rb.onclick=async()=>{clearTimeout(clrTimer);clrTimer=null;try{const s=await api("/api/clearance",{reset:true});syncCraft(s.clearance,true)}catch(e){}};
   b.appendChild(rb);el.appendChild(b);craftEl=el;return el}
 function syncCraft(c,force){if(c&&!sqkEdit){sqkVal=c.t||"";sqkShow()}if(!craftEl||!c||(clrTimer&&!force))return;
@@ -124,7 +128,7 @@ const qu={};function qUnit(k,v){return v?(v.includes(".")?"In":"hPa"):(qu[k]||"h
 function qnhInMode(k,v){return v.includes(".")||qu[k]==="In"}  // in digitazione: inHg se c'e' il punto o se l'unita' scelta e' In (campo vuoto: il "." scatta dopo 2 cifre)
 function qnhFull(v){return /^\d{4}$/.test(v)||/^\d{2}\.\d{2}$/.test(v)}  // solo valori completi si convertono
 // ATIS-PURE-END
-function fStart(el,sel){if(el.querySelector("input"))return;const k=el.dataset.f,i=document.createElement("input");i.value=fval(k);i.dataset.f=k;
+function fStart(el,sel){if(REMOTE||el.querySelector("input"))return;const k=el.dataset.f,i=document.createElement("input");i.value=fval(k);i.dataset.f=k;
   const sf=k.replace(/^d?atis_/,""),isA=sf!==k,txt=["runway","flap","taxiway"].includes(k)||isA&&["letter","rwy","wind"].includes(sf);i.inputMode=txt?"text":k==="zfwcg"||isA&&sf==="qnh"?"decimal":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
   let done=false;const end=()=>{if(done)return;done=true;if(isA&&sf==="tl"&&/^\d{1,2}$/.test(i.value)){i.value=i.value.padStart(3,"0");inpDirty[k]=i.value}if(isA&&sf==="rwy"&&/\/$/.test(i.value)){i.value=i.value.replace(/\/+$/,"");inpDirty[k]=i.value}inpSend();i.remove();fShow(el)};
   const nextF=()=>{const tc=el.closest(".tc");if(tc){const c=tc.nextElementSibling;return c&&c.querySelector(".fld")}let n=el.nextElementSibling;while(n&&!n.dataset.f)n=n.nextElementSibling;return n};  // tabella ATIS: il campo successivo e' nella cella accanto
@@ -166,7 +170,7 @@ function inputsNode(it){const el=document.createElement("div");el.className="a i
     if(one)c.dataset.r=it.response||"";else if(!f.plan&&!/^d?atis_wind$/.test(f.k))c.dataset.pre=f.label.split(" (")[0].toLowerCase();
     c.onclick=()=>fStart(c);fShow(c);el.appendChild(c)});
   const ks=it.inputs.filter(f=>f.plan).map(f=>f.k);
-  if(ks.length){const b=document.createElement("button");b.className="rs";b.textContent="\u21ba";b.title="Reset to plan";b.setAttribute("aria-label","Reset to plan");
+  if(ks.length){const b=document.createElement("button");b.className="rs";b.disabled=REMOTE;b.textContent="\u21ba";b.title="Reset to plan";b.setAttribute("aria-label","Reset to plan");
     b.onclick=async ev=>{ev.stopPropagation();clearTimeout(inpTimer);inpTimer=null;ks.forEach(k=>delete inpDirty[k]);try{const s=await api("/api/fields",{reset:ks});lastRev=s.rev;last=s;syncInputs(s)}catch(e){}};el.appendChild(b)}
   return el}
 // iPhone: un tocco su un'area non interattiva non toglie il focus (e la tastiera numerica può non avere Invio): lo togliamo noi
@@ -189,10 +193,10 @@ function clGo(body){api("/api/checklist-phase",body).then(apply).catch(()=>{})}
 function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!c)return;
   const idx=ph.findIndex(p=>p.id===cur),strip=$("clstrip"),key=ph.length+"|"+cur;
   if(key!==clKey){clKey=key;strip.textContent="";
-    for(const p of ph){const b=document.createElement("button");b.className="clchip"+(p.id===cur?" cur":"");b.textContent=p.name;b.onclick=()=>clGo({phase:p.id});strip.appendChild(b);
+    for(const p of ph){const b=document.createElement("button");b.className="clchip"+(p.id===cur?" cur":"");b.disabled=REMOTE;b.textContent=p.name;b.onclick=()=>clGo({phase:p.id});strip.appendChild(b);
       if(p.id===cur)setTimeout(()=>b.scrollIntoView({inline:"center",block:"nearest"}),0)}}
   $("clprev").onclick=()=>clGo({step:-1});$("clnext").onclick=()=>clGo({step:1});
-  $("clprev").disabled=idx<=0;$("clnext").disabled=idx>=ph.length-1;
+  $("clprev").disabled=REMOTE||idx<=0;$("clnext").disabled=REMOTE||idx>=ph.length-1;
   $("clname").textContent=c.phase.name;const sm=$("clsum");sm.textContent=c.bad+" out of spec";sm.className="clsum"+(c.bad?" bad":"");
   const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live,i.raw,i.show,i.expected,i.inputs,i.layout,i.atis_hint,i.datis_hint,i.wx_hint])]),showLive,s.test_links]);
   if(bk!==clBodyKey){clBodyKey=bk;const y=window.scrollY,x=window.scrollX;
@@ -220,7 +224,7 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
   if(keepF){const c=body.querySelector('.fld[data-f="'+keepF[0]+'"]');if(c)fStart(c,[keepF[1],keepF[2]])}
   window.scrollTo(x,y)}
   syncCraft(s.clearance);syncInputs(s);
-  const nb=$("clnextbtn"),nx=ph[idx+1];nb.hidden=!nx;if(nx){nb.textContent="Next phase: "+nx.name;nb.onclick=()=>{clGo({step:1});$("clcard").scrollIntoView({block:"start"})}}}
+  const nb=$("clnextbtn"),nx=ph[idx+1];nb.hidden=REMOTE||!nx;if(nx){nb.textContent="Next phase: "+nx.name;nb.onclick=()=>{clGo({step:1});$("clcard").scrollIntoView({block:"start"})}}}
 function speech(s){const sp=$("speech"),tx=$("sptxt"),l=s.log,ago=s.spoke_ago==null?1e9:s.spoke_ago;
   if(s.spoke_n!==spN){if(spN!==null)spExp=false;spN=s.spoke_n;spUntil=Date.now()+Math.max(0,10-ago)*1000}
   const big=Date.now()<spUntil&&l.length>0;sp.className=(big?"big":"")+(spExp&&!big?" exp":"");
@@ -232,15 +236,35 @@ function render(){const s=last;if(!s)return;const fly=s.phase==="flying";
   const a=$("sim");a.textContent=s.sim_demo?"SimConnect: demo":s.sim_ok===null?"SimConnect: waiting":s.sim_ok?"SimConnect: connected":s.dll_missing?"SimConnect: DLL missing":"SimConnect: not connected";a.className="pill "+(s.sim_ok===null?"":s.sim_ok?"ok":"bad");
   $("simstat").textContent=s.sim_demo?"Demo flight: the simulator is not read.":s.sim_ok?"Connected to MSFS.":(s.sim_error||"Waiting for MSFS…");$("simmsg").textContent=s.dll_fetching?"Downloading…":(s.dll_msg||"");$("simdll").hidden=!s.dll_missing;$("simdll").disabled=!!s.dll_fetching;$("simretry").hidden=!!s.sim_demo;
   $("go").textContent=fly?"Back to flight":"Briefing complete";$("go").className="big "+(fly?"fly":"");$("end").hidden=!fly;$("end2").hidden=!fly;
-  $("info").textContent=s.info;chips(s);checklist(s);cockpit(s);fdata(s);fpills(s);plans(s);calib(s);
+  $("info").textContent=s.info;chips(s);checklist(s);cockpit(s);fdata(s);fpills(s);plans(s);if(!REMOTE)calib(s);
   speech(s);
   const l=s.log;
-  $("log").innerHTML="";for(const t of l.slice(1)){const li=document.createElement("li");li.textContent=t;$("log").appendChild(li)}}
+  $("log").textContent="";for(const t of l.slice(1)){const li=document.createElement("li");li.textContent=t;$("log").appendChild(li)}}
 function apply(s){const prev=last;last=s;
-  if(!prev||prev.phase!==s.phase)view=s.phase==="flying"?"flight":"config";  // cambio di fase → vista di default
+  if(!prev||prev.phase!==s.phase)view=REMOTE||s.phase==="flying"?"flight":"config";  // cambio di fase → vista di default
   render()}
 async function poll(){try{const s=await api("/api/state");
   if(lastRev===-1){build(s);fill(s);lastRev=s.rev}else if(s.rev!==lastRev){fill(s);lastRev=s.rev}apply(s)}catch(e){const a=$("sim");a.textContent="Connection lost…";a.className="pill bad"}setTimeout(poll,1500)}
+let rseq=null,repoch=null,rlast=null;
+function norm(s){const d={fields:{},plan:{},flight:[],monitor:[],pills:{},pill_defs:[],log:[],cl_phases:[],clearance:{},rwy_bad:{},atis_warn:{},wx_dep:null,wx_dest:null,info:"",test_links:false,checklist:null,spoke_n:0};
+  for(const k in d)if(s[k]===undefined)s[k]=d[k];return s}
+function rbanner(t){const b=$("banner");b.textContent=t||"";b.hidden=!t}
+function rdata(on){$("rdata").hidden=!on}
+function remoteApply(d){
+  if(!d.connected){rseq=null;repoch=null;rlast=null;last=null;rdata(false);rbanner("Program not connected");return}
+  if(d.snapshot){rseq=d.seq;repoch=d.epoch;rlast=norm(d.snapshot);rlast.spoke_ago=d.spoke_ago}
+  else if(d.unchanged&&rlast){rlast.spoke_ago=d.spoke_ago}
+  if(!rlast){rdata(false);rbanner("Program connected: waiting for the first data");return}
+  if(rlast.phase==="briefing"){rdata(false);rbanner("Briefing in progress on the PC");return}
+  rdata(true);rbanner(d.age!=null&&d.age>20?"No update for "+Math.round(d.age)+" s":"");apply(rlast)}
+async function rpoll(){let wait=3000;
+  try{const r=await fetch("/api/flight/state"+(rseq!==null&&repoch!==null?"?seq="+rseq+"&epoch="+repoch:""),{credentials:"same-origin",cache:"no-store"});
+    if(r.status===401){location.replace("/login");return}
+    if(r.status===429)wait=Math.max(1,+r.headers.get("Retry-After")||5)*1000;
+    else if(!r.ok)throw new Error(r.status);
+    else{const d=await r.json();remoteApply(d);wait=d.connected?1000:3000}}
+  catch(e){rbanner("Connection lost\u2026")}
+  setTimeout(rpoll,wait)}
 $("load").onclick=async()=>{$("load").disabled=true;$("info").textContent="Loading…";
   try{const s=await api("/api/load-plan",{simbrief:$("simbrief").value});fill(s);lastRev=s.rev;apply(s)}catch(e){$("info").textContent="SimBrief error: "+e.message}$("load").disabled=false};
 $("go").onclick=async()=>{await api("/api/fields",collect());
@@ -252,4 +276,4 @@ if(window.ResizeObserver)new ResizeObserver(()=>document.documentElement.style.s
 
 $("edit").onclick=()=>{view="config";if(last)fill(last);render()};  // fill: Departure puo' essere cambiato dal T/O runway della checklist
 const _apply=apply;apply=function(s){phase=s.phase;_apply(s)};
-poll();
+if(REMOTE){document.body.classList.add("ro");rpoll()}else poll();

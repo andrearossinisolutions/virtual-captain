@@ -29,7 +29,7 @@ Scheda e decisioni nel second brain: `life/virtual-captain/progetto.md`.
 
 Il programma si collega da solo al server pubblico (`https://virtualcaptain.rossinisolutions.com`, sovrascrivibile con `--server-url`): e' **acceso di default**. La pagina locale resta sempre attiva e SimConnect e la voce non dipendono mai dal collegamento (nessun blocco se il server e' irraggiungibile).
 
-- **Nuova dipendenza**: `websockets` (fissata in `requirements.txt`). Dopo un aggiornamento, **a mano**: `pip install -r requirements.txt` (il launcher non installa nulla). Senza la libreria il programma parte lo stesso e lo scrive in console.
+- **Nuova dipendenza**: `websockets` (fissata in `requirements.txt`). Il launcher installa da solo i requirements (`pip install -r requirements.txt`) quando il file cambia (hash in `.requirements.sha256`, locale); se pip fallisce lo scrive e avvia comunque. Se il pull aggiorna `launcher.py` stesso la nuova logica parte dal lancio successivo: dopo quel primo aggiornamento fai un secondo avvio o `pip install -r requirements.txt` a mano. Per i test: `pip install -r requirements-dev.txt` (pytest, non serve sul PC di gioco). Senza la libreria il programma parte lo stesso e lo scrive in console.
 - Al primo avvio, senza token, la console mostra un **codice** (e un QR): apri il link, accedi al sito, controlla il codice e digita gli ultimi 4 caratteri; poi la pagina `/waiting` diventa "Program connected".
 - Opzioni: `--server` (abilita e salva), `--no-server` o `--local` (nessun uplink in questa esecuzione), `--server-url URL` (salvato; http solo su localhost), `--link` (nuovo collegamento), `--unlink` (revoca sul server e cancella i token, poi esce; se il server non risponde i token restano per riprovare).
 - I token sono salvati in `%APPDATA%\VirtualCaptain\link.dat` (cifrati con DPAPI, legati all'utente di Windows e a questo PC; se `LOCALAPPDATA` manca si usa `APPDATA`); su altri sistemi in `~/.config/virtual-captain/link.dat` con permessi 0600, **non cifrati** (avviso in console). Accanto, `uplink.json` (acceso/spento, indirizzo) e il lock di istanza: una seconda istanza parte senza uplink.
@@ -37,6 +37,10 @@ Il programma si collega da solo al server pubblico (`https://virtualcaptain.ross
 - **Cartella `server/`**: il programma richiede `server/wire.py` accanto a `protocol.py` (`protocol.py` lo importa). Si aggiorna con `git pull` (launcher), mai copiando a mano singoli file.
 - `--link`: i vecchi token restano finche' il nuovo collegamento non riesce; poi i nuovi li sostituiscono e si tenta (best effort, 3 s) di revocare la famiglia vecchia.
 - Test: `python3 -m pytest test_secure_store.py test_uplink.py`.
+
+### Snapshot del volo e pagina `/flight` (U2)
+
+Con il collegamento attivo il programma manda al server, al massimo 1 volta al secondo e solo se cambia, uno **snapshot** del volo (`snapshot.py`, filtrato da un'allowlist in `server/wire.py`). **La posizione (lat/lon) e i dati sensibili (SimBrief ID, errori, calibrazioni) non escono dal PC.** Dal sito, `Start flight` apre `/flight`: pagina in **sola lettura** con le stesse viste del pannello (checklist della fase corrente, pill, cockpit, log); in Briefing mostra solo "Briefing in progress on the PC". Il thread dell'uplink legge solo `State.snapshot()`: non tocca SimConnect ne' la voce. Nessuna nuova dipendenza. Test: `python3 -m pytest test_snapshot.py test_uplink.py test_flight_page.py server/`.
 
 ## Anti-Ice dinamico (Engine Anti-Ice)
 
@@ -59,6 +63,6 @@ La pagina vive in `web/` (`index.html`, `app.css`, `app.js`). `web.py` la assemb
 
 ## Server pubblico
 
-Cartella `server/` (FastAPI + uvicorn, dietro Apache): al passo 1 serve solo una pagina segnaposto e `/healthz` (con lo sha del deploy), nessuna API, nessun legame col programma sul PC; non serve ancora `web/`. Il deploy e' automatico: un push su `main` che tocca `server/` (escluse `server/deploy/` e i `.md`), `web/` o il workflow lancia `.github/workflows/deploy-server.yml` sul runner del VPS. **La repo e' pubblica: nessun segreto nei file.** Preparazione del VPS (passi A-I, verifiche e ritorni indietro): `server/DEPLOY.md`.
+Cartella `server/` (FastAPI + uvicorn, dietro Apache): al passo 1 serve solo una pagina segnaposto e `/healthz` (con lo sha del deploy), nessuna API, nessun legame col programma sul PC; dal passo U2 serve anche `/app.js` e `/app.css` da `web/` (whitelist) per la pagina `/flight`. Il deploy e' automatico: un push su `main` che tocca `server/` (escluse `server/deploy/` e i `.md`), `web/` o il workflow lancia `.github/workflows/deploy-server.yml` sul runner del VPS. **La repo e' pubblica: nessun segreto nei file.** Preparazione del VPS (passi A-I, verifiche e ritorni indietro): `server/DEPLOY.md`.
 
 Prova locale (venv fuori dalla repo): `pip install -r server/requirements-dev.txt`, poi `python -m pytest server/test_server.py` (senza fastapi i test del server vengono saltati) e `uvicorn server.app:app --host 127.0.0.1 --port 8100`.

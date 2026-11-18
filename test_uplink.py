@@ -629,7 +629,119 @@ def test_uplink_module_never_touches_simconnect_or_voice():
             imported.add((n.module or "").split(".")[0])
     assert not imported & {"simconnect_backend", "speak", "state", "web", "pyttsx3", "monitor", "brain"}
     assert imported <= {"__future__", "json", "os", "random", "socket", "sys", "threading", "time", "urllib", "dataclasses",
-                        "pathlib", "typing", "protocol", "secure_store", "websockets", "msvcrt", "fcntl"}
+                        "pathlib", "typing", "protocol", "secure_store", "websockets", "msvcrt", "fcntl", "hashlib", "snapshot"}
+
+
+# ---------------------------------------------------------------- snapshot del volo (U2)
+
+def _run_with_source(tmp_path, source, ticks=30, factory=None):
+    rig = Rig(tmp_path, FakeHttp({}), tokens=good_tokens(), snapshot_source=source)
+    ws = FakeWs(rig.clock, [WELCOME] + [None] * ticks + [ConnClosed(4001)])
+    rig.ws_factory = factory or ws
+    rig.run()
+    return rig, ws
+
+
+def _snaps(ws):
+    return [m for m in ws.sent if m["t"] == "snapshot"]
+
+
+def test_no_source_no_snapshot(tmp_path):
+    rig, ws = _run_with_source(tmp_path, None)
+    assert _snaps(ws) == []
+
+
+def test_first_snapshot_right_after_the_hello_with_seq_and_version(tmp_path):
+    rig, ws = _run_with_source(tmp_path, lambda: {"phase": "briefing", "n": 1}, ticks=2)
+    assert [m["t"] for m in ws.sent[:2]] == ["hello", "snapshot"]
+    assert ws.sent[1] == {"t": "snapshot", "sv": 1, "seq": 1, "d": {"n": 1, "phase": "briefing"}}
+
+
+def test_unchanged_snapshot_is_not_resent_and_change_gets_the_next_seq(tmp_path):
+    state = {"v": 1}
+    rig = Rig(tmp_path, FakeHttp({}), tokens=good_tokens(), snapshot_source=lambda: {"phase": "flying", "v": state["v"]})
+    class Ws(FakeWs):
+        def recv(self, timeout):
+            if len(self.sent) and self.clock.now > 1_000_000.0 + 5:
+                state["v"] = 2  # a change after ~5 s
+            return super().recv(timeout)
+    ws = Ws(rig.clock, [WELCOME] + [None] * 45 + [ConnClosed(4001)])  # 9 s < STALE_AFTER
+    rig.ws_factory = ws
+    rig.run()
+    snaps = _snaps(ws)
+    assert [m["seq"] for m in snaps] == [1, 2] and snaps[0]["d"]["v"] == 1 and snaps[1]["d"]["v"] == 2
+
+
+def test_at_most_one_snapshot_per_second(tmp_path):
+    n = {"i": 0}
+
+    def src():
+        n["i"] += 1
+        return {"phase": "flying", "i": n["i"]}  # changes at every call
+    rig, ws = _run_with_source(tmp_path, src, ticks=50)  # 50 ticks = 10 s of clock
+    assert 9 <= len(_snaps(ws)) <= 11 and n["i"] <= 11
+    assert [m["seq"] for m in _snaps(ws)] == list(range(1, len(_snaps(ws)) + 1))
+
+
+def test_seq_restarts_and_the_first_snapshot_is_resent_on_each_connection(tmp_path):
+    rig = Rig(tmp_path, FakeHttp({}), tokens=good_tokens(), snapshot_source=lambda: {"phase": "flying"}, wait_limit=3)
+    wss = []
+
+    def factory(n):
+        ws = FakeWs(rig.clock, [WELCOME, None, None, ConnClosed(1006) if n < 2 else ConnClosed(4001)])
+        wss.append(ws)
+        return ws
+    rig.ws_factory = factory
+    rig.run()
+    assert len(wss) == 2 and all([m["seq"] for m in _snaps(w)] == [1] for w in wss)
+
+
+def test_source_errors_are_contained_reported_once_and_recover(tmp_path):
+    calls = {"n": 0}
+
+    def src():
+        calls["n"] += 1
+        if calls["n"] <= 3:
+            raise RuntimeError("SECRET-CONTENT lat=1.5")
+        return {"phase": "flying"}
+    rig, ws = _run_with_source(tmp_path, src, ticks=30)
+    assert [m["seq"] for m in _snaps(ws)] == [1]  # recovered, connection never dropped
+    said = rig.say_text()
+    assert said.count("snapshot del volo non disponibile") == 1 and "SECRET-CONTENT" not in said and "lat=" not in said
+
+
+def test_source_returning_none_sends_nothing(tmp_path):
+    rig, ws = _run_with_source(tmp_path, lambda: None, ticks=10)
+    assert _snaps(ws) == []
+
+
+def test_snapshot_messages_are_valid_json_under_the_size_limit(tmp_path):
+    rig, ws = _run_with_source(tmp_path, lambda: {"phase": "flying", "log": ["x" * 300] * 30}, ticks=3)
+    assert len(json.dumps(_snaps(ws)[0]).encode()) < protocol.MAX_MSG
+
+
+def test_server_rejection_1008_after_snapshots_is_reported_once_without_content(tmp_path):
+    rig = Rig(tmp_path, FakeHttp({}), tokens=good_tokens(), snapshot_source=lambda: {"phase": "flying", "log": ["SECRET-X"]}, wait_limit=3)
+    rig.ws_factory = lambda n: FakeWs(rig.clock, [WELCOME, None, None, ConnClosed(1008 if n < 3 else 4001)])
+    rig.run()
+    said = rig.say_text()
+    assert said.count("snapshot e' stato rifiutato dal server") == 1 and "SECRET-X" not in said
+
+
+def test_1008_without_snapshots_sent_is_not_reported_as_rejected(tmp_path):
+    rig = Rig(tmp_path, FakeHttp({}), tokens=good_tokens(), wait_limit=2)
+    rig.ws_factory = lambda n: FakeWs(rig.clock, [WELCOME, ConnClosed(1008 if n < 2 else 4001)])
+    rig.run()
+    assert "rifiutato" not in rig.say_text()
+
+
+def test_local_validation_failure_is_reported_once_and_nothing_is_sent(tmp_path):
+    import snapshot as S
+    from server import wire
+    def src():
+        return S.remote_view({"phase": "flying", "fields": {"a": 5}})  # numeric value: the allowlist refuses it
+    rig, ws = _run_with_source(tmp_path, src, ticks=20)
+    assert _snaps(ws) == [] and rig.say_text().count("snapshot del volo non disponibile (SnapshotError)") == 1
 
 
 # ---------------------------------------------------------------- instance lock

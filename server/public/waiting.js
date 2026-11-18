@@ -1,15 +1,14 @@
 "use strict";
 /* Waiting page: polls /api/agent/status every 3 s. Connected = the PC program is online:
-   the title turns to "Program connected" and "Start flight" is enabled. No flight data here
-   (step U1). Dynamic text only with textContent. */
+   the title turns to "Program connected" and "Start flight" is enabled and opens /flight (step U2).
+   No flight data here. Dynamic text only with textContent. */
 (function () {
   var POLL_MS = 3000;
   var TEXT = {
     offTitle: "Program not connected",
     offState: "Waiting for the Virtual Captain program",
     onTitle: "Program connected",
-    onState: "The Virtual Captain program is connected",
-    started: "Connected. The flight view arrives in the next step."
+    onState: "The Virtual Captain program is connected"
   };
   var connected = null;
 
@@ -37,6 +36,6 @@
   });
   VC.logoutButton(VC.$("logout"));
   VC.$("start").addEventListener("click", function () {
-    if (connected) { VC.message(VC.$("note"), TEXT.started, "ok"); }
+    if (connected) { VC.go("/flight"); }
   });
 })();

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Flight - Virtual Captain</title>
+<link rel="stylesheet" href="/app.css"></head><body data-mode="remote"><main id="main">
+<nav class="rnav"><a href="/waiting">Waiting page</a><a href="/account">Account settings</a></nav>
+<div class="banner" id="banner">Connecting&hellip;</div>
+<div id="rdata" hidden>
+<header id="hdr"><h1>Virtual Captain</h1><span class="pill" id="sim"></span>
+  <div class="chips" id="chips"></div><span class="chip" id="sqk"></span><div class="chips" id="fpills"></div>
+  <details id="more"><summary>More</summary>
+    <label class="livesw"><input type="checkbox" id="livesw"> Show real values on checklist</label>
+    <details class="card cs" id="fd"><summary>Flight data</summary><div id="fdbody"></div></details>
+    <details class="card cs" id="cs"><summary>Cockpit state</summary><div id="csbody"></div></details>
+    <div id="planflt"></div>
+    <h2>Earlier</h2><div class="card"><ul id="log"></ul></div>
+  </details>
+</header>
+
+<section id="flt">
+  <div class="card clcard cl" id="clcard">
+    <div class="clbar"><button class="clnav" id="clprev" aria-label="Previous phase">&lsaquo;</button><div class="clstrip" id="clstrip"></div><button class="clnav" id="clnext" aria-label="Next phase">&rsaquo;</button></div>
+    <div class="clname" id="clname"></div><div class="clsum" id="clsum"></div>
+    <div id="clbody"></div>
+    <button class="big fly" id="clnextbtn">Next phase</button>
+  </div>
+  <div id="speech"><div id="sptxt" class="idle">Listening&hellip;</div><div id="sptime"></div></div>
+</section>
+</div>
+</main>
+<noscript><p>This page needs JavaScript.</p></noscript>
+<script src="/app.js"></script></body></html>

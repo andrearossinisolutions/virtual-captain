@@ -13,6 +13,7 @@ import sys
 import time
 
 import firewall
+import snapshot
 import uplink
 import web
 from brain import Brain, parse_dep, readout_pair
@@ -108,7 +109,7 @@ def main():
     print(f"\nVirtual Captain — apri dal tablet:  {url}\n", flush=True)
     show_qr(url)
 
-    up = uplink.launch(sys.argv, show_login)  # thread daemon: non tocca SimConnect ne' la voce
+    up = uplink.launch(sys.argv, show_login, snapshot_source=lambda: snapshot.remote_view(st.snapshot()))  # thread daemon: legge solo lo State (con lock), non tocca SimConnect ne' la voce
 
     def speak(text, shown=None):
         say(text, on_start=st.add_log, shown=shown)  # nel log (e in grande nella pagina) solo quando inizia la lettura

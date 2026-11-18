@@ -6,6 +6,7 @@ gli stati e gli errori vanno solo in console (print), mai token, mai codici nei 
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import random
@@ -21,6 +22,7 @@ from typing import Callable, Optional
 from urllib.parse import urlparse
 
 import protocol
+import snapshot
 from secure_store import TokenStore, default_dir
 
 APP_NAME = "VirtualCaptain"
@@ -33,6 +35,7 @@ REFRESH_MARGIN = 120.0      # secondi: sotto questa soglia l'access token si rin
 STABLE_AFTER = 30.0         # secondi di collegamento stabile dopo i quali il backoff riparte da 1 s
 MAX_LOGIN_RESTARTS = 3      # nuovi codici dopo la scadenza del primo
 RECV_TICK = 0.2
+SNAPSHOT_EVERY = 1.0        # secondi minimi tra due letture dello snapshot (max 1 Hz, si invia solo se cambia)
 SEND_TIMEOUT = 5.0         # secondi massimi per un invio sul WebSocket
 MAX_FRESH_REJECTS = 3       # 401 consecutivi su token appena rinnovati: serve un nuovo collegamento
 REVOKE_OLD_TIMEOUT = 3.0
@@ -335,12 +338,14 @@ class Uplink:
                  say: Callable[[str], None] = print, show_login: Optional[Callable[[dict], None]] = None,
                  wait: Optional[Callable[[float], bool]] = None, wall: Callable[[], float] = time.time,
                  mono: Callable[[], float] = time.monotonic, rng: Callable[[], float] = random.random,
-                 force_link: bool = False, lock: Optional[InstanceLock] = None):
+                 force_link: bool = False, lock: Optional[InstanceLock] = None,
+                 snapshot_source: Optional[Callable[[], Optional[dict]]] = None):
         self.base_url = check_base_url(base_url)
         self.store, self.http = store, http or UrllibHttp()
         self.connect = connect or websockets_connect
         self.say, self.show_login = say, show_login or (lambda info: None)
         self.wall, self.mono, self.force_link, self.lock = wall, mono, force_link, lock
+        self.snapshot_source = snapshot_source  # iniettata da main: vista remota (gia' filtrata) dello State; mai SimConnect o voce
         self._stop = threading.Event()
         self._wait = wait or self._stop.wait
         self.backoff = Backoff(rng)
@@ -349,6 +354,7 @@ class Uplink:
         self._last_msg = ""
         self._dirty: Optional[dict] = None  # token rinnovati non ancora salvati su disco
         self._unproven = False   # token rinnovati e mai usati con successo
+        self._told_rejected = False  # il rifiuto degli snapshot si dice una sola volta
         self._rejects = 0        # 401 consecutivi su token rinnovati
 
     # ---- ciclo di vita
@@ -493,6 +499,7 @@ class Uplink:
 
     def _session(self, ws):
         """Una connessione: ("stop"|"closed"|"error"|"bad", codice). Chiude sempre il socket."""
+        snap = None
         try:
             deadline = self.mono() + protocol.HELLO_TIMEOUT + 2
             msg = None
@@ -513,6 +520,8 @@ class Uplink:
             self._set(CONNECTED, "collegato al server")
             now = self.mono()
             next_ping, last_rx = now + beat, now
+            snap = _SnapshotSender(self.snapshot_source, self._tell)  # per connessione: seq da 1, il primo invio e' subito dopo l'hello
+            next_snap = now
             while True:
                 if self.stopping():
                     try:
@@ -528,12 +537,48 @@ class Uplink:
                 if now >= next_ping:
                     ws.send(json.dumps({"t": protocol.T_PING}))
                     next_ping = now + beat
+                if now >= next_snap:
+                    next_snap = now + SNAPSHOT_EVERY
+                    text = snap.next_message()
+                    if text is not None:
+                        ws.send(text)
         except ConnClosed as e:
+            if e.code == 1008 and snap is not None and snap.seq > 0 and not self._told_rejected:
+                self._told_rejected = True
+                self._tell("lo snapshot e' stato rifiutato dal server: aggiorna il programma o segnala il problema")
             return "closed", e.code
         except ConnError:
             return "error", None
         finally:
             ws.close()
+
+
+class _SnapshotSender:
+    """Prende lo snapshot dalla sorgente e produce il messaggio solo se e' cambiato dall'ultimo inviato."""
+
+    def __init__(self, source, tell):
+        self.source, self.tell, self.seq, self.last_hash, self.failing = source, tell, 0, None, False
+
+    def next_message(self) -> Optional[str]:
+        if self.source is None:
+            return None
+        try:
+            view = self.source()
+            if view is None:
+                return None
+            body = snapshot.dumps(view)
+        except Exception as e:  # noqa: BLE001  (la sorgente non deve mai fermare il collegamento; mai il contenuto in console)
+            if not self.failing:
+                self.failing = True
+                self.tell(f"snapshot del volo non disponibile ({type(e).__name__}): il collegamento continua senza dati")
+            return None
+        self.failing = False
+        digest = hashlib.sha1(body.encode("utf-8")).digest()
+        if digest == self.last_hash:
+            return None
+        self.last_hash = digest
+        self.seq += 1
+        return '{"t":"%s","sv":%d,"seq":%d,"d":%s}' % (protocol.T_SNAPSHOT, protocol.SNAPSHOT_VERSION, self.seq, body)
 
 
 def _parse(text) -> dict:
@@ -623,7 +668,7 @@ def unlink_cli(argv: list, say: Callable[[str], None] = print, store: Optional[T
 
 def launch(argv: list, show_login: Callable[[dict], None], say: Callable[[str], None] = print,
            store: Optional[TokenStore] = None, directory: Optional[Path] = None,
-           http=None, connect=None) -> Optional[Uplink]:
+           http=None, connect=None, snapshot_source: Optional[Callable[[], Optional[dict]]] = None) -> Optional[Uplink]:
     """Avvia l'uplink in un thread daemon (None se disattivato o se un'altra istanza lo ha gia')."""
     directory = Path(directory) if directory else default_dir()
     opts = parse_options(argv, load_config(directory), lambda cfg: save_config(directory, cfg))
@@ -638,6 +683,6 @@ def launch(argv: list, show_login: Callable[[dict], None], say: Callable[[str], 
         say("[uplink] un'altra istanza di Virtual Captain ha gia' il collegamento al server: questa parte senza.")
         return None
     up = Uplink(opts.base_url, store or TokenStore(directory), http=http, connect=connect, say=say,
-                show_login=show_login, force_link=opts.link, lock=lock)
+                show_login=show_login, force_link=opts.link, lock=lock, snapshot_source=snapshot_source)
     up.start()
     return up

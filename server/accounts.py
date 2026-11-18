@@ -21,6 +21,7 @@ VERIFY_TTL = 24 * 3600
 RESET_TTL = 3600
 SESSION_ABSOLUTE = 30 * DAY
 SESSION_IDLE = 7 * DAY
+SESSION_TOUCH_EVERY = 60.0  # last_seen is refreshed at most once a minute (the idle limit is days)
 MAX_SESSIONS = 10
 CLEANUP_EVERY = 600.0
 ROTATED_KEEP = 7 * DAY
@@ -271,7 +272,8 @@ class Accounts:
             if now - row["created_at"] > SESSION_ABSOLUTE or now - row["last_seen"] > SESSION_IDLE:
                 c.execute("DELETE FROM sessions WHERE id=?", (row["sid"],))
                 return None
-            c.execute("UPDATE sessions SET last_seen=? WHERE id=?", (now, row["sid"]))
+            if now - row["last_seen"] >= SESSION_TOUCH_EVERY:  # hot polling must not write to the DB every second
+                c.execute("UPDATE sessions SET last_seen=? WHERE id=?", (now, row["sid"]))
         return {"sid": row["sid"], "uid": row["uid"], "email": row["email"],
                 "verified": bool(row["verified"]), "simbrief_id": row["simbrief_id"],
                 "csrf": row["csrf"]}

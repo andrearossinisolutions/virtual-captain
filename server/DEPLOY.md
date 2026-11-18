@@ -210,7 +210,7 @@ I backup del DB non ci sono ancora (previsto `sqlite3 .backup` con timer piu' av
 
 ## Pagine web (passo 2b-2)
 
-Le pagine vivono in `server/public/` (inglese, nessuno script o stile inline, CSP invariata) e sono servite da `app.py` con una whitelist di route, **solo se `PUBLIC_BASE_URL` e' impostata** (cioe' con l'API montata). Senza, `/` resta il segnaposto "coming soon" e tutte le altre pagine rispondono 404: il sito non si rompe. `web/` (il pannello del programma) **non** e' servito.
+Le pagine vivono in `server/public/` (inglese, nessuno script o stile inline, CSP invariata) e sono servite da `app.py` con una whitelist di route, **solo se `PUBLIC_BASE_URL` e' impostata** (cioe' con l'API montata). Senza, `/` resta il segnaposto "coming soon" e tutte le altre pagine rispondono 404: il sito non si rompe. Dal passo U2 con l'API montata sono serviti anche `/app.js` e `/app.css` da `current/web/` (whitelist esatta, niente percorsi) per la pagina `/flight`; il resto di `web/` (compreso `index.html`) **non** e' servito.
 
 | Percorso | Cosa fa |
 |---|---|
@@ -219,7 +219,8 @@ Le pagine vivono in `server/public/` (inglese, nessuno script o stile inline, CS
 | `/verify#<token>` | Anteprima del link (non lo consuma), poi scelta della password con conferma; a fine verifica si apre la sessione e si va a `/waiting`. Per il cambio email: un solo bottone di conferma, poi si rifa' il login |
 | `/login`, `/forgot`, `/reset#<token>` | Accesso, richiesta e impostazione della nuova password |
 | `/account` | Email e SimBrief (modifica), cambio password, cambio email (conferma dalla nuova casella), cancellazione (password + testo DELETE), logout |
-| `/waiting` | "Program not connected", bottone "Start flight" disattivato, nessun dato di volo |
+| `/waiting` | "Program not connected", bottone "Start flight" disattivato (attivo con il programma collegato: apre `/flight`), nessun dato di volo |
+| `/flight` | Pagina di volo in sola lettura (stessa `app.js`/`app.css` del programma, `data-mode="remote"`): vedi il passo U2 |
 
 Le pagine protette (`/account`, `/waiting`) leggono `/api/auth/me` e mandano a `/login` senza sessione; `/login` e `/register` mandano a `/waiting` se si e' gia' dentro. Il token dei link sta nel frammento: il JS lo legge, lo toglie subito dall'URL (`history.replaceState`) e lo manda solo nel corpo JSON di una POST. I form sono `method="post"` senza `action`, cosi' se lo script non carica nessun dato finisce nell'URL.
 
@@ -281,6 +282,20 @@ Il poll risponde `{"error":"authorization_pending",...}`. Apri nel browser, gia'
 - **Righe ruotate (m4)**: restano 7 giorni per riconoscere il riuso; oltre, un refresh vecchio da' solo `invalid_grant` senza revocare la famiglia. Il cambio email non revoca i token.
 - `verify_access_token` legge con una connessione in sola lettura e aggiorna `last_used_at` al massimo una volta al minuto. La migrazione 4 aggiunge `looked_up_by` a `device_codes`.
 - Il codice conservato nella scheda durante il login (`sessionStorage`) scade dopo 10 minuti e si cancella al logout e alla registrazione.
+
+## Snapshot del volo e pagina /flight (passo U2)
+
+Il programma manda al server uno **snapshot** del volo (al massimo 1 al secondo, solo se cambia) e la pagina `/flight` lo mostra in sola lettura. Nessuna variabile nuova, **nessun cambio al service e ad Apache**: basta il deploy del codice.
+
+- Messaggio `{"t":"snapshot","sv":1,"seq":N,"d":{...}}` (solo dopo l'`hello`). `d` passa da un'**allowlist** (`server/wire.py`, `sanitize_snapshot`): chiavi di primo livello sconosciute scartate; dentro le sezioni note le chiavi sconosciute sono scartate ma un tipo o un limite sbagliato rende lo snapshot non valido. **La posizione non esce dal PC**: righe Position/Latitude/Longitude tolte, waypoint senza coordinate. Esclusi anche SimBrief ID, info, errori di SimConnect, calibrazioni, DLL, valori grezzi.
+- Il server tiene l'ultimo snapshot **solo in RAM, dentro la connessione** (si cancella alla disconnessione o alla sostituzione 4001); mai nei log (nei log restano solo "agent connected/disconnected"). Chiusure: 4004 oltre 4 snapshot in 2 s o 1 MiB in 10 s; 4002 `sv` non supportata; 1008 dopo 5 snapshot non validi di fila (uno solo viene ignorato).
+- `GET /api/flight/state[?seq=N]`: **solo cookie di sessione** (l'account e' quello della sessione, nessun id nell'URL), 401 senza sessione, 429 con `Retry-After` (limiti in RAM: 120/min per utente, 600/min per IP, mai sul DB), `Cache-Control: no-store`, `Vary: Cookie`. Risposte: `{"connected":false}` (programma assente o silenzioso oltre 12 s), `{"connected":true,"seq","age","spoke_ago","snapshot"}`; con `seq` uguale a quello attuale `"snapshot":null,"unchanged":true`. `age` = secondi dall'ultimo segnale del programma (snapshot o heartbeat).
+- `accounts.session()` aggiorna `last_seen` al massimo una volta al minuto (il polling non scrive sul DB ogni secondo; il limite di inattivita' e' di giorni).
+- `/flight`: polling ogni 1 s con il programma collegato, ogni 3 s altrimenti; banner "Program not connected" (dati nascosti), "Briefing in progress on the PC", "No update for N s" oltre 20 s.
+
+### Come provarlo (U2)
+
+Con il programma avviato e collegato (anche con `--sim`): da `/waiting` premi **Start flight**. In Briefing la pagina dice "Briefing in progress on the PC"; premi "Briefing complete" sul PC e dopo ~1 s compaiono pill, checklist e log. Chiudi il programma: entro ~12 s "Program not connected" e i dati spariscono. Ritorno indietro: ripristina il deploy precedente (nessuna modifica di service, Apache o variabili).
 
 ## Uplink del programma (passo U1)
 

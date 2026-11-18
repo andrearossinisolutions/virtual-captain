@@ -18,10 +18,10 @@
 <section id="cfg">
   <h2>Briefing</h2>
   <div class="card">
-    <div class="row"><div style="flex:2"><label for="simbrief">SimBrief ID or username</label><input id="simbrief" enterkeyhint="next" autocapitalize="off" autocorrect="off"></div>
-    <div style="flex:1"><label for="mode">Mode</label><select id="mode"></select></div>
-    <div style="flex:1"><label for="clmode">Checklists</label><select id="clmode"></select></div></div>
-    <p style="margin:12px 0 0"><button id="load" style="width:100%">Load latest plan</button></p>
+    <div class="row"><div class="f2"><label for="simbrief">SimBrief ID or username</label><input id="simbrief" enterkeyhint="next" autocapitalize="off" autocorrect="off"></div>
+    <div class="f1"><label for="mode">Mode</label><select id="mode"></select></div>
+    <div class="f1"><label for="clmode">Checklists</label><select id="clmode"></select></div></div>
+    <p id="loadp"><button id="load">Load latest plan</button></p>
     <p id="info"></p>
     <div class="grid" id="apt"></div>
     <div id="plancfg"></div>
@@ -30,26 +30,26 @@
   <details class="card" id="tech"><summary>Technical settings</summary>
     <div id="thrcal">
       <label>Thrust levers calibration</label>
-      <p id="thrst" class="meta" style="margin:0 0 8px"></p>
+      <p id="thrst" class="meta"></p>
       <div class="row"><button class="ghost" id="thrstart">Calibrate</button><button class="ghost" id="thrclear" hidden>Clear calibration</button></div>
       <div class="card" id="thrcard" hidden>
-        <div class="clname" id="thrtitle" style="font-size:22px;margin-top:0"></div>
-        <p id="thrtext" style="margin:6px 0"></p>
-        <p class="meta" id="thrwarn" style="margin:0 0 8px">Hold the levers still for a moment before pressing Next.</p>
-        <div style="overflow-x:auto"><table id="thrtab"></table></div>
-        <p id="threrr" class="bad" style="margin:8px 0 0"></p>
-        <div class="row" style="margin-top:10px" id="thrbtns"><button class="ghost" id="thrback">Back</button><button id="thrnext">Next</button><button class="ghost" id="thrskip">Skip</button><button class="ghost" id="thrcancel">Cancel</button></div>
-        <div id="thrsum" hidden><p id="thrsumtxt"></p><button id="thrclose" style="width:100%">Close</button></div>
+        <div class="clname" id="thrtitle"></div>
+        <p id="thrtext"></p>
+        <p class="meta" id="thrwarn">Hold the levers still for a moment before pressing Next.</p>
+        <div class="xs"><table id="thrtab"></table></div>
+        <p id="threrr" class="bad"></p>
+        <div class="row" id="thrbtns"><button class="ghost" id="thrback">Back</button><button id="thrnext">Next</button><button class="ghost" id="thrskip">Skip</button><button class="ghost" id="thrcancel">Cancel</button></div>
+        <div id="thrsum" hidden><p id="thrsumtxt"></p><button id="thrclose">Close</button></div>
       </div>
-      <p id="thrmsg" class="bad" style="margin:8px 0"></p>
+      <p id="thrmsg" class="bad"></p>
     </div>
     <label>SimConnect</label>
-    <p id="simstat" class="meta" style="margin:0 0 8px"></p>
+    <p id="simstat" class="meta"></p>
     <div class="row"><button class="ghost" id="simdll" hidden>Download SimConnect.dll</button><button class="ghost" id="simretry">Retry</button></div>
     <p id="simmsg" class="meta"></p>
   </details>
   <button class="big" id="go">Briefing complete</button>
-  <p style="margin-top:12px"><button class="ghost" id="end" hidden style="width:100%">End flight (stop reading)</button></p>
+  <p id="endp"><button class="ghost" id="end" hidden>End flight (stop reading)</button></p>
 </section>
 
 <section id="flt" hidden>

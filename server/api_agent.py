@@ -1,9 +1,12 @@
-"""Uplink of the PC program: `WS /ws/agent` and `GET /api/agent/status` (step U1).
+"""Uplink of the PC program: `WS /ws/agent`, `GET /api/agent/status` (step U1) and the flight
+snapshot with `GET /api/flight/state` (step U2).
 
 The handshake is refused BEFORE accepting the socket (HTTP 4xx/5xx): any Origin header, too many
 attempts from one IP, too many programs, no `Authorization: Bearer` header (a token in the query
 string is ignored, so it counts as missing), an unknown or expired access token. Only then the
-socket is accepted. Nothing sensitive is logged (no tokens, addresses or user data)."""
+socket is accepted. Nothing sensitive is logged (no tokens, addresses or user data, never the content
+of a snapshot). The snapshot lives only in the RAM of the connection and goes only to the browser
+session of the same account (the hub key is the session's user id: no id travels in the URL)."""
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +16,7 @@ from collections import deque
 from typing import Optional
 
 from fastapi import APIRouter, Request, WebSocket
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from server import wire
@@ -21,6 +24,7 @@ from server.accounts import AccountError, Accounts
 from server.api_auth import _fail, client_ip_from, current_session
 from server.devicecode import DeviceCodes
 from server.hub import Hub
+from server.ratelimit import MemoryRateLimiter
 
 log = logging.getLogger("virtual_captain")
 
@@ -51,6 +55,12 @@ async def _deny(ws: WebSocket, status: int) -> None:
         pass
 
 
+# Snapshot limits (the program sends at most 1 per second): more is a misbehaving client.
+SNAP_MAX_PER_WINDOW, SNAP_WINDOW = 4, 2.0
+SNAP_MAX_BYTES, SNAP_BYTES_WINDOW = 1 << 20, 10.0
+SNAP_MAX_INVALID = 5          # consecutive invalid snapshots before the connection is closed (1008)
+FLIGHT_PER_USER_MINUTE, FLIGHT_PER_IP_MINUTE = 120, 600   # polling of /api/flight/state, RAM only
+
 SEND_TIMEOUT = 5.0  # a peer that does not read must not hold a handler (or the loop) hostage
 
 
@@ -61,9 +71,11 @@ async def _close(ws: WebSocket, code: int, timeout: float = SEND_TIMEOUT) -> Non
         pass
 
 
-def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub) -> APIRouter:
+def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
+                       memory_limiter: Optional[MemoryRateLimiter] = None) -> APIRouter:
     router = APIRouter()
     cfg = accounts.cfg
+    mem = memory_limiter or MemoryRateLimiter(hub.monotonic)
 
     async def recv(ws: WebSocket, timeout: float):
         """Next message dict, or None on timeout; _Gone when the program disconnected."""
@@ -121,6 +133,8 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub) -> AP
             started = mono()
             next_family = started + cfg.agent_family_recheck
             recent: deque = deque()
+            snaps: deque = deque()      # (time, bytes) of the last snapshots, for the rate limits
+            invalid = 0
             while True:
                 now = mono()
                 if now - started >= cfg.agent_max_lifetime:
@@ -161,6 +175,33 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub) -> AP
                 elif data["t"] == wire.T_BYE:
                     await _close(ws, 1000)
                     return
+                elif data["t"] == wire.T_SNAPSHOT:
+                    size = len(msg["text"].encode("utf-8", "replace"))
+                    snaps.append((now, size))
+                    while snaps and now - snaps[0][0] > SNAP_BYTES_WINDOW:
+                        snaps.popleft()
+                    if (sum(1 for t, _ in snaps if now - t <= SNAP_WINDOW) > SNAP_MAX_PER_WINDOW
+                            or sum(b for _, b in snaps) > SNAP_MAX_BYTES):
+                        await _close(ws, wire.CLOSE_TOO_BIG)
+                        return
+                    sv = data.get("sv")
+                    if isinstance(sv, bool) or sv not in wire.SUPPORTED_SNAPSHOT_VERSIONS:
+                        await _close(ws, wire.CLOSE_BAD_VERSION)
+                        return
+                    seq, view = data.get("seq"), None
+                    if isinstance(seq, int) and not isinstance(seq, bool) and seq >= 0:
+                        try:
+                            view = wire.sanitize_snapshot(data.get("d"))
+                        except Exception:  # noqa: BLE001  (SnapshotError, RecursionError...: never log the content)
+                            view = None
+                    if view is None:
+                        invalid += 1
+                        if invalid >= SNAP_MAX_INVALID:
+                            await _close(ws, 1008)
+                            return
+                    else:
+                        invalid = 0
+                        hub.store_snapshot(conn, seq, view)
                 # pong, repeated hello and unknown types: only keep-alive (forward compatible)
         finally:
             hub.unregister(user_id, conn)
@@ -202,5 +243,39 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub) -> AP
         except AccountError as e:
             return _fail(e.status, e.code)
         return JSONResponse({"connected": hub.status(sess["uid"])})
+
+    def client_key(request: Request) -> str:
+        return client_ip_from(request.client.host if request.client else "", request.headers)
+
+    @router.get("/api/flight/state", include_in_schema=False)
+    async def flight_state(request: Request):
+        """Live state for the signed-in account (session cookie only, never a token or an id in the URL)."""
+        try:
+            sess = current_session(accounts, request, False)
+        except AccountError as e:
+            return _fail(e.status, e.code)
+        if (not mem.allow("flight_user", str(sess["uid"]), FLIGHT_PER_USER_MINUTE, 60.0)
+                or not mem.allow("flight_ip", client_key(request), FLIGHT_PER_IP_MINUTE, 60.0)):
+            return JSONResponse({"error": "rate_limited"}, status_code=429, headers={"Retry-After": "5", "Vary": "Cookie"})
+        raw_seq = request.query_params.get("seq", "")
+        seq = int(raw_seq) if raw_seq.isascii() and raw_seq.isdigit() and len(raw_seq) <= 12 else None  # anything else: full snapshot
+        raw_epoch = request.query_params.get("epoch", "")
+        epoch = int(raw_epoch) if raw_epoch.isascii() and raw_epoch.isdigit() and len(raw_epoch) <= 12 else None  # missing/garbage: full snapshot
+        state = hub.flight_state(sess["uid"])
+        headers = {"Vary": "Cookie"}
+        if state is None:
+            return JSONResponse({"connected": False}, headers=headers)
+        same = seq is not None and seq == state["seq"] and epoch == state["epoch"]
+        age = "null" if state["age"] is None else "%.1f" % state["age"]
+        ago = "null" if state["spoke_ago"] is None else "%.1f" % state["spoke_ago"]
+        if state["text"] is None:
+            snap = "null"
+        elif same:
+            snap = "null"
+        else:
+            snap = state["text"]
+        unchanged = ',"unchanged":true' if state["text"] is not None and same else ""
+        body = '{"connected":true,"seq":%d,"epoch":%d,"age":%s,"spoke_ago":%s,"snapshot":%s%s}' % (state["seq"], state["epoch"], age, ago, snap, unchanged)
+        return Response(body, media_type="application/json", headers=headers)
 
     return router

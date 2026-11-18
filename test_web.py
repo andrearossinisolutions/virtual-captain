@@ -587,7 +587,7 @@ def test_inputs_markup():
     assert "atis_rwy:" not in p[p.index("const full="):p.index("[k]||(isA")]  # solo lettera e QNH avanzano da soli
     chips = p[p.index("function chips"):p.index("function cockpit")]
     assert 'add("DEP",f.origin);' in chips and 'add("ARR ATIS",f.atis_letter)' in chips and "JSON.stringify([f,rb])" in chips  # ARR come DEP, in cache (anche il rosso della pista)
-    assert 'f.destination?f.destination+(rw?"/"+rw:""):rw' in chips and 'replace(/\\//g,"-")' in chips and "innerHTML=`<b>${k}</b>`;d.append(v)" in chips  # EDDF/17R, EDDF/17R-17L, EDDF; v come testo
+    assert 'f.destination?f.destination+(rw?"/"+rw:""):rw' in chips and 'replace(/\\//g,"-")' in chips and "b.textContent=k;d.append(b,v)" in chips and "innerHTML" not in chips  # EDDF/17R, EDDF/17R-17L, EDDF; v come testo
     assert '"TA"' not in chips and '"V1"' not in chips and '"FLAP"' not in chips and '"RWY"' not in chips
 
 
@@ -942,7 +942,7 @@ def test_index_has_no_inline_code():
     html = (web.WEB_DIR / "index.html").read_text(encoding="utf-8")
     assert '<link rel="stylesheet" href="/app.css">' in html and '<script src="/app.js"></script>' in html
     assert "<style" not in html and "function " not in html and "=>" not in html
-    assert html.count("<script") == 1
+    assert "style=" not in html and html.count("<script") == 1  # nemmeno attributi style: il CSS sta tutto in app.css (CSP del sito: style-src 'self')
 
 
 def test_protocol_covers_routes():

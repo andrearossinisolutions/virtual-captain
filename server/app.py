@@ -1,7 +1,7 @@
 """Virtual Captain public server: skeleton, account API (2b-1) and account pages (2b-2).
 
-Placeholder page, health check, /api/auth/*, /api/device/*, /api/agent/status, WS /ws/agent and, with the API, the pages in public/.
-No docs. It does NOT serve web/ and does NOT import protocol.py yet. Nothing touches the DB until first use.
+Placeholder page, health check, /api/auth/*, /api/device/*, /api/agent/status, /api/flight/state, WS /ws/agent and, with the API, the pages in public/
+plus web/app.js and web/app.css (whitelist). No docs. It does NOT import protocol.py. Nothing touches the DB until first use.
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ SECURITY_HEADERS = {
 ACCOUNT_PAGES = {
     "/": "home.html", "/register": "register.html", "/login": "login.html",
     "/verify": "verify.html", "/forgot": "forgot.html", "/reset": "reset.html",
-    "/account": "account.html", "/waiting": "waiting.html", "/link": "link.html",
+    "/account": "account.html", "/waiting": "waiting.html", "/link": "link.html", "/flight": "flight.html",
 }
 ACCOUNT_SCRIPTS = {
     "/common.js": "common.js", "/register.js": "register.js", "/login.js": "login.js",
@@ -47,6 +47,9 @@ ACCOUNT_SCRIPTS = {
     "/account.js": "account.js", "/waiting.js": "waiting.js",
     "/link.js": "link.js",
 }
+# The flight page reuses the program's own web/app.js, web/app.css (and common.js from public/): whitelist, no traversal.
+WEB_DIR = BASE_DIR.parent / "web"
+WEB_FILES = {"/app.js": ("app.js", "text/javascript; charset=utf-8"), "/app.css": ("app.css", "text/css; charset=utf-8")}
 
 # Known limit: the middleware does not add these headers to unhandled 500 errors
 # (Starlette answers those outside the middleware stack); Apache/clients see a bare 500.
@@ -99,13 +102,13 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
         response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
             response.headers[name] = value
-        if request.url.path.startswith(("/api/auth/", "/api/device/", "/api/agent/")):
+        if request.url.path.startswith(("/api/auth/", "/api/device/", "/api/agent/", "/api/flight/")):
             response.headers["Cache-Control"] = "no-store"
         return response
 
-    def add_file(path: str, name: str, media_type: str) -> None:
+    def add_file(path: str, name: str, media_type: str, directory: Path = PUBLIC_DIR) -> None:
         async def serve() -> FileResponse:
-            return FileResponse(PUBLIC_DIR / name, media_type=media_type)
+            return FileResponse(directory / name, media_type=media_type)
         app.add_api_route(path, serve, methods=["GET", "HEAD"], include_in_schema=False)
 
     # "/" is the placeholder unless the API is mounted: then the home page links to the account pages
@@ -116,6 +119,8 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
                 add_file(path, name, "text/html; charset=utf-8")
         for path, name in ACCOUNT_SCRIPTS.items():
             add_file(path, name, "text/javascript; charset=utf-8")
+        for path, (name, media_type) in WEB_FILES.items():
+            add_file(path, name, media_type, WEB_DIR)
 
     @app.api_route("/style.css", methods=["GET", "HEAD"], include_in_schema=False)
     async def style() -> FileResponse:
