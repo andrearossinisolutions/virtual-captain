@@ -887,6 +887,74 @@ def test_thrust_cal_markup_and_main():
     assert "calib_active" in inspect.getsource(main.main) and "set_calib_raw" in inspect.getsource(main.main)
 
 
+def test_page_assembled_from_files():
+    d = web.WEB_DIR
+    css = (d / "app.css").read_text(encoding="utf-8")
+    js = (d / "app.js").read_text(encoding="utf-8")
+    assert web.PAGE == web.build_page()
+    assert "<style>\n" + css + "</style>" in web.PAGE and "<script>\n" + js + "</script>" in web.PAGE
+    assert "// ATIS-PURE-BEGIN" in js and "// ATIS-PURE-END" in js
+
+
+def test_static_assets_served():
+    import http.client
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "cfg.json")
+    srv = web.serve(st, "127.0.0.1", 0)
+    port = srv.server_address[1]
+    hdrs = {}
+
+    def get(path):
+        c = http.client.HTTPConnection("127.0.0.1", port)
+        c.request("GET", path)
+        r = c.getresponse()
+        out = (r.status, r.getheader("Content-Type"), r.read())
+        hdrs[path] = r.getheader("X-Content-Type-Options")
+        c.close()
+        return out
+    try:
+        code, ct, body = get("/app.css")
+        assert code == 200 and ct.startswith("text/css") and body == (web.WEB_DIR / "app.css").read_bytes()
+        code, ct, body = get("/app.js")
+        assert code == 200 and ct.startswith("text/javascript") and body == (web.WEB_DIR / "app.js").read_bytes()
+        assert get("/")[2] == web.PAGE.encode()
+        assert hdrs["/app.css"] == "nosniff" and hdrs["/app.js"] == "nosniff" and hdrs["/"] is None
+        for bad in ("/state.py", "/main.py", "/web.py", "/../state.py", "/web/../state.py", "/web/app.css",
+                    "/%2e%2e/state.py", "/app.css/../state.py", "/app.js?x=1"):
+            assert get(bad)[0] == 404, bad
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_build_page_missing_file_message():
+    orig = web.WEB_DIR
+    web.WEB_DIR = pathlib.Path(tempfile.mkdtemp())
+    try:
+        web.build_page()
+        assert False, "doveva fallire"
+    except RuntimeError as e:
+        assert "cartella web/ incompleta: manca index.html" in str(e) and "git pull" in str(e)
+    finally:
+        web.WEB_DIR = orig
+
+
+def test_index_has_no_inline_code():
+    html = (web.WEB_DIR / "index.html").read_text(encoding="utf-8")
+    assert '<link rel="stylesheet" href="/app.css">' in html and '<script src="/app.js"></script>' in html
+    assert "<style" not in html and "function " not in html and "=>" not in html
+    assert html.count("<script") == 1
+
+
+def test_protocol_covers_routes():
+    import re
+    import protocol
+    src = pathlib.Path(web.__file__).read_text(encoding="utf-8")
+    posts = set(re.findall(r'self\.path == "/api/([a-z-]+)"', src)) - {"state"}
+    assert protocol.PROTOCOL_VERSION == 1
+    assert posts == set(protocol.REMOTE_COMMANDS) | set(protocol.LOCAL_ONLY)
+    assert not set(protocol.REMOTE_COMMANDS) & set(protocol.LOCAL_ONLY)
+
+
 if __name__ == "__main__":
     test_thrust_cal_flow()
     test_thrust_cal_failure_and_invalid_file()
@@ -928,4 +996,9 @@ if __name__ == "__main__":
     test_firewall_noop_off_windows()
     test_plan_extraction()
     test_old_mode_values_migrate()
+    test_page_assembled_from_files()
+    test_static_assets_served()
+    test_build_page_missing_file_message()
+    test_index_has_no_inline_code()
+    test_protocol_covers_routes()
     print("ok")

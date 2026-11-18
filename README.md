@@ -39,3 +39,7 @@ Regole e soglie vengono da PPRuNe, guide FlyByWire e flashcards, non dal FCOM Fe
 - **Voci**: dopo l'avviamento (a terra, METAR di partenza) ATTIVA: con icing eng1_ai e eng2_ai devono essere ON, altrimenti rosso. After takeoff e climb solo promemoria (mai colorate). Descent preparation ATTIVA: SAT < -40 C richiede ON (indipendente dal METAR); con SAT >= -40 richiede ON se il METAR di destinazione da' icing conditions con TAT <= 10 C. Parking invariato (OFF), wing anti-ice in approach rimandato.
 - **Check** `{"ai": "ground|takeoff|climb|descent"}` in `checklist_links.json` (solo da solo, mai dentro `all`).
 - Test: `python3 test_icing.py`, `test_weather.py`, `test_monitor.py`, `test_checklist.py`, `test_checklist_eval.py`.
+
+## Pagina web
+
+La pagina vive in `web/` (`index.html`, `app.css`, `app.js`). `web.py` la assembla in una sola pagina con CSS e JS inline (`build_page()`, servita su `/`) e serve `/app.css` e `/app.js` da una whitelist. `protocol.py` elenca i comandi remoti e quelli solo locali.

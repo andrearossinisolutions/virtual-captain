@@ -1,1 +1,2 @@
 *.bat text eol=crlf
+web/* text eol=lf
