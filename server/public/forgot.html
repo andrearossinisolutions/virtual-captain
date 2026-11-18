@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Forgot password - Virtual Captain</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+<p class="brand">Virtual Captain</p>
+<div class="card">
+<h1>Forgot password</h1>
+<p>Enter your email address. If an account exists, we will send a reset link.</p>
+<form id="form" method="post" novalidate>
+<label for="email">Email</label>
+<input id="email" name="email" type="email" autocomplete="email" maxlength="254" required>
+<button type="submit">Send reset link</button>
+<p class="msg" id="msg" role="status" aria-live="polite"></p>
+</form>
+<p class="links"><a href="/login">Back to sign in</a></p>
+</div>
+<noscript><p class="msg error">This page needs JavaScript.</p></noscript>
+</main>
+<script src="/common.js"></script>
+<script src="/forgot.js"></script>
+</body>
+</html>

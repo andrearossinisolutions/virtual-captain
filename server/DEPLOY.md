@@ -177,14 +177,14 @@ Poi apri la mail ricevuta (Gmail: tre puntini > "Mostra originale") e controlla 
 
 Se il server rifiuta il mittente (errore di tipo `sender`), prova a impostare `MAIL_ENVELOPE_FROM=<casella principale>`: la mail parte con quell'indirizzo come mittente di busta, il `From` resta l'alias e viene aggiunto `Reply-To` con l'alias. Si puo' provare anche da riga di comando: `... -m server.mailtest <destinatario> --envelope-from <casella principale>`. Ultima spiaggia: `MAIL_FROM` = casella principale.
 
-## Account (passo 2b-1: API, senza pagine)
+## Account (passo 2b-1: API; 2b-2: pagine web)
 
 Nuove variabili in `/etc/virtual-captain/env` (NOME=valore, una per riga; i valori non vanno in repo ne' in chat):
 
-- `SECRET_KEY` (**obbligatoria se imposti `PUBLIC_BASE_URL`**, min 32 caratteri): sale degli hash di IP e indirizzi nei limiti di frequenza. Generala a mano sul VPS: `python3 -c "import secrets; print(secrets.token_urlsafe(48))"` e incolla il risultato con `sudo nano /etc/virtual-captain/env`. Se la cambi, i contatori dei limiti si azzerano. **Impostala PRIMA di `PUBLIC_BASE_URL`**: con `PUBLIC_BASE_URL` e senza `SECRET_KEY` il servizio rifiuta di partire (messaggio chiaro nel journal).
+- `SECRET_KEY` (**obbligatoria se imposti `PUBLIC_BASE_URL`**, min 32 caratteri): sale degli hash di IP e indirizzi nei limiti di frequenza. Generala a mano sul VPS: `python3 -c "import secrets; print(secrets.token_urlsafe(48))"` e incolla il risultato con `sudo nano /etc/virtual-captain/env`. **Se il servizio non parte dopo aver toccato `/etc/virtual-captain/env`, guarda `journalctl -u virtual-captain -e`** (il messaggio nomina la variabile sbagliata, mai il valore). Se la cambi, i contatori dei limiti si azzerano. **Impostala PRIMA di `PUBLIC_BASE_URL`**: con `PUBLIC_BASE_URL` e senza `SECRET_KEY` il servizio rifiuta di partire (messaggio chiaro nel journal).
 - `PUBLIC_BASE_URL`: origine pubblica https senza slash finale e senza percorso (`http` ammesso solo per localhost/127.0.0.1/::1). Serve per i link nelle mail e per il controllo `Origin`. Se manca, l'API `/api/auth/*` **non viene montata** e nel journal compare un warning ("NOT mounted").
 - `DB_PATH` (facoltativa): file SQLite. Default `/var/www/virtual-captain/shared/virtual-captain.db`. Viene creato col primo uso, permessi 600 (anche `-wal`/`-shm`); la cartella `shared` deve essere scrivibile dall'utente del servizio.
-- Limiti (facoltative, default tra parentesi): `RATE_IP_HOURLY` (5), `RATE_IP_DAILY` (20), `RATE_MAIL_ADDR_HOURLY` (3), `RATE_MAIL_DAILY` (200, **per tipo di mail**: verifica, reset, altre), `LOGIN_MAX_FAILURES` (5), `LOCKOUT_MINUTES` (15), `RATE_LOGIN_IP_15MIN` (30). I limiti per IP valgono separatamente per registrazione/forgot, reset e verifica; gli IPv6 sono raggruppati per /64.
+- Limiti (facoltative, default tra parentesi): `RATE_IP_HOURLY` (5), `RATE_IP_DAILY` (20), `RATE_MAIL_ADDR_HOURLY` (3), `RATE_MAIL_DAILY` (200, **per tipo di mail**: verifica, reset, altre), `LOGIN_MAX_FAILURES` (5), `LOCKOUT_MINUTES` (15), `RATE_LOGIN_IP_15MIN` (30), `RATE_PREVIEW_IP_HOURLY` (20, bucket dedicato all'anteprima del link in `/verify`; la verifica vera resta a 5/ora con `RATE_IP_HOURLY`). I limiti per IP valgono separatamente per registrazione/forgot, reset, verifica e anteprima (quattro bucket distinti); gli IPv6 sono raggruppati per /64.
 
 ### X-Forwarded-For
 
@@ -200,10 +200,40 @@ L'app legge il corpo a blocchi con tetto di 8 KB (413 oltre; Content-Length non 
 
 ### Compromessi noti (decisioni consapevoli)
 
-- **Pre-hijack**: chi registra per primo l'indirizzo di un'altra persona fissa la password dell'account non verificato. Se la vittima poi si registra, l'ultima registrazione vince (la password viene sostituita e parte un nuovo link), ma prima di allora vale quella dell'attaccante. Mitigazione prevista per 2b-2: impostare la password al momento della verifica, non della registrazione.
+- **Pre-hijack chiuso** (decisione 2b-2): la registrazione non riceve password; l'account nasce senza password utilizzabile e la password si sceglie solo nella pagina `/verify`, dopo il click sul link arrivato nella casella. Chi registra l'indirizzo di un altro non ottiene mai una password valida. Residuo minimo, solo sul SimBrief: su un account non verificato l'ultima registrazione vince anche sul valore SimBrief (se non vuoto), quindi chi registra l'indirizzo di un altro puo' fissarlo; la vittima lo vede e lo modifica da `/account`. La password non cambia mai.
 - **Lockout dell'account**: dopo N tentativi falliti l'indirizzo e' bloccato per 15 minuti anche per il proprietario (chi conosce un indirizzo puo' quindi bloccarlo a ripetizione); il controllo del blocco e la registrazione del fallimento non sono un'unica operazione atomica, quindi tentativi paralleli possono superare di poco la soglia. Reset password e lockout: il reset azzera i fallimenti.
 - **Quota mail per indirizzo** (3/ora): un attaccante puo' esaurirla per ritardare una mail legittima verso quell'indirizzo fino a un'ora. Quando una mail viene soppressa dai limiti, il link gia' emesso resta valido (non viene sostituito).
 - Cambio password e cambio email confermato invalidano i token di reset gia' emessi.
 - Pulizia automatica (sessioni scadute, token usati/scaduti, eventi vecchi) al primo uso e al massimo ogni 10 minuti; massimo 10 sessioni per utente (le piu' vecchie vengono revocate).
 
 I backup del DB non ci sono ancora (previsto `sqlite3 .backup` con timer piu' avanti).
+
+## Pagine web (passo 2b-2)
+
+Le pagine vivono in `server/public/` (inglese, nessuno script o stile inline, CSP invariata) e sono servite da `app.py` con una whitelist di route, **solo se `PUBLIC_BASE_URL` e' impostata** (cioe' con l'API montata). Senza, `/` resta il segnaposto "coming soon" e tutte le altre pagine rispondono 404: il sito non si rompe. `web/` (il pannello del programma) **non** e' servito.
+
+| Percorso | Cosa fa |
+|---|---|
+| `/` | Home con i link a Sign in / Create account (solo con l'API montata) |
+| `/register` | Email + "SimBrief Pilot ID or username" (facoltativo); risposta sempre uguale |
+| `/verify#<token>` | Anteprima del link (non lo consuma), poi scelta della password con conferma; a fine verifica si apre la sessione e si va a `/waiting`. Per il cambio email: un solo bottone di conferma, poi si rifa' il login |
+| `/login`, `/forgot`, `/reset#<token>` | Accesso, richiesta e impostazione della nuova password |
+| `/account` | Email e SimBrief (modifica), cambio password, cambio email (conferma dalla nuova casella), cancellazione (password + testo DELETE), logout |
+| `/waiting` | "Program not connected", bottone "Start flight" disattivato, nessun dato di volo |
+
+Le pagine protette (`/account`, `/waiting`) leggono `/api/auth/me` e mandano a `/login` senza sessione; `/login` e `/register` mandano a `/waiting` se si e' gia' dentro. Il token dei link sta nel frammento: il JS lo legge, lo toglie subito dall'URL (`history.replaceState`) e lo manda solo nel corpo JSON di una POST. I form sono `method="post"` senza `action`, cosi' se lo script non carica nessun dato finisce nell'URL.
+
+### Flusso di registrazione (cambia rispetto a 2b-1)
+
+1. `POST /api/auth/register` con solo `email` (+ `simbrief_id` facoltativo): crea l'account non verificato **senza password** e manda `/verify#<token>`. Risposta identica per indirizzo nuovo ed esistente; su un indirizzo non verificato rinvia il link e aggiorna il SimBrief se indicato (la password non si tocca); su uno verificato manda la mail "sign-up attempt" senza link.
+2. `POST /api/auth/verify/preview` `{token}`: dice se il link e' valido e di che tipo, non consuma (bucket per IP proprio, 20/ora).
+3. `POST /api/auth/verify` `{token, password}` (min 10, max 128): imposta la password, verifica l'account, consuma il token e apre la sessione (cookie + `csrf_token`). Password non valida: 400 e il token **non** si consuma. Bucket per IP stretto (5/ora). Per il cambio email non serve password e non si apre la sessione.
+4. Il login richiede account verificato e password impostata.
+
+Sul vhost SSL ricorda `LimitRequestBody 16384` (vedi sopra).
+
+### Come provarle
+
+Dopo il deploy imposta `SECRET_KEY` e poi `PUBLIC_BASE_URL` in `/etc/virtual-captain/env` (prima i limiti SMTP gia' presenti), riavvia il servizio e apri `https://<tuo dominio>/`: devono comparire i link. Crea un account, apri il link ricevuto per mail, scegli la password, arrivi su `/waiting`.
+
+Le risposte di `/api/auth/*` hanno `Cache-Control: no-store`.

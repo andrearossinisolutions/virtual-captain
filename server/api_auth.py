@@ -109,7 +109,7 @@ def build_router(accounts: Accounts) -> APIRouter:
     async def register(request, background):
         check_origin(request)
         data = await _body(request)
-        queue(background, await accounts.register(data.get("email"), data.get("password"),
+        queue(background, await accounts.register(data.get("email"), data.get("simbrief_id"),
                                                   client_ip(request)))
         return JSONResponse(OK)
 
@@ -123,7 +123,13 @@ def build_router(accounts: Accounts) -> APIRouter:
     async def verify(request, background):
         check_origin(request)
         data = await _body(request)
-        return JSONResponse({"ok": True, **accounts.verify(data.get("token"), client_ip(request))})
+        kind, session = await accounts.verify(data.get("token"), data.get("password"),
+                                              client_ip(request))
+        if session is None:  # email change: every session was closed, log in again
+            return JSONResponse({"ok": True, "kind": kind})
+        resp = JSONResponse({"ok": True, "kind": kind, "csrf_token": session[1]})
+        set_cookie(resp, session[0])
+        return resp
 
     @post("/login")
     async def login(request, background):

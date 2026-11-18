@@ -23,7 +23,17 @@ SESSION_ABSOLUTE = 30 * DAY
 SESSION_IDLE = 7 * DAY
 MAX_SESSIONS = 10
 CLEANUP_EVERY = 600.0
-SIMBRIEF_RE = re.compile(r"^[0-9]{1,12}$")
+SIMBRIEF_RE = re.compile(r"[A-Za-z0-9 ._-]{1,40}", re.ASCII)  # Pilot ID or username
+
+
+def normalize_simbrief(value) -> Optional[str]:
+    """Stripped SimBrief Pilot ID or username, "" if empty, None if not acceptable."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if value and not SIMBRIEF_RE.fullmatch(value):
+        return None
+    return value
 
 Mail = tuple  # (to, subject, body)
 
@@ -110,18 +120,19 @@ class Accounts:
             raise AccountError(*BAD_TOKEN)
 
     # ---- registration / verification ----
-    async def register(self, email, password, ip: str) -> Optional[Mail]:
-        """Always the same answer. Last registration wins for an UNVERIFIED address (the
-        password is replaced and a new link is sent). Known residual risk (pre-hijack): someone
-        can register a victim's address first; the victim's own sign-up then replaces the
-        password, but until then the attacker's password is the stored one and the victim
-        cannot tell. Planned mitigation for 2b-2: set the password at verification time."""
+    async def register(self, email, simbrief, ip: str) -> Optional[Mail]:
+        """Always the same answer. No password here: it is chosen on the verification page, so
+        nobody can pre-register someone else's address with a password of their own (pre-hijack).
+        New address: an unverified account with NO usable password and the verify link. Unverified
+        address: the link is sent again and a non-empty SimBrief value replaces the stored one (last
+        registration wins); the password is never touched. Verified address: the 'someone
+        tried to register' mail, without a link."""
         self.maybe_cleanup()
-        em, pw = normalize_email(email), normalize_password(password)
-        if em is None or pw is None:
+        em = normalize_email(email)
+        sb = normalize_simbrief("" if simbrief is None else simbrief)
+        if em is None or sb is None:
             raise AccountError(*BAD_REQUEST)
         self._ip_gate(ip)
-        pw_hash = await hash_password(pw)  # computed once, same cost on every path
         with self.db.tx() as c:
             existing = c.execute("SELECT verified FROM users WHERE email=?", (em,)).fetchone()
         allowed = self._mail_allowed(em, "other" if existing and existing["verified"] else "verify")
@@ -129,15 +140,16 @@ class Accounts:
         with self.db.tx() as c:
             user = c.execute("SELECT id, verified FROM users WHERE email=?", (em,)).fetchone()
             if user is None:
-                try:
-                    cur = c.execute("INSERT INTO users(email,pw_hash,verified,created_at) "
-                                    "VALUES (?,?,0,?)", (em, pw_hash, self.clock()))
+                try:  # pw_hash '' is never a valid argon2 hash: the account cannot log in
+                    cur = c.execute("INSERT INTO users(email,pw_hash,verified,simbrief_id,created_at) "
+                                    "VALUES (?,'',0,?,?)", (em, sb, self.clock()))
                     uid = cur.lastrowid
                 except sqlite3.IntegrityError:
                     uid = None
             elif not user["verified"]:
                 uid = user["id"]
-                c.execute("UPDATE users SET pw_hash=? WHERE id=?", (pw_hash, uid))
+                if sb:  # the last registration wins for the SimBrief value (password untouched)
+                    c.execute("UPDATE users SET simbrief_id=? WHERE id=?", (sb, uid))
             else:
                 uid = None
             if uid is not None and allowed:  # a suppressed mail keeps the previous link valid
@@ -151,21 +163,40 @@ class Accounts:
         return None
 
     def verify_preview(self, token, ip: str) -> dict:
-        """Does NOT consume the token."""
-        self._ip_gate(ip, "verify_ip")
+        """Does NOT consume the token. Own, wider bucket (the page calls it on every load)."""
+        if not self.limiter.allow("preview_ip", ip, [(self.cfg.preview_ip_hourly, 3600)]):
+            raise AccountError(*LOCKED)
         with self.db.tx() as c:
             row = self._find_token(c, token, ("verify", "email_change"))
         return {"valid": row is not None, "kind": row["kind"] if row else None}
 
-    def verify(self, token, ip: str) -> dict:
+    async def verify(self, token, password, ip: str):
+        """Consumes the token. 'verify': the password chosen here is stored, the account becomes
+        verified and a session is opened (returns session token and csrf). 'email_change': no
+        password, the new address is activated and every session is closed."""
         self._ip_gate(ip, "verify_ip")
+        with self.db.tx() as c:
+            row = self._find_token(c, token, ("verify", "email_change"))
+        if row is None:
+            raise AccountError(*BAD_TOKEN)  # unknown/expired/used: no hash computed
+        pw_hash = None
+        if row["kind"] == "verify":
+            pw = normalize_password(password)
+            if pw is None:
+                raise AccountError(*BAD_REQUEST)  # token not consumed: the user can retry
+            pw_hash = await hash_password(pw)  # one hash on this path
+        session = None
         with self.db.tx() as c:
             row = self._find_token(c, token, ("verify", "email_change"))
             if row is None:
                 raise AccountError(*BAD_TOKEN)
             self._consume(c, row)
             if row["kind"] == "verify":
-                c.execute("UPDATE users SET verified=1 WHERE id=?", (row["user_id"],))
+                cur = c.execute("UPDATE users SET pw_hash=?, verified=1 WHERE id=? AND verified=0",
+                                (pw_hash, row["user_id"]))
+                if cur.rowcount != 1:
+                    raise AccountError(*BAD_TOKEN)
+                c.execute("DELETE FROM email_tokens WHERE user_id=?", (row["user_id"],))
             else:
                 if c.execute("SELECT 1 FROM users WHERE email=?", (row["new_email"],)).fetchone():
                     raise AccountError(*BAD_TOKEN)
@@ -174,7 +205,9 @@ class Accounts:
                 c.execute("DELETE FROM sessions WHERE user_id=?", (row["user_id"],))
                 c.execute("DELETE FROM email_tokens WHERE user_id=? AND kind='reset'",
                           (row["user_id"],))
-        return {"kind": row["kind"]}
+        if row["kind"] == "verify":
+            session = self._new_session(row["user_id"])
+        return row["kind"], session
 
     # ---- login / sessions ----
     async def login(self, email, password, ip: str):
@@ -194,7 +227,7 @@ class Accounts:
         ok = False
         if pw is not None:
             ok = (await verify_password(user["pw_hash"], pw)) if user else await verify_dummy(pw)
-        if not (ok and user and user["verified"]):
+        if not (ok and user and user["verified"] and user["pw_hash"]):
             self.limiter.record_failure(key)
             raise AccountError(*BAD_CREDENTIALS)
         self.limiter.clear_failures(key)
@@ -271,10 +304,8 @@ class Accounts:
         return (em,) + tpl.email_change_mail(self.cfg.public_base_url, token)
 
     def set_simbrief_id(self, sess: dict, value) -> str:
-        if not isinstance(value, str):
-            raise AccountError(*BAD_REQUEST)
-        value = value.strip()
-        if value and not SIMBRIEF_RE.match(value):
+        value = normalize_simbrief(value)
+        if value is None:
             raise AccountError(*BAD_REQUEST)
         with self.db.tx() as c:
             c.execute("UPDATE users SET simbrief_id=? WHERE id=?", (value, sess["uid"]))

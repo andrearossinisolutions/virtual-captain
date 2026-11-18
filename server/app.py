@@ -1,7 +1,7 @@
-"""Virtual Captain public server: skeleton plus the account API (step 2b-1).
+"""Virtual Captain public server: skeleton, account API (2b-1) and account pages (2b-2).
 
-Placeholder page, health check and /api/auth/*. No docs. It does NOT serve web/
-and does NOT import protocol.py yet. Nothing touches the DB until first use.
+Placeholder page, health check, /api/auth/* and, with the API, the pages in public/.
+No docs. It does NOT serve web/ and does NOT import protocol.py yet. Nothing touches the DB until first use.
 """
 from __future__ import annotations
 
@@ -35,6 +35,18 @@ SECURITY_HEADERS = {
     "Cache-Control": "no-cache",
 }
 
+# Pages and scripts of the account area: whitelist, served only when the API is mounted.
+ACCOUNT_PAGES = {
+    "/": "home.html", "/register": "register.html", "/login": "login.html",
+    "/verify": "verify.html", "/forgot": "forgot.html", "/reset": "reset.html",
+    "/account": "account.html", "/waiting": "waiting.html",
+}
+ACCOUNT_SCRIPTS = {
+    "/common.js": "common.js", "/register.js": "register.js", "/login.js": "login.js",
+    "/verify.js": "verify.js", "/forgot.js": "forgot.js", "/reset.js": "reset.js",
+    "/account.js": "account.js", "/waiting.js": "waiting.js",
+}
+
 # Known limit: the middleware does not add these headers to unhandled 500 errors
 # (Starlette answers those outside the middleware stack); Apache/clients see a bare 500.
 ROBOTS_TXT = "User-agent: *\nDisallow: /\n"
@@ -61,7 +73,8 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     config = config if config is not None else load_app_config()
     check_secret(config.public_base_url, config.secret_key)
-    if not config.public_base_url:
+    mounted = bool(config.public_base_url)
+    if not mounted:
         log.warning("PUBLIC_BASE_URL is not set: the account API /api/auth/* is NOT mounted")
     else:  # without it the account API stays off (no safe link/Origin)
         from server.accounts import Accounts
@@ -75,11 +88,23 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
         response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
             response.headers[name] = value
+        if request.url.path.startswith("/api/auth/"):
+            response.headers["Cache-Control"] = "no-store"
         return response
 
-    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
-    async def index() -> FileResponse:
-        return FileResponse(PUBLIC_DIR / "index.html", media_type="text/html; charset=utf-8")
+    def add_file(path: str, name: str, media_type: str) -> None:
+        async def serve() -> FileResponse:
+            return FileResponse(PUBLIC_DIR / name, media_type=media_type)
+        app.add_api_route(path, serve, methods=["GET", "HEAD"], include_in_schema=False)
+
+    # "/" is the placeholder unless the API is mounted: then the home page links to the account pages
+    add_file("/", "home.html" if mounted else "index.html", "text/html; charset=utf-8")
+    if mounted:
+        for path, name in ACCOUNT_PAGES.items():
+            if path != "/":
+                add_file(path, name, "text/html; charset=utf-8")
+        for path, name in ACCOUNT_SCRIPTS.items():
+            add_file(path, name, "text/javascript; charset=utf-8")
 
     @app.api_route("/style.css", methods=["GET", "HEAD"], include_in_schema=False)
     async def style() -> FileResponse:

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Waiting - Virtual Captain</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+<p class="brand">Virtual Captain</p>
+<div class="card">
+<h1>Program not connected</h1>
+<div class="status"><span class="dot"></span><span>Waiting for the Virtual Captain program</span></div>
+<p>Flight data appears here once the Virtual Captain program is running on your PC and signed in to your account. No flight data is shown while it is not connected.</p>
+<button type="button" id="start" disabled>Start flight</button>
+<p class="hint">Signed in as <span class="value" id="who"></span></p>
+</div>
+<p class="links"><a href="/account">Account settings</a><button type="button" id="logout" class="secondary">Sign out</button></p>
+<noscript><p class="msg error">This page needs JavaScript.</p></noscript>
+</main>
+<script src="/common.js"></script>
+<script src="/waiting.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Confirm - Virtual Captain</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+<p class="brand">Virtual Captain</p>
+<div class="card">
+<h1>Confirm your email</h1>
+<p id="checking">Checking your link...</p>
+<form id="pwform" method="post" novalidate hidden>
+<p>Choose a password to finish creating your account.</p>
+<label for="password">Password</label>
+<input id="password" name="password" type="password" autocomplete="new-password" maxlength="128" required>
+<p class="hint">At least 10 characters.</p>
+<label for="confirm">Repeat the password</label>
+<input id="confirm" name="confirm" type="password" autocomplete="new-password" maxlength="128" required>
+
+<button type="submit">Create my account</button>
+</form>
+<form id="emailform" method="post" novalidate hidden>
+<p>Confirm this address for your account.</p>
+<button type="submit">Confirm address</button>
+</form>
+<p class="msg" id="msg" role="status" aria-live="polite"></p>
+<p class="links" id="again" hidden><a href="/register">Create account</a><a href="/login">Sign in</a></p>
+</div>
+<noscript><p class="msg error">This page needs JavaScript.</p></noscript>
+</main>
+<script src="/common.js"></script>
+<script src="/verify.js"></script>
+</body>
+</html>

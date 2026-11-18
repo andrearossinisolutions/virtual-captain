@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Create account - Virtual Captain</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+<p class="brand">Virtual Captain</p>
+<div class="card">
+<h1>Create account</h1>
+<p>We will email you a link to confirm your address and choose your password.</p>
+<form id="form" method="post" novalidate>
+<label for="email">Email</label>
+<input id="email" name="email" type="email" autocomplete="email" maxlength="254" required>
+<label for="simbrief">SimBrief Pilot ID or username</label>
+<input id="simbrief" name="simbrief" type="text" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false">
+<p class="hint">Optional. Used by the program to load your flight plan.</p>
+<button type="submit">Create account</button>
+<p class="msg" id="msg" role="status" aria-live="polite"></p>
+</form>
+<p class="links"><a href="/login">Sign in</a></p>
+</div>
+<noscript><p class="msg error">This page needs JavaScript.</p></noscript>
+</main>
+<script src="/common.js"></script>
+<script src="/register.js"></script>
+</body>
+</html>

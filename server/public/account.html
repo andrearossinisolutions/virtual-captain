@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Account - Virtual Captain</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+<p class="brand">Virtual Captain</p>
+<div class="card">
+<h1>Account</h1>
+<p>Signed in as <span class="value" id="who"></span></p>
+<form id="settings" method="post" novalidate>
+<h2>SimBrief</h2>
+<label for="simbrief">SimBrief Pilot ID or username</label>
+<input id="simbrief" name="simbrief" type="text" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false">
+<p class="hint">Optional. Used by the program to load your flight plan.</p>
+<button type="submit">Save</button>
+<p class="msg" id="msg-settings" role="status" aria-live="polite"></p>
+</form>
+</div>
+<div class="card">
+<form id="password" method="post" novalidate>
+<h2>Change password</h2>
+<label for="current_password">Current password</label>
+<input id="current_password" name="current_password" type="password" autocomplete="current-password" maxlength="128" required>
+
+<label for="new_password">New password</label>
+<input id="new_password" name="new_password" type="password" autocomplete="new-password" maxlength="128" required>
+<p class="hint">At least 10 characters.</p>
+<button type="submit">Change password</button>
+<p class="msg" id="msg-password" role="status" aria-live="polite"></p>
+</form>
+</div>
+<div class="card">
+<form id="email" method="post" novalidate>
+<h2>Change email</h2>
+<label for="new_email">New email</label>
+<input id="new_email" name="new_email" type="email" autocomplete="email" maxlength="254" required>
+<label for="email_password">Password</label>
+<input id="email_password" name="email_password" type="password" autocomplete="current-password" maxlength="128" required>
+
+<p class="hint">We will send a confirmation link to the new address.</p>
+<button type="submit">Change email</button>
+<p class="msg" id="msg-email" role="status" aria-live="polite"></p>
+</form>
+</div>
+<div class="card">
+<form id="delete" method="post" novalidate>
+<h2>Delete account</h2>
+<p>This permanently deletes your account and cannot be undone.</p>
+<label for="delete_password">Password</label>
+<input id="delete_password" name="delete_password" type="password" autocomplete="current-password" maxlength="128" required>
+
+<label for="confirm_text">Type DELETE to confirm</label>
+<input id="confirm_text" name="confirm_text" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+<button type="submit" class="danger">Delete account</button>
+<p class="msg" id="msg-delete" role="status" aria-live="polite"></p>
+</form>
+</div>
+<p class="links"><a href="/waiting">Back</a><button type="button" id="logout" class="secondary">Sign out</button></p>
+<noscript><p class="msg error">This page needs JavaScript.</p></noscript>
+</main>
+<script src="/common.js"></script>
+<script src="/account.js"></script>
+</body>
+</html>

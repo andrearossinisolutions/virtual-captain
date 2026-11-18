@@ -95,6 +95,7 @@ class AppConfig:
     login_max_failures: int = 5
     lockout_seconds: int = 900
     login_ip_per_15min: int = 30
+    preview_ip_hourly: int = 20
 
 
 def _int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -148,4 +149,5 @@ def load_app_config(env: Mapping[str, str] = os.environ) -> AppConfig:
         login_max_failures=_int(env, "LOGIN_MAX_FAILURES", 5),
         lockout_seconds=_int(env, "LOCKOUT_MINUTES", 15) * 60,
         login_ip_per_15min=_int(env, "RATE_LOGIN_IP_15MIN", 30),
+        preview_ip_hourly=_int(env, "RATE_PREVIEW_IP_HOURLY", 20),
     )

@@ -54,6 +54,7 @@ class Mailer:
 
 def cfg(tmp_path, **kw):
     kw.setdefault("ip_hourly", 1000)
+    kw.setdefault("preview_ip_hourly", 1000)
     kw.setdefault("ip_daily", 1000)
     return AppConfig(public_base_url=BASE, db_path=str(tmp_path / "t.db"),
                      secret_key="k" * 40, **kw)
@@ -72,13 +73,19 @@ def make_client(tmp_path, clock, mailer, peer=("203.0.113.9", 4000), **kw):
     return TestClient(app, base_url="https://testserver", client=peer)
 
 
-def register(client, email="a@example.test", password=PW):
-    return client.post("/api/auth/register", json={"email": email, "password": password})
+def register(client, email="a@example.test", simbrief_id=None):
+    body = {"email": email}
+    if simbrief_id is not None:
+        body["simbrief_id"] = simbrief_id
+    return client.post("/api/auth/register", json=body)
 
 
 def verified(client, mailer, email="a@example.test", password=PW):
-    register(client, email, password)
-    assert client.post("/api/auth/verify", json={"token": mailer.token()}).status_code == 200
+    """Register and verify choosing the password (this also opens a session, dropped here)."""
+    register(client, email)
+    r = client.post("/api/auth/verify", json={"token": mailer.token(), "password": password})
+    assert r.status_code == 200
+    client.cookies.clear()
 
 
 def login(client, email="a@example.test", password=PW):
@@ -162,11 +169,16 @@ def test_db_file_mode_wal_and_migrations(env):
 
 # ---------- registration ----------
 
+def vpost(client, token, password=PW):
+    return client.post("/api/auth/verify", json={"token": token, "password": password})
+
+
 def test_register_identical_response_new_and_existing(env):
     client, mailer, _, _ = env
     r1 = register(client)
     r2 = register(client)  # exists, unverified
-    client.post("/api/auth/verify", json={"token": mailer.token()})
+    assert vpost(client, mailer.token()).status_code == 200
+    client.cookies.clear()
     r3 = register(client)  # exists, verified
     assert r1.status_code == r2.status_code == r3.status_code == 200
     assert r1.content == r2.content == r3.content
@@ -176,15 +188,14 @@ def test_register_identical_response_new_and_existing(env):
     assert "#" not in mailer.sent[2][2]  # the "someone tried" mail has no link
 
 
-def test_register_hashes_once_in_both_paths(env, monkeypatch):
+def test_register_never_hashes(env, monkeypatch):
     client, mailer, _, _ = env
     calls = []
     real = security._hash
     monkeypatch.setattr(security, "_hash", lambda p: calls.append(1) or real(p))
     register(client)
-    assert len(calls) == 1
     register(client)
-    assert len(calls) == 2
+    assert calls == []  # the password is chosen at verification: one hash, there
 
 
 def test_register_timing_similar(env):
@@ -199,14 +210,14 @@ def test_register_timing_similar(env):
         register(client, "base@example.test")
         old.append(time.perf_counter() - t)
     a, b = statistics.median(new), statistics.median(old)
-    assert max(a, b) / min(a, b) < 4  # the hash-count test is the real guarantee
+    assert max(a, b) / min(a, b) < 4
 
 
 def test_register_validation(env):
     client = env[0]
-    for body in ({"email": "bad", "password": PW}, {"email": "a@example.test", "password": "short"},
-                 {"email": "a@example.test", "password": "x" * 129}, {"email": 1, "password": PW},
-                 {"email": "a@example.test"}):
+    for body in ({"email": "bad"}, {"email": 1}, {}, {"email": "a@example.test", "simbrief_id": 5},
+                 {"email": "a@example.test", "simbrief_id": "x" * 41},
+                 {"email": "a@example.test", "simbrief_id": "bad;name"}):
         assert client.post("/api/auth/register", json=body).status_code == 400
     assert client.post("/api/auth/register", content=b"nope",
                        headers={"content-type": "application/json"}).status_code == 400
@@ -214,11 +225,26 @@ def test_register_validation(env):
                        headers={"content-type": "text/plain"}).status_code == 400
 
 
+def test_register_ignores_a_password_field(env):
+    client, mailer, _, tmp = env
+    client.post("/api/auth/register", json={"email": "a@example.test", "password": PW})
+    assert login(client, password=PW).status_code == 401
+    assert stored_hash(tmp) == ""
+
+
+def stored_hash(tmp, email="a@example.test"):
+    c = sqlite3.connect(tmp / "t.db")
+    try:
+        return c.execute("SELECT pw_hash FROM users WHERE email=?", (email,)).fetchone()[0]
+    finally:
+        c.close()
+
+
 def test_email_is_normalised(env):
     client, mailer, _, _ = env
     register(client, "  Mixed.Case@Example.TEST ")
     assert mailer.sent[0][0] == "mixed.case@example.test"
-    client.post("/api/auth/verify", json={"token": mailer.token()})
+    vpost(client, mailer.token())
     assert login(client, "MIXED.case@example.test").status_code == 200
 
 
@@ -242,8 +268,8 @@ def test_mail_failure_does_not_change_response(env):
 
 # ---------- verification ----------
 
-def test_verify_two_phase_single_use(env):
-    client, mailer, _, _ = env
+def test_verify_sets_password_opens_session_single_use(env):
+    client, mailer, _, tmp = env
     register(client)
     token = mailer.token()
     assert BASE + "/verify#" in mailer.sent[0][2]
@@ -251,21 +277,49 @@ def test_verify_two_phase_single_use(env):
         r = client.post("/api/auth/verify/preview", json={"token": token})
         assert r.json() == {"valid": True, "kind": "verify"}
     assert client.get("/api/auth/verify", params={"token": token}).status_code in (404, 405)
-    assert login(client).status_code == 401  # still unverified
-    assert client.post("/api/auth/verify", json={"token": token}).status_code == 200
-    assert client.post("/api/auth/verify", json={"token": token}).status_code == 400
+    assert login(client).status_code == 401  # still unverified, no password yet
+    r = vpost(client, token)
+    assert r.status_code == 200 and r.json()["kind"] == "verify" and r.json()["csrf_token"]
+    assert "__Host-session" in r.headers["set-cookie"]
+    assert client.get("/api/auth/me").status_code == 200  # session opened by the verification
+    assert vpost(client, token).status_code == 400  # used
     assert client.post("/api/auth/verify/preview", json={"token": token}).json()["valid"] is False
     assert login(client).status_code == 200
+    assert stored_hash(tmp).startswith("$argon2id$")
+
+
+def test_verify_short_or_missing_password_does_not_consume_token(env):
+    client, mailer, _, _ = env
+    register(client)
+    token = mailer.token()
+    for pw in ("short", "x" * 129, None, 5):
+        body = {"token": token} if pw is None else {"token": token, "password": pw}
+        assert client.post("/api/auth/verify", json=body).status_code == 400
+    assert client.post("/api/auth/verify/preview", json={"token": token}).json()["valid"] is True
+    assert login(client).status_code == 401
+    assert vpost(client, token).status_code == 200
+
+
+def test_verify_one_hash_and_none_for_bad_token(env, monkeypatch):
+    client, mailer, _, _ = env
+    register(client)
+    calls = []
+    real = security._hash
+    monkeypatch.setattr(security, "_hash", lambda p: calls.append(1) or real(p))
+    assert vpost(client, "x" * 43).status_code == 400
+    assert calls == []
+    assert vpost(client, mailer.token()).status_code == 200
+    assert len(calls) == 1
 
 
 def test_verify_wrong_and_expired(env):
     client, mailer, clock, _ = env
     register(client)
-    assert client.post("/api/auth/verify", json={"token": "x" * 43}).status_code == 400
-    assert client.post("/api/auth/verify", json={"token": 5}).status_code == 400
+    assert vpost(client, "x" * 43).status_code == 400
+    assert client.post("/api/auth/verify", json={"token": 5, "password": PW}).status_code == 400
     assert client.post("/api/auth/verify", json={}).status_code == 400
     clock.advance(24 * 3600 + 1)
-    assert client.post("/api/auth/verify", json={"token": mailer.token()}).status_code == 400
+    assert vpost(client, mailer.token()).status_code == 400
 
 
 def test_tokens_stored_hashed_only(env):
@@ -276,20 +330,60 @@ def test_tokens_stored_hashed_only(env):
     assert token.encode() not in raw
 
 
-def test_second_registration_replaces_password_when_unverified(env):
-    client, mailer, _, _ = env
-    register(client, password=PW)
-    register(client, password=PW2)  # last registration wins
-    assert client.post("/api/auth/verify", json={"token": mailer.token()}).status_code == 200
-    assert login(client, password=PW).status_code == 401
-    assert login(client, password=PW2).status_code == 200
+def test_no_login_before_password_is_set_and_prehijack_is_impossible(env):
+    client, mailer, _, tmp = env
+    # the attacker registers the victim's address (and cannot choose a password)
+    register(client, "victim@example.test")
+    assert stored_hash(tmp, "victim@example.test") == ""
+    for guess in ("", PW, "attacker chosen password"):
+        assert login(client, "victim@example.test", guess).status_code == 401
+    # the link goes to the victim's mailbox only; a second registration changes nothing
+    first = mailer.token()
+    register(client, "victim@example.test", "999")
+    assert stored_hash(tmp, "victim@example.test") == ""
+    assert vpost(client, first).status_code == 400  # replaced by the newest link
+    # the victim chooses the password: only that one works
+    assert vpost(client, mailer.token(), "victim chosen password").status_code == 200
+    client.cookies.clear()
+    assert login(client, "victim@example.test", "attacker chosen password").status_code == 401
+    assert login(client, "victim@example.test", "victim chosen password").status_code == 200
 
 
-def test_verified_account_password_not_replaced_by_register(env):
+def test_register_on_verified_account_changes_nothing(env):
     client, mailer, _, _ = env
     verified(client, mailer)
-    register(client, password="attacker chosen password")
+    register(client, simbrief_id="evil")
     assert login(client, password=PW).status_code == 200
+    assert client.get("/api/auth/me").json()["simbrief_id"] == ""
+
+
+def test_register_again_unverified_resends_link_last_simbrief_wins(env):
+    client, mailer, _, _ = env
+    register(client, simbrief_id="alice")
+    register(client, simbrief_id="mallory")
+    register(client)  # empty value: keeps the stored one
+    assert len(mailer.sent) == 3
+    vpost(client, mailer.token())
+    assert client.get("/api/auth/me").json()["simbrief_id"] == "mallory"
+
+
+def test_api_responses_are_no_store(env):
+    client, mailer, _, _ = env
+    assert client.get("/api/auth/me").headers["cache-control"] == "no-store"
+    assert register(client).headers["cache-control"] == "no-store"
+    r = vpost(client, mailer.token())
+    assert r.headers["cache-control"] == "no-store"
+    assert login(client).headers["cache-control"] == "no-store"
+    assert client.get("/healthz").headers["cache-control"] == "no-cache"
+
+
+def test_reset_token_on_verify_is_not_consumed(env):
+    client, mailer, _, _ = env
+    verified(client, mailer)
+    client.post("/api/auth/forgot", json={"email": "a@example.test"})
+    token = mailer.token()
+    assert vpost(client, token, PW2).status_code == 400
+    assert client.post("/api/auth/reset", json={"token": token, "password": PW2}).status_code == 200
 
 
 def test_resend_for_unverified_replaces_old_token(env):
@@ -297,8 +391,23 @@ def test_resend_for_unverified_replaces_old_token(env):
     register(client)
     first = mailer.token()
     register(client)
-    assert client.post("/api/auth/verify", json={"token": first}).status_code == 400
-    assert client.post("/api/auth/verify", json={"token": mailer.token()}).status_code == 200
+    assert vpost(client, first).status_code == 400
+    assert vpost(client, mailer.token()).status_code == 200
+
+
+def test_verify_consumes_other_tokens_of_the_user(env):
+    client, mailer, _, tmp = env
+    register(client)
+    vpost(client, mailer.token())
+    assert rows(tmp / "t.db", "email_tokens") == 0
+
+
+def test_reset_before_verification_sends_nothing_and_cannot_set_password(env):
+    client, mailer, _, _ = env
+    register(client)
+    client.post("/api/auth/forgot", json={"email": "a@example.test"})
+    assert len(mailer.sent) == 1
+    assert login(client).status_code == 401
 
 
 # ---------- login, cookie, sessions ----------
@@ -452,14 +561,14 @@ def test_ip_from_forwarded_for_only_when_peer_is_loopback(tmp_path):
     local = make_client(tmp_path, clock, mailer, peer=("127.0.0.1", 1), ip_hourly=2)
     for i, spoof in enumerate(("1.1.1.1", "2.2.2.2")):  # client-forged first value changes: no help
         h = {"X-Forwarded-For": f"{spoof}, 198.51.100.7"}
-        assert local.post("/api/auth/register", json={"email": f"l{i}@example.test", "password": PW},
+        assert local.post("/api/auth/register", json={"email": f"l{i}@example.test"},
                           headers=h).status_code == 200
     h = {"X-Forwarded-For": "3.3.3.3, 198.51.100.7"}
-    assert local.post("/api/auth/register", json={"email": "l9@example.test", "password": PW},
+    assert local.post("/api/auth/register", json={"email": "l9@example.test"},
                       headers=h).status_code == 429
     # a different real client behind Apache is counted separately
     h = {"X-Forwarded-For": "198.51.100.8"}
-    assert local.post("/api/auth/register", json={"email": "l8@example.test", "password": PW},
+    assert local.post("/api/auth/register", json={"email": "l8@example.test"},
                       headers=h).status_code == 200
 
 
@@ -468,10 +577,10 @@ def test_forwarded_for_ignored_from_other_peers(tmp_path):
     remote = make_client(tmp_path, clock, mailer, peer=("203.0.113.50", 1), ip_hourly=2)
     for i in range(2):
         h = {"X-Forwarded-For": f"9.9.9.{i}"}  # rotating spoofed addresses must not help
-        assert remote.post("/api/auth/register", json={"email": f"r{i}@example.test", "password": PW},
+        assert remote.post("/api/auth/register", json={"email": f"r{i}@example.test"},
                            headers=h).status_code == 200
     h = {"X-Forwarded-For": "9.9.9.77"}
-    assert remote.post("/api/auth/register", json={"email": "r9@example.test", "password": PW},
+    assert remote.post("/api/auth/register", json={"email": "r9@example.test"},
                        headers=h).status_code == 429
 
 
@@ -535,14 +644,27 @@ def test_change_email_to_taken_address_gives_same_answer_without_mail(env):
 def test_simbrief_id_validation(env):
     client, mailer, _, _ = env
     csrf = logged(client, mailer)
-    for bad in ("12a", "1" * 13, "-5", "12 34", 5, None, "<script>"):
+    for bad in ("1" * 41, "a;b", "<script>", "a\nb", "a/b", "caf\u00e9", "x@y", 5, None):
         r = client.post("/api/auth/settings", json={"simbrief_id": bad}, headers=hdr(csrf))
         assert r.status_code == 400
+    raw = client.post("/api/auth/settings", content=b'{"simbrief_id": "a\\ud800"}',
+                      headers={**hdr(csrf), "content-type": "application/json"})
+    assert raw.status_code == 400  # lone surrogate
     r = client.post("/api/auth/settings", json={"simbrief_id": " 424242 "}, headers=hdr(csrf))
     assert r.json()["simbrief_id"] == "424242"
     assert client.get("/api/auth/me").json()["simbrief_id"] == "424242"
+    for good in ("Captain_Jo-1.x", "A B", "1", "x" * 40):  # Pilot ID or username
+        r = client.post("/api/auth/settings", json={"simbrief_id": good}, headers=hdr(csrf))
+        assert r.status_code == 200 and r.json()["simbrief_id"] == good
     client.post("/api/auth/settings", json={"simbrief_id": ""}, headers=hdr(csrf))
     assert client.get("/api/auth/me").json()["simbrief_id"] == ""
+
+
+def test_register_stores_simbrief_username(env):
+    client, mailer, _, _ = env
+    assert register(client, simbrief_id=" Pilot.Name_1 ").status_code == 200
+    vpost(client, mailer.token())
+    assert client.get("/api/auth/me").json()["simbrief_id"] == "Pilot.Name_1"
 
 
 def test_delete_account_removes_everything(env):
@@ -673,8 +795,25 @@ def test_reset_and_verify_ip_limits_and_no_hash_for_bad_token(tmp_path, monkeypa
     for _ in range(3):
         assert client.post("/api/auth/verify", json={"token": "z" * 43}).status_code == 400
     assert client.post("/api/auth/verify", json={"token": "z" * 43}).status_code == 429
-    assert client.post("/api/auth/verify/preview", json={"token": "z" * 43}).status_code == 429
+    # the preview has its own bucket: the exhausted verify one does not block it
+    assert client.post("/api/auth/verify/preview", json={"token": "z" * 43}).status_code == 200
 
+
+def test_preview_bucket_is_separate_and_wider(tmp_path):
+    clock, mailer = Clock(), Mailer()
+    client = make_client(tmp_path, clock, mailer, ip_hourly=5, ip_daily=20, preview_ip_hourly=20)
+    for _ in range(20):
+        assert client.post("/api/auth/verify/preview", json={"token": "z" * 43}).status_code == 200
+    assert client.post("/api/auth/verify/preview", json={"token": "z" * 43}).status_code == 429
+    for _ in range(5):  # consuming has its own, tighter bucket (5 per hour)
+        assert vpost(client, "z" * 43).status_code == 400
+    assert vpost(client, "z" * 43).status_code == 429
+    clock.advance(3601)
+    assert client.post("/api/auth/verify/preview", json={"token": "z" * 43}).status_code == 200
+
+
+def test_default_preview_limit_is_20_per_hour():
+    assert AppConfig().preview_ip_hourly == 20 and AppConfig().ip_hourly == 5
 
 def test_reset_single_use_still_atomic(env):
     client, mailer, _, _ = env
@@ -749,7 +888,7 @@ def test_suppressed_mail_keeps_previous_link_valid(tmp_path):
     link = mailer.token()
     register(client)  # mail suppressed by the per-address cap: old link must survive
     assert len(mailer.sent) == 1
-    assert client.post("/api/auth/verify", json={"token": link}).status_code == 200
+    assert vpost(client, link).status_code == 200
 
 
 def test_reset_mail_cap_is_separate_from_signup_flood(tmp_path):
@@ -770,13 +909,13 @@ def test_ipv6_grouped_by_64_and_bad_forwarded_value_ignored(tmp_path):
     local = make_client(tmp_path, clock, mailer, peer=("127.0.0.1", 1), ip_hourly=2)
     for i, addr in enumerate(("2001:db8:1:2::1", "2001:db8:1:2:ffff::9")):  # same /64
         h = {"X-Forwarded-For": addr}
-        assert local.post("/api/auth/register", json={"email": f"v{i}@example.test", "password": PW},
+        assert local.post("/api/auth/register", json={"email": f"v{i}@example.test"},
                           headers=h).status_code == 200
     h = {"X-Forwarded-For": "2001:db8:1:2:aaaa::1"}
-    assert local.post("/api/auth/register", json={"email": "v9@example.test", "password": PW},
+    assert local.post("/api/auth/register", json={"email": "v9@example.test"},
                       headers=h).status_code == 429
     h = {"X-Forwarded-For": "2001:db8:1:3::1"}  # another /64
-    assert local.post("/api/auth/register", json={"email": "v8@example.test", "password": PW},
+    assert local.post("/api/auth/register", json={"email": "v8@example.test"},
                       headers=h).status_code == 200
     # garbage in the header: falls back to the peer (127.0.0.1), not to a forged key
     from server.api_auth import client_ip

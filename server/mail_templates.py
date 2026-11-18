@@ -6,7 +6,8 @@ SIGNATURE = "\n--\nVirtual Captain\n"
 
 def verify_mail(base_url: str, token: str):
     return ("Confirm your Virtual Captain account",
-            "Welcome aboard.\n\nConfirm your email address within 24 hours:\n\n"
+            "Welcome aboard.\n\nConfirm your email address and choose your password within "
+            "24 hours:\n\n"
             f"{base_url}/verify#{token}\n\n"
             "If you did not create an account, ignore this message." + SIGNATURE)
 
