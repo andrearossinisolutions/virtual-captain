@@ -186,6 +186,7 @@ class State:
         self.brain_saved = {"done": [], "roll_done": [], "armed": False}  # stato del brain (lo aggiorna set_brain)
         self.resumed = False  # True se il volo in corso arriva dal file di sessione (il brain non ripete callout/briefing)
         self.restored_flying = False  # ripristinato in "flying": la consegna 2 verifica il sim e puo' chiamare end_flight_session()
+        self._flown = False  # in questa esecuzione l'aereo e' stato in aria o veloce (serve alla fine volo)
         self._ended = False  # volo chiuso: il file non si riscrive finche' non c'e' un nuovo piano o "Briefing complete"
         self._dirty, self._timer, self._written = False, None, 0.0
         self._io_lock = threading.Lock()  # serializza le scritture del file (mai preso mentre si tiene self.lock)
@@ -312,6 +313,7 @@ class State:
                 elif phase == "flying" and was != "flying":
                     self.brain_saved = {"done": [], "roll_done": [], "armed": False}
                     self.resumed = False
+                    self._flown = False
                     self._ended = False
                     self._mark_session()
                 else:
@@ -454,9 +456,46 @@ class State:
             return
         self._dirty = True
         if self._timer is None:
-            self._timer = threading.Timer(self._debounce, self.flush_session)
+            self._timer = threading.Timer(self._debounce, self._timer_flush)
             self._timer.daemon = True
             self._timer.start()
+
+    def _timer_flush(self) -> None:
+        """Corpo del Timer: un errore inatteso non deve lasciare il thread in eccezione ne' bloccare i salvataggi successivi."""
+        try:
+            self.flush_session()
+        except Exception:
+            with self.lock:
+                self._timer = None
+
+    def sample_check(self, core, raw) -> bool:
+        """Controllo sul sim a ogni campione letto in volo (un solo thread). False = il volo e' finito: sessione chiusa e ritorno
+        al briefing e brain fermo; fine volo in corso: solo file cancellato, il volo resta in "flying". Ripristinato: prima verifica (aereo fermo a terra a motori
+        spenti = volo finito). Durante il volo: fine volo (a terra, fermo, motori spenti, parking brake) solo se in questa
+        esecuzione l'aereo e' stato in aria o veloce (al gate prima della partenza e' la stessa situazione e non e' una fine)."""
+        with self.lock:
+            if self.phase != "flying":
+                return True
+            og, ias = sess._num((core or {}).get("on_ground")), sess._num((core or {}).get("ias"))
+            if (og is not None and og < 0.5) or (ias is not None and ias >= 40):  # dato mancante: mai
+                self._flown = True
+            if self.restored_flying:
+                if sess.stopped_on_ground(core, raw):
+                    self.set_phase("briefing")  # appena riavviato: volo gia' finito, non si ripristina (briefing pulito, file cancellato)
+                    self.log.appendleft(f"{datetime.now().strftime('%H:%M:%S')}  Flight already over: not restored")
+                    self.rev += 1
+                    return False
+                self.restored_flying = False  # verificato: il volo prosegue
+                return True
+            if self._flown and sess.flight_over(core, raw):
+                self._finish("Flight over: session closed")
+                return True  # il volo resta in "flying" (checklist dopo l'atterraggio); il brain continua
+            return True
+
+    def _finish(self, msg: str) -> None:
+        self.end_flight_session()  # solo il file: fase, checklist, gate, latch e clearance restano; il briefing e' End flight manuale
+        self.log.appendleft(f"{datetime.now().strftime('%H:%M:%S')}  {msg}")
+        self.rev += 1
 
     def flush_session(self) -> None:
         """Scrive subito il file se c'e' qualcosa da salvare (anche in chiusura del programma). Sotto il lock dello State solo la
@@ -470,7 +509,7 @@ class State:
                     return
                 self._dirty = False
                 data = self._session_data()
-            ok = sess.write_atomic(self.session_path, data)
+            sess.write_atomic(self.session_path, data)
             with self.lock:
                 self._written = self._wall()  # anche in errore: il battito riprova tra HEARTBEAT_S, niente tempeste a 2 Hz
                 if self._ended:  # il volo e' finito mentre si scriveva: il file non deve restare
@@ -479,7 +518,7 @@ class State:
     def end_flight_session(self) -> None:
         """Fine del volo (End flight, fine volo rilevata): cancella il file e non lo riscrive fino al prossimo piano/volo."""
         with self.lock:
-            self._ended, self._dirty, self.resumed, self.restored_flying = True, False, False, False
+            self._ended, self._dirty, self.resumed, self.restored_flying, self._flown = True, False, False, False, False
             self.flight_id = ""
             self.brain_saved = {"done": [], "roll_done": [], "armed": False}
             t, self._timer = self._timer, None

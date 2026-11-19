@@ -143,6 +143,18 @@ def test_say_logs_shown_text():
     assert got == ["shown text", "plain"]
 
 
+def test_restored_brain_is_silent_and_keeps_state():
+    b = Brain(Briefing(ta=6000, thr_red_agl=800))
+    b.from_dict({"done": ["posrate"], "roll_done": [], "armed": False})
+    b.resumed = True
+    s = {"on_ground": 0, "ias": 200, "vs": 2000, "agl": 5000, "gear": 0, "alt": 7000}
+    assert b.update(s, 1.0) == []  # soglie gia' passate (thr_red, ta): marcate, mai ripetute
+    assert not b.resumed and {"posrate", "thr_red", "ta"} <= b.done
+    assert b.update(s, 2.0) == []
+    b2 = Brain(Briefing(ta=6000))  # senza resumed parla
+    assert b2.update(s, 1.0)
+
+
 if __name__ == "__main__":
     test_readout_pair_shown_vs_spoken()
     test_say_logs_shown_text()
@@ -156,4 +168,5 @@ if __name__ == "__main__":
     test_takeoff_callouts()
     test_rejected_takeoff_rearms()
     test_no_speeds_no_callouts()
+    test_restored_brain_is_silent_and_keeps_state()
     print("ok")

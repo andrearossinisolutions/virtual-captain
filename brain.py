@@ -71,7 +71,7 @@ class Brain:
     gear_checked: bool = False
     roll_done: set = field(default_factory=set)
     armed: bool = False  # callout del decollo attivi solo dopo essere stati fermi/lenti a terra
-    resumed: bool = False  # volo ripristinato dal file di sessione (la logica che lo usa e' della consegna 2)
+    resumed: bool = False  # ripristinato dal file: il primo campione marca come fatto cio' che e' gia' passato, senza parlare
 
     def to_dict(self) -> dict:
         return {"done": sorted(self.done), "roll_done": sorted(self.roll_done), "armed": self.armed}
@@ -90,6 +90,13 @@ class Brain:
         return [long_text if (long_text and self.b.mode == "training") else text]
 
     def update(self, s: dict, now: float) -> list[str]:
+        out = self._update(s, now)
+        if self.resumed:  # primo campione dopo il ripristino: nessun callout ripetuto (lo stato e' aggiornato, la voce no)
+            self.resumed = False
+            return []
+        return out
+
+    def _update(self, s: dict, now: float) -> list[str]:
         out: list[str] = []
         ias = s.get("ias", 0)
         if s["on_ground"] >= 1:

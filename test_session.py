@@ -377,3 +377,120 @@ def test_brain_to_from_dict():
     assert b2.done == set() and b2.roll_done == set() and not b2.armed
     b2.from_dict({"done": [1, "a"], "armed": 1})
     assert b2.done == {"a"} and not b2.armed
+
+
+def _fly(tmp_path, w=None):
+    st, w = _st(tmp_path, w)
+    _prep(st)
+    st.set_phase("flying")
+    st.set_brain({"done": ["posrate"], "roll_done": [], "armed": False})
+    st.flush_session()
+    return st, w
+
+
+PARKED = ({"on_ground": 1, "ias": 0}, {"eng1": 0, "eng2": 0, "parking": 1})
+RUNNING = ({"on_ground": 1, "ias": 0}, {"eng1": 1, "eng2": 1, "parking": 0})
+AIR = ({"on_ground": 0, "ias": 250}, {"eng1": 1, "eng2": 1, "parking": 0})
+
+
+def test_restore_then_sim_still_flying_continues(tmp_path):
+    st, w = _fly(tmp_path)
+    st2, _ = _st(tmp_path, w)
+    assert st2.restored_flying and st2.resumed
+    assert st2.sample_check(*AIR) and not st2.restored_flying and st2.phase == "flying" and st2.resumed
+    assert st2.brain_saved["done"] == ["posrate"] and (tmp_path / "s.json").exists()
+
+
+def test_restore_sim_stopped_ends_flight(tmp_path):
+    st, w = _fly(tmp_path)
+    st2, _ = _st(tmp_path, w)
+    assert not st2.sample_check(*PARKED)  # gia' finito: non si ripristina
+    assert st2.phase == "briefing" and not st2.resumed and not st2.restored_flying and not (tmp_path / "s.json").exists()
+    st2.flush_session()
+    assert not (tmp_path / "s.json").exists()
+    st3, _ = _st(tmp_path, w)
+    assert st3.phase == "briefing" and st3.fields["origin"] == ""  # il prossimo volo non e' pre-compilato
+
+
+def test_restore_waits_for_sim_state_visible_and_file_kept(tmp_path):
+    st, w = _fly(tmp_path)
+    st2, _ = _st(tmp_path, w)
+    st2.set_sim(False, "no sim")  # sim non collegato: nessun campione, nessun controllo
+    assert st2.phase == "flying" and st2.restored_flying and st2.fields["destination"] == "EDDF" and (tmp_path / "s.json").exists()
+    assert st2.sample_check(*RUNNING)  # fermo a terra ma motori accesi: volo non finito
+    assert st2.phase == "flying"
+
+
+def test_restore_unknown_data_is_not_a_finished_flight(tmp_path):
+    st, w = _fly(tmp_path)
+    st2, _ = _st(tmp_path, w)
+    assert st2.sample_check({"on_ground": 1, "ias": 0}, {"parking": 1})  # eng1/eng2 mancanti: nel dubbio no
+    assert st2.phase == "flying"
+
+
+def test_flight_over_in_flight_deletes_file(tmp_path):
+    st, _ = _fly(tmp_path)
+    assert st.sample_check(*AIR) and st.sample_check(*RUNNING) and st.sample_check(
+        PARKED[0], {"eng1": 0, "eng2": 0, "parking": 0})  # parking non inserito
+    assert (tmp_path / "s.json").exists()
+    x = _ids(st)[0]
+    st.set_cl_phase("takeoff")
+    st.gates["open"].add(x)
+    st.latch._ids.add(x)
+    cl, clr = st.cl_phase, dict(st.clearance)
+    assert st.sample_check(*PARKED)  # il brain continua
+    assert st.phase == "flying" and not (tmp_path / "s.json").exists() and "Flight over" in st.log[0]
+    assert st.cl_phase == cl and st.gates["open"] == {x} and x in st.latch.ids() and st.clearance == clr
+    st.flush_session()
+    assert not (tmp_path / "s.json").exists()
+
+
+def test_flown_needs_valid_data_and_is_reset(tmp_path):
+    st, _ = _fly(tmp_path)
+    assert st.sample_check({}, {}) and not st._flown  # dato mancante: mai
+    assert st.sample_check({"on_ground": None, "ias": None}, {}) and not st._flown
+    assert st.sample_check(*AIR) and st._flown
+    st.set_phase("briefing")  # End flight
+    assert not st._flown
+    st.set_phase("flying")
+    assert not st._flown
+    assert st.sample_check(*AIR) and st._flown
+    st.end_flight_session()
+    assert not st._flown
+
+
+def test_go_around_and_touch_and_go_do_not_end_flight(tmp_path):
+    st, _ = _fly(tmp_path)
+    assert st.sample_check(*AIR)
+    assert st.sample_check({"on_ground": 1, "ias": 0.5}, {"eng1": 1, "eng2": 1, "parking": 0})  # motori accesi
+    assert st.sample_check({"on_ground": 1, "ias": 0.5}, {"eng1": 0, "eng2": 0, "parking": 0})  # parking disinserito
+    assert (tmp_path / "s.json").exists()
+
+
+def test_parked_at_gate_before_departure_is_not_flight_over(tmp_path):
+    st, _ = _fly(tmp_path)  # Briefing complete al gate: motori spenti e parking inserito, mai volato
+    assert st.sample_check(*PARKED) and st.phase == "flying" and (tmp_path / "s.json").exists()
+
+
+def test_brain_change_updates_file(tmp_path):
+    st, _ = _fly(tmp_path)
+    st.set_brain({"done": ["posrate", "ta"], "roll_done": ["v1"], "armed": False})
+    st.flush_session()
+    assert _load(tmp_path / "s.json")["brain"]["done"] == ["posrate", "ta"]
+
+
+def test_briefing_restored_before_complete_starts_clean(tmp_path):
+    st, w = _st(tmp_path)
+    _prep(st)
+    st.flush_session()
+    st2, _ = _st(tmp_path, w)
+    assert st2.phase == "briefing" and not st2.resumed and st2.sample_check(*PARKED)
+    st2.set_phase("flying")
+    assert not st2.resumed and st2.brain_saved == {"done": [], "roll_done": [], "armed": False}
+
+
+def test_timer_flush_error_does_not_leave_thread_stuck(tmp_path):
+    st, _ = _st(tmp_path)
+    st.flush_session = lambda: 1 / 0
+    st._timer_flush()  # nessuna eccezione
+    assert st._timer is None

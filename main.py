@@ -149,13 +149,19 @@ def main():
                     continue
                 time.sleep(0.3)
                 continue
-            if brain is None:  # appena premuto "Briefing complete"
+            if brain is None:
                 b = st.briefing()
-                brain, src, clock = Brain(b), (simulated() if sim else None), 0.0
-                last, sim_done = None, False
-                with st.lock:
-                    shown, text = readout_pair(dict(st.fields), dict(st.plan), st.mode)
-                speak(text, shown)
+                if st.resumed:  # volo ripristinato: stato del brain dal file, nessun briefing parlato; gira solo dopo il controllo sul sim
+                    brain = Brain(b)
+                    brain.from_dict(st.brain_saved)
+                    brain.resumed = True
+                    src, clock, last, sim_done = (simulated() if sim else None), 0.0, None, False
+                else:  # appena premuto "Briefing complete"
+                    brain, src, clock = Brain(b), (simulated() if sim else None), 0.0
+                    last, sim_done = None, False
+                    with st.lock:
+                        shown, text = readout_pair(dict(st.fields), dict(st.plan), st.mode)
+                    speak(text, shown)
             brain.b = st.briefing()  # modifiche dal tablet valide subito
             try:
                 if src:
@@ -178,9 +184,13 @@ def main():
                 continue
             st.set_core(s)
             st.set_monitor(mon)
+            if not st.sample_check(s, mon):  # volo finito (anche gia' prima del riavvio): tornato in briefing, sessione chiusa
+                brain = None
+                continue
             clock = clock + 1 if src else time.time()
             for phrase in brain.update(s, clock):
                 speak(phrase)
+            st.set_brain(brain.to_dict())  # cambia solo quando cambia: il file si aggiorna
             time.sleep(0.4 if src else 0.5)
     except KeyboardInterrupt:
         pass
