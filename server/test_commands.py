@@ -102,7 +102,7 @@ def roundtrip(e, pc, name, body, **answer):
 def test_constants():
     assert wire.ENABLED_COMMANDS == ("fields", "clearance", "checklist-phase", "phase", "load-plan", "sim-retry")
     assert set(wire.ENABLED_COMMANDS) <= set(wire.REMOTE_COMMANDS)
-    assert wire.LOCAL_ONLY == ("simdll-fetch", "thrust-cal")
+    assert wire.LOCAL_ONLY == ("simdll-fetch",)
     assert not set(wire.LOCAL_ONLY) & set(wire.REMOTE_COMMANDS)
     assert wire.CMD_TIMEOUT == {"default": 8.0, "load-plan": 20.0} or wire.CMD_TIMEOUT["default"] <= 8.0
     assert (wire.MAX_CMD_DATA, wire.MAX_CMD_BYTES, wire.MAX_RESULT_BYTES) == (2048, 4096, 1024)
@@ -150,7 +150,7 @@ INVALID = [
     ("phase", {"phase": "briefing", "confirm": 1}), ("phase", {"phase": "flying", "confirm": True}),
     ("phase", {"phase": "other"}), ("phase", {"phase": ["flying"]}),
     ("load-plan", {"x": 1}), ("sim-retry", {"x": 1}),
-    ("simdll-fetch", {"confirm": True}), ("thrust-cal", {"action": "start"}), ("unknown", {}), (None, {}), ("fields", []),
+    ("simdll-fetch", {"confirm": True}), ("unknown", {}), (None, {}), ("fields", []),
     ("fields", "x"), ("fields", None),
 ]
 
@@ -216,7 +216,7 @@ def test_parse_caps():
 def test_needs_a_session_first_even_for_local_only_names(env):
     from fastapi.testclient import TestClient
     anon = TestClient(env.app, base_url="https://vc.example.test")
-    for name in ("fields", "simdll-fetch", "thrust-cal", "nonsense"):
+    for name in ("fields", "simdll-fetch", "nonsense"):
         r = anon.post("/api/flight/cmd/" + name, json={}, headers=hdr(env.csrf))
         assert r.status_code == 401 and r.headers["cache-control"] == "no-store"
     assert anon.post("/api/flight/cmd/fields", json={}).status_code == 401
@@ -231,7 +231,7 @@ def test_csrf_and_origin_are_checked(env):
     assert post(env, "simdll-fetch", csrf=False).status_code == 403  # the CSRF check comes before the name check
 
 
-@pytest.mark.parametrize("name", ["simdll-fetch", "thrust-cal", "nonsense", "fetch_dll", "calib_action", "state", "FIELDS", "fields%2F.."])
+@pytest.mark.parametrize("name", ["simdll-fetch", "nonsense", "fetch_dll", "state", "FIELDS", "fields%2F.."])
 def test_local_only_and_unknown_names_are_404_and_never_reach_the_program(env, name):
     with Pc(env) as pc:
         r = post(env, name, {"confirm": True})
@@ -649,7 +649,7 @@ def test_real_uvicorn_command_roundtrip_404_and_timeout(live):
         assert box and box[0][0] == 200 and box[0][1] == {"ok": True}
         assert box[0][2].get("Cache-Control") == "no-store" or box[0][2].get("cache-control") == "no-store"
         # local-only names: 404 on the real server too, and the program receives nothing
-        for name in ("simdll-fetch", "thrust-cal"):
+        for name in ("simdll-fetch",):
             assert _http_post(e, url, name, {"confirm": True})[0] == 404
         ws.send(json.dumps({"t": "ping"}))
         assert json.loads(ws.recv(5)) == {"t": "pong"}

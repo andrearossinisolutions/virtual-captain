@@ -1,6 +1,6 @@
 """Confronto puro tra uno stato atteso della checklist e le etichette lette dal cockpit (sola lettura, nessun I/O).
 
-check: {"key": k, "eq": "ON" | ["ON", "OFF"]}, {"all": [check, ...]}, {"ai": "ground|takeoff|climb|descent"} (anti-ice dinamico: attivo, eng1_ai e eng2_ai ON, solo se "ai.on" in expected; altrimenti "none"), {"detent": "IDLE" | ["FLX", "TOGA"]} (entrambe le leve nel detent, valori virtuali thr_det_l/thr_det_r; senza calibrazione "none") {"key": k, "lt": soglia} (numerico stretto, es. VS < 0; non leggibile "na"), oppure {"show": [chiavi]} (solo mostrare: nessun esito).
+check: {"key": k, "eq": "ON" | ["ON", "OFF"]}, {"all": [check, ...]}, {"ai": "ground|takeoff|climb|descent"} (anti-ice dinamico: attivo, eng1_ai e eng2_ai ON, solo se "ai.on" in expected; altrimenti "none"), {"detent": "IDLE" | ["FLX", "TOGA"]} (entrambe le leve nel detent, valori virtuali thr_det_l/thr_det_r) {"key": k, "lt": soglia} (numerico stretto, es. VS < 0; non leggibile "na"), oppure {"show": [chiavi]} (solo mostrare: nessun esito).
 Valore atteso da un riferimento chiuso (REFS): {"key": k, "eq_ref": "clr.t"} (kind con mappa di etichette ammessi solo se l'atteso normalizzato e' un'etichetta valida, altrimenti "none"; ammesso dentro "all", dove i riferimenti con atteso vuoto sono saltati)
 e {"show_ref": "clr.a"} (solo atteso, nessun esito). expected: {riferimento: testo}; atteso vuoto => "none" (si mostra solo NOW).
 optional (campo del link): se la voce non e' conforme l'esito e' "opt" (neutro, non conta come bad) invece di "bad".
@@ -311,10 +311,7 @@ def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: 
 def _evaluate_link(check: dict | None, labels: dict, verified: bool, optional: bool, expected: dict | None) -> dict:
     if not check or "show" in check or "show_ref" in check:
         return _res("none")
-    if "detent" in check:
-        if not _want(expected, "cal.thrust"):
-            return _res("none")  # non calibrato: si mostra solo NOW
-    elif "ai" in check:
+    if "ai" in check:
         if not _want(expected, "ai.on"):
             return _res("none")  # regola non attiva (promemoria, METAR assente, niente icing): solo testo e NOW
     elif "qnh" in check:

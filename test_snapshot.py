@@ -44,7 +44,7 @@ def test_real_snapshot_keeps_the_allowlist_and_drops_the_rest():
     snap = make_state().snapshot()
     view = snapshot.remote_view(snap)
     assert set(view) <= set(wire.SNAPSHOT_FIELDS)
-    for k in ("sim_error", "dll_msg", "dll_confirm", "dll_fetching", "thr_cal", "calib", "now", "spoke_ago", "test_links"):
+    for k in ("sim_error", "dll_msg", "dll_confirm", "dll_fetching", "now", "spoke_ago", "test_links"):
         assert k in snap and k not in view, k
     for k in ("simbrief", "info", "labels", "modes", "cl_modes", "rev", "dll_missing"):  # briefing view on the site (U3)
         assert k in snap and k in view, k

@@ -106,7 +106,7 @@ def test_detent_labels():
     assert monitor.lvar_request(d) is None and monitor.std_request(d) is None
     import simvars
     assert simvars.MONITOR["thr_det_l"] is None and simvars.default_monitor()["thr_det_r"] is None
-    assert BY["thr_pos_3"].lvar.endswith("POS_3") and BY["thr_pos_4"].lvar.endswith("POS_4")
+    assert BY["thr_in_l"].lvar == "A_FC_THROTTLE_LEFT_INPUT" and BY["thr_gate_r"].lvar == "A_FC_THROTTLE_RIGHT_GATE"
 
 
 def test_flight_items_std_only():

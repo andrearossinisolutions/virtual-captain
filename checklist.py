@@ -155,7 +155,7 @@ def raw_values(check: dict | None, raw: dict) -> list:
     out = []
     keys = check_keys(check or {})
     if "detent" in (check or {}):
-        keys += ["thr_gate_l", "thr_gate_r", "thr_pos_1", "thr_pos_2"]
+        keys += ["thr_gate_l", "thr_gate_r"]
     for k in keys:
         it = BY_KEY[k]
         out.append([it.lvar or it.std or it.name, mon.raw_text(raw.get(k))])
@@ -170,7 +170,7 @@ def live_values(check: dict | None, labels: dict) -> list:
     if "detent" in (check or {}):
         if any(labels.get(k) for k in ("thr_det_l", "thr_det_r")):
             return [[BY_KEY[k].name, labels.get(k) or mon.NA] for k in check_keys(check)]
-        return [[BY_KEY[k].name, labels.get(k) or mon.NA] for k in ("thr_gate_l", "thr_gate_r", "thr_pos_1", "thr_pos_2")]
+        return [[BY_KEY[k].name, labels.get(k) or mon.NA] for k in ("thr_gate_l", "thr_gate_r")]
     return [[BY_KEY[k].name, labels.get(k) or mon.NA] for k in check_keys(check or {})]
 
 

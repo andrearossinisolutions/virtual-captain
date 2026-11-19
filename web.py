@@ -103,13 +103,6 @@ def make_handler(st: State):
                         st.fetch_dll()
                     except ValueError as e:
                         return self._send(400, str(e).encode(), "text/plain")
-                elif name == "thrust-cal":
-                    try:
-                        if not isinstance(data, dict):
-                            raise ValueError("body must be an object")
-                        st.calib_action(data.get("action"))
-                    except ValueError as e:
-                        return self._send(400, str(e).encode(), "text/plain")
                 elif name in commands.COMMANDS:
                     try:
                         commands.run_command(st, name, data)

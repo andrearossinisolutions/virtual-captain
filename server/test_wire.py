@@ -32,7 +32,7 @@ def base() -> dict:
         "clearance": {"c": "", "t": "1234"}, "log": ["12:00  hi"], "spoke_n": 3,
         # not allowed: must be dropped
         "simbrief": "SECRET-ID", "info": "x", "sim_error": "boom", "dll_msg": "m", "labels": [["a", "b"]], "now": 1.0,
-        "spoke_ago": 2.0, "test_links": True, "rev": 5, "thr_cal": {"when": "x"}, "calib": {"a": 1},
+        "spoke_ago": 2.0, "test_links": True, "rev": 5,
         "dll_confirm": "Download?", "modes": ["normal", "training"], "cl_modes": ["complete", "simplified"], "dll_missing": False,
     }
 
@@ -40,7 +40,7 @@ def base() -> dict:
 def test_allowlist_keeps_known_and_drops_the_rest():
     out = wire.sanitize_snapshot(base())
     assert set(out) <= set(wire.SNAPSHOT_FIELDS)
-    for k in ("sim_error", "dll_msg", "dll_confirm", "now", "spoke_ago", "test_links", "thr_cal", "calib"):
+    for k in ("sim_error", "dll_msg", "dll_confirm", "now", "spoke_ago", "test_links"):
         assert k not in out
     # U3: the briefing view needs these (the user's own SimBrief ID goes back to the user's own page)
     assert out["simbrief"] == "SECRET-ID" and out["info"] == "x" and out["labels"] == [["a", "b"]] and out["rev"] == 5

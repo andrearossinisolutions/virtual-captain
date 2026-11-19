@@ -139,11 +139,9 @@ def main():
         while True:
             if st.phase != "flying":
                 brain = None
-                if backend is not None:  # fuori dal volo la lettura serve alla riga di stato e alla calibrazione
+                if backend is not None:  # fuori dal volo la lettura serve alla riga di stato
                     try:
-                        data = read_sim(0)
-                        if st.calib_active():  # calibrazione leve in Briefing: solo lettura, nessun brain e nessun parlato
-                            st.set_calib_raw(data[1])
+                        read_sim(0)
                     except BackendError:
                         pass
                     time.sleep(0.5)

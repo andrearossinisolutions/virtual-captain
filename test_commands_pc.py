@@ -43,7 +43,7 @@ def test_pc_modules_do_not_import_the_server_stack():
 
 def test_commands_module_has_no_local_machine_functions():
     src = (ROOT / "commands.py").read_text(encoding="utf-8").lower()
-    for word in ("simdll", "thrust", "fetch_dll", "calib", "simconnect", "speak", "pyttsx3", "subprocess", "os.system",
+    for word in ("simdll", "fetch_dll", "simconnect", "speak", "pyttsx3", "subprocess", "os.system",
                  "shutil", "open(", "eval(", "exec(", "__import__"):
         assert word not in src, word
     tree = ast.parse((ROOT / "commands.py").read_text(encoding="utf-8"))
@@ -101,8 +101,8 @@ def test_execute_revalidates_what_the_server_sends():
                        ("fields", {"mode": "silent"}), ("clearance", {"t": "9"}), ("clearance", {"reset": True, "c": "x"}),
                        ("checklist-phase", {"step": 5}), ("checklist-phase", {}), ("phase", {"phase": "briefing"}),
                        ("phase", {"phase": "nope"}), ("load-plan", {"simbrief": "a;b"}), ("load-plan", {"simbrief": "   "}), ("sim-retry", {"x": 1}),
-                       ("simdll-fetch", {"confirm": True}), ("thrust-cal", {"action": "start"}), ("fetch_dll", {}),
-                       ("calib_action", {}), ("nonsense", {}), ("fields", "text"), ("fields", None), (None, {})):
+                       ("simdll-fetch", {"confirm": True}), ("fetch_dll", {}),
+                       ("nonsense", {}), ("fields", "text"), ("fields", None), (None, {})):
         out = commands.execute(st, name, data)
         assert out["ok"] is False and out["code"] == "invalid" and len(out["msg"]) <= wire.MAX_RESULT_MSG, (name, data)
     assert (dict(st.fields), st.mode, st.simbrief, st.phase, dict(st.clearance)) == before
@@ -421,7 +421,7 @@ def test_rejected_and_local_only_commands_leave_the_state_alone(tmp_path):
     st.simbrief = "KEEP"
     up, msgs = start_uplink(tmp_path, st, ws)
     hello_of(ws)
-    cmds = [("fields", {"simbrief": "HACK"}), ("simdll-fetch", {"confirm": True}), ("thrust-cal", {"action": "clear"}),
+    cmds = [("fields", {"simbrief": "HACK"}), ("simdll-fetch", {"confirm": True}),
             ("fields", {"v1": 1}), ("nonsense", {})]
     for i, (n, d) in enumerate(cmds):
         ws.put_cmd(ids(i + 1), n, d)
@@ -430,7 +430,7 @@ def test_rejected_and_local_only_commands_leave_the_state_alone(tmp_path):
     up.stop()
     assert [(r["id"], r["code"]) for r in ws.results()] == [(ids(i + 1), "invalid") for i in range(len(cmds))]
     assert st.simbrief == "KEEP" and st.fields["v1"] == ""
-    assert not any(w in "".join(msgs) for w in ("HACK", "simdll", "thrust"))
+    assert not any(w in "".join(msgs) for w in ("HACK", "simdll"))
 
 
 def test_switched_off_program_answers_disabled(tmp_path):

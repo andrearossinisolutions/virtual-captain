@@ -12,23 +12,8 @@ function build(s){const g=$("grid"),apt=$("apt");g.textContent="";apt.textConten
   const opts=(sel,list)=>{sel.textContent="";for(const m of list){const o=mk("option",m[0].toUpperCase()+m.slice(1));o.value=m;sel.appendChild(o)}};
   opts($("mode"),s.modes);opts($("clmode"),s.cl_modes);
   document.querySelectorAll("[data-k]").forEach(i=>{i.oninput=()=>{mark(i.dataset.k,i);save();localTime()};i.onchange=()=>{if(REMOTE)save(true)}});$("mode").onchange=()=>{mark("mode",$("mode"));save(true)};$("clmode").onchange=()=>{mark("checklist_mode",$("clmode"));save(true)};document.querySelectorAll("#cfg input").forEach(i=>i.onkeydown=nextField);$("simbrief").oninput=()=>{if(REMOTE)mark("simbrief",$("simbrief"));else save()};$("simdll").onclick=simDll;$("simretry").onclick=simRetry;
-  for(const a of ["start","next","back","skip","cancel"])$("thr"+a).onclick=()=>thrAct(a);$("thrclose").onclick=()=>thrAct("cancel");
-  $("thrclear").onclick=()=>{if(confirm("Clear the thrust levers calibration?"))thrAct("clear")}}
-let calKey="";
-async function thrAct(action){try{await api("/api/thrust-cal",{action});$("thrmsg").textContent="";await refresh()}catch(e){$("thrmsg").textContent=e.message;try{await refresh()}catch(x){}}}
+}
 async function refresh(){const s=await api("/api/state");apply(s)}
-function calib(s){const c=s.calib,t=s.thr_cal,k=JSON.stringify([c,t]);if(k===calKey)return;calKey=k;
-  $("thrst").textContent=t?`Calibrated ${t.when}, guide L: ${t.guides.l}, R: ${t.guides.r}`:"Not calibrated";
-  $("thrstart").hidden=!!(c&&c.active);$("thrclear").hidden=!t;$("thrcard").hidden=!(c&&c.active);
-  if(!(c&&c.active))return;
-  $("thrtitle").textContent=c.done?"Calibration complete":`Step ${c.step+1}/${c.total}: ${c.name}`;
-  $("thrtext").textContent=c.done?"":c.text;$("thrwarn").hidden=c.done;$("threrr").textContent=c.error||(c.has_live||c.done?"":"No live data from the simulator (is MSFS connected?)");
-  $("thrbtns").hidden=c.done;$("thrsum").hidden=!c.done;
-  $("thrback").disabled=c.step===0;$("thrskip").hidden=!c.can_skip;
-  if(c.done&&t)$("thrsumtxt").textContent=`Saved ${t.when}. Guide L: ${t.guides.l}; R: ${t.guides.r}.`;
-  const tb=$("thrtab");tb.textContent="";const mk=(tag,txt,cls)=>{const e=document.createElement(tag);e.textContent=txt;if(cls)e.className=cls;return e};
-  const h=document.createElement("tr");h.appendChild(mk("th","Variable"));h.appendChild(mk("th","Live"));for(const x of c.heads)h.appendChild(mk("th",x));tb.appendChild(h);
-  for(const r of c.rows){const tr=document.createElement("tr");if(r.guide)tr.className="gd";tr.appendChild(mk("td",r.name));tr.appendChild(mk("td",r.live===""?"n/d":r.live,"lv"));for(const v of r.vals)tr.appendChild(mk("td",v));tb.appendChild(tr)}}
 function localTime(){const el=$("deploc"),dt=document.querySelector('[data-k="dep_time"]');if(!el||!dt)return;const v=(dt.value||"").trim();
   const m=v.match(/^(\d{1,2})[:.]?(\d{2})$/);if(!m||+m[1]>23||+m[2]>59){el.value="";return}
   const n=new Date(),d=new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate(),+m[1],+m[2]));
@@ -250,7 +235,7 @@ function render(){const s=last;if(!s)return;const fly=s.phase==="flying";
   const a=$("sim");a.textContent=s.sim_demo?"SimConnect: demo":s.sim_ok===null?"SimConnect: waiting":s.sim_ok?"SimConnect: connected":s.dll_missing?"SimConnect: DLL missing":"SimConnect: not connected";a.className="pill "+(s.sim_ok===null?"":s.sim_ok?"ok":"bad");
   $("simstat").textContent=s.sim_demo?"Demo flight: the simulator is not read.":s.sim_ok?"Connected to MSFS.":(s.sim_error||(REMOTE&&s.dll_missing?"SimConnect.dll is missing: download it from the program on the PC.":"Waiting for MSFS…"));$("simmsg").textContent=s.dll_fetching?"Downloading…":(s.dll_msg||"");$("simdll").hidden=!s.dll_missing;$("simdll").disabled=!!s.dll_fetching;$("simretry").hidden=!!s.sim_demo;
   $("go").textContent=fly?"Back to flight":"Briefing complete";$("go").className="big "+(fly?"fly":"");$("end").hidden=!fly;$("end2").hidden=!fly;
-  $("info").textContent=s.info;chips(s);checklist(s);cockpit(s);fdata(s);fpills(s);plans(s);if(!REMOTE)calib(s);
+  $("info").textContent=s.info;chips(s);checklist(s);cockpit(s);fdata(s);fpills(s);plans(s);
   speech(s);
   const l=s.log;
   $("log").textContent="";for(const t of l.slice(1)){const li=document.createElement("li");li.textContent=t;$("log").appendChild(li)}}

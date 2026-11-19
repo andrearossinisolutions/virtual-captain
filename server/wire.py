@@ -267,7 +267,7 @@ COMMAND_VERSION = 1      # "cv" of the hello (no PROTOCOL_VERSION bump)
 # Commands a browser may ever send through the server, and the ones switched on today (a subset).
 REMOTE_COMMANDS = ("fields", "clearance", "checklist-phase", "load-plan", "phase", "sim-retry")
 # Commands that touch the local machine: they stay on the PC for good, the server answers 404.
-LOCAL_ONLY = ("simdll-fetch", "thrust-cal")
+LOCAL_ONLY = ("simdll-fetch",)
 ENABLED_COMMANDS = ("fields", "clearance", "checklist-phase", "phase", "load-plan", "sim-retry")
 
 CMD_TIMEOUT = {"default": 8.0, "load-plan": 20.0}   # seconds the server waits for the result

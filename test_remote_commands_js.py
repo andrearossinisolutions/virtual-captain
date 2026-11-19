@@ -296,7 +296,7 @@ out.r = {asked0, confirms: t.log.confirms.length, cancelled, postsAfterCancel, p
 def test_local_only_and_unknown_paths_never_leave_the_page(tmp_path):
     out = run_js(tmp_path, PRELUDE + """
 const res = [];
-for (const p of ["/api/simdll-fetch", "/api/thrust-cal", "/api/state", "/api/whatever", "/api/fetch_dll"]) {
+for (const p of ["/api/simdll-fetch", "/api/state", "/api/whatever", "/api/fetch_dll"]) {
   try { await t.run('api("' + p + '", {confirm: true})'); res.push("sent"); } catch (e) { res.push(e.message); }
 }
 out.r = {res, fetches: t.log.fetches.length};
@@ -373,7 +373,7 @@ def test_adapter_source_rules():
     assert "textContent" in body and "credentials:\"same-origin\"" in body and '"X-CSRF-Token":tok' in body
     assert "http://" not in body and "https://" not in body
     assert body.count('"/api/flight/cmd/"') == 1  # a single place builds the URL
-    for local in ("simdll", "thrust-cal"):
+    for local in ("simdll",):
         assert local not in body
     assert "confirm(" in body and body.count("confirm(") == 1
 

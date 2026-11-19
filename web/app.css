@@ -73,14 +73,11 @@ main.fv{max-width:none;padding:12px 16px}
 .a.inpr .rs{background:none;border:0;color:var(--mut);padding:0 4px;font-size:16px;font-weight:400;cursor:pointer}
 .craft .cb{margin-top:6px}.craft .cb button{padding:4px 10px;font-size:13px}
 #clnextbtn{margin-top:14px}
-#thrtab{border-collapse:collapse;font:13px ui-monospace,monospace;width:100%}#thrtab th,#thrtab td{border-bottom:1px solid var(--bd);padding:3px 6px;text-align:right;white-space:nowrap}#thrtab th:first-child,#thrtab td:first-child{text-align:left}#thrtab .lv{font-weight:700}#thrtab .gd td:first-child{color:var(--fg)}
 ul{list-style:none;margin:0;padding:0;font:15px/1.5 ui-monospace,monospace}li{padding:6px 0;border-bottom:1px solid var(--bd);color:var(--mut)}
 /* ex stili inline di index.html: id/classi con specificita' sufficiente (l'inline batteva ogni regola) */
 .row>.f2{flex:2}.row>.f1{flex:1}
-#loadp{margin:12px 0 0}#load,#thrclose,#end{width:100%}
-#thrst,#simstat{margin:0 0 8px}
-#thrtitle{font-size:22px;margin-top:0}#thrtext{margin:6px 0}#thrwarn{margin:0 0 8px}
-.xs{overflow-x:auto}#threrr{margin:8px 0 0}#thrbtns{margin-top:10px}#thrmsg{margin:8px 0}
+#loadp{margin:12px 0 0}#load,#end{width:100%}
+#simstat{margin:0 0 8px}
 #endp{margin-top:12px}
 /* pagina /flight del sito (sola lettura) */
 .bold{font-weight:600}

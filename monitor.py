@@ -43,7 +43,7 @@ MAPS = {
     "signs": {0: "OFF", 1: "AUTO", 2: "ON"},  # provvisoria: da verificare dal vivo col grezzo
     "emerlt": {0: "OFF", 1: "ARM", 2: "ON"},  # provvisoria: da verificare dal vivo col grezzo
     "tcas": {0: "STBY", 1: "TA", 2: "TA/RA"},  # provvisoria (ipotesi): da verificare dal vivo col grezzo
-    "detent": {-1: "BETWEEN", 0: "REVERSE", 1: "REVERSE IDLE", 2: "IDLE", 3: "CLIMB", 4: "FLX", 5: "TOGA"},  # virtuale, dalla calibrazione (thrust.py)
+    "detent": {-1: "BETWEEN", 0: "REVERSE", 1: "REVERSE IDLE", 2: "IDLE", 3: "CLIMB", 4: "FLX", 5: "TOGA"},  # virtuale, dalle LVar INPUT/GATE (thrust.py)
     "autobrake": {0: "OFF", 1: "LO", 2: "MED", 3: "MAX"},  # virtuale, dalle tre lampade (autobrake_state)
     "gsx": GSX_STATES,
     "numeric": {},  # nessuna mappa: si mostra solo il valore (nessun esito)
@@ -168,18 +168,12 @@ ITEMS: list[Item] = [
     Item("fuel_weight", "Weight & fuel", "Fuel weight (MSFS, lbs)", "numeric", {}, "(A:FUEL TOTAL QUANTITY WEIGHT, Pounds)"),
     Item("zfw_calc", "Weight & fuel", "ZFW calc. (MSFS total - fuel, Fenix unit)", "numeric"),  # virtuale, solo da mostrare
     Item("vs_fpm", FLIGHT_GROUP, "VS (fpm)", "numeric"),  # virtuale: A:VERTICAL SPEED del core (stessa della pill VS), per il check "lt" della checklist
-    # Thrust levers: solo valori correnti (soglie dei detent da ricavare dal vivo)
+    # Thrust levers: INPUT 0..5 e GATE 10..5 (gate = 10 - input) per leva
     Item("thr_gate_l", "Thrust", "Throttle gate L (raw)", "numeric", {}, None, "A_FC_THROTTLE_LEFT_GATE"),  # solo grezzo
     Item("thr_gate_r", "Thrust", "Throttle gate R (raw)", "numeric", {}, None, "A_FC_THROTTLE_RIGHT_GATE"),  # solo grezzo
     Item("thr_in_l", "Thrust", "Throttle input L (raw)", "numeric", {}, None, "A_FC_THROTTLE_LEFT_INPUT"),  # solo grezzo
     Item("thr_in_r", "Thrust", "Throttle input R (raw)", "numeric", {}, None, "A_FC_THROTTLE_RIGHT_INPUT"),  # solo grezzo
-    Item("thr_pos_1", "Thrust", "Throttle lever pos 1 (raw)", "numeric", {}, None, "WT_VIRTUAL_THROTTLE_LEVER_POS_1"),  # solo grezzo
-    Item("thr_pos_2", "Thrust", "Throttle lever pos 2 (raw)", "numeric", {}, None, "WT_VIRTUAL_THROTTLE_LEVER_POS_2"),  # solo grezzo
-    Item("thr_rev_l", "Thrust", "Throttle max reverse L (raw)", "numeric", {}, None, "S_FC_THROTTLE_LEFT_MAX_REVERSE"),  # solo grezzo
-    Item("thr_rev_r", "Thrust", "Throttle max reverse R (raw)", "numeric", {}, None, "S_FC_THROTTLE_RIGHT_MAX_REVERSE"),  # solo grezzo
-    Item("thr_pos_3", "Thrust", "Throttle lever pos 3 (raw)", "numeric", {}, None, "WT_VIRTUAL_THROTTLE_LEVER_POS_3"),  # solo diagnostica
-    Item("thr_pos_4", "Thrust", "Throttle lever pos 4 (raw)", "numeric", {}, None, "WT_VIRTUAL_THROTTLE_LEVER_POS_4"),  # solo diagnostica
-    # Virtuali (nessuna sorgente): detent calcolato dalla calibrazione; None se non calibrato o dato assente
+    # Virtuali (nessuna sorgente): detent calcolato da thr_in_* e thr_gate_* (thrust.py); None se non leggibile
     Item("thr_det_l", "Thrust", "Thrust lever L detent", "detent"),
     Item("thr_det_r", "Thrust", "Thrust lever R detent", "detent"),
     # Dati di volo correnti (sola lettura, solo standard: nessuna L-var). Segni MSFS: pitch + = muso giu', bank + = sinistra.

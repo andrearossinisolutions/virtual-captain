@@ -207,10 +207,8 @@ def test_qnh_source_in_detail():
 
 def test_detent():
     one, two = {"detent": "IDLE"}, {"detent": ["FLX", "TOGA"]}
-    cal, none = {"cal.thrust": "1"}, {"cal.thrust": ""}
+    cal = None  # nessuna calibrazione: il controllo e' sempre attivo
     both = lambda l, r: {"thr_det_l": l, "thr_det_r": r}
-    assert evaluate(one, both("IDLE", "IDLE"), expected=none)["status"] == "none"  # non calibrato: solo NOW
-    assert evaluate(one, both("IDLE", "IDLE"), expected=None)["status"] == "none"
     assert evaluate(one, both("IDLE", "IDLE"), expected=cal) == {"status": "ok", "kind": "ok", "detail": ""}
     r = evaluate(one, both("IDLE", "CLIMB"), expected=cal)
     assert r["status"] == "bad" and r["detail"] == "Thrust lever R detent: expected IDLE, actual CLIMB"
@@ -287,7 +285,7 @@ def test_gate_in_evaluate():
     assert evaluate(c, {"gear": "UP"}, gate=unk)["status"] == "wait"  # quota non leggibile: in attesa
     assert evaluate({"show": ["gear"]}, {"gear": "UP"}, gate=rule)["status"] == "none"  # show: nessun gate
     assert evaluate(None, {}, gate=rule)["status"] == "none"
-    assert evaluate({"detent": "CLIMB"}, {}, gate=rule)["status"] == "none"  # esito none (non calibrato): nessun gate
+    assert evaluate({"detent": "CLIMB"}, {}, gate=rule)["status"] == "wait"  # detent non leggibile (na): il gate vale e la voce attende
 
 
 def test_landing_gate_rules():

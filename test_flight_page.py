@@ -29,10 +29,8 @@ def js_ids():
     return set(re.findall(r'\$\("([A-Za-z0-9_-]+)"\)', JS))
 
 
-# id usati da app.js che la pagina remota NON ha di proposito (briefing, calibrazione, scaricamento DLL, comandi):
-LOCAL_ONLY = {"deploc", "simdll", "tech", "thrback", "thrcal", "thrcard", "thrclear",
-              "thrclose", "threrr", "thrmsg", "thrnext", "thrsum", "thrsumtxt", "thrskip", "thrcancel",
-              "thrstart", "thrst", "thrtab", "thrtext", "thrtitle", "thrwarn", "thrbtns", "banner", "rdata", "rerr"}
+# id usati da app.js che la pagina remota NON ha di proposito (briefing, scaricamento DLL, comandi):
+LOCAL_ONLY = {"deploc", "simdll", "tech", "banner", "rdata", "rerr"}
 REMOTE_ONLY = {"banner", "rdata", "rerr"}
 
 
@@ -56,7 +54,7 @@ def test_flight_html_has_the_views_the_remote_render_needs():
 
 def test_flight_html_briefing_section_has_no_technical_or_local_only_controls():
     cfg = FLIGHT[FLIGHT.index('<section id="cfg">'):FLIGHT.index('<section id="flt"')]
-    for local in ("tech", "thr", "simdll", "Calibrat", "Download", "deploc"):
+    for local in ("tech", "simdll", "Calibrat", "Download", "deploc"):
         assert local not in cfg, local
     assert 'id="simretry"' in cfg and 'id="simstat"' in cfg and 'id="go"' in cfg
 
@@ -92,11 +90,10 @@ def test_polling_is_one_second_in_flight_and_three_when_not_connected_with_backo
 
 def test_index_style_ids_exist_in_the_css():
     css = (ROOT / "web" / "app.css").read_text(encoding="utf-8")
-    for sel in ("#loadp", "#thrtitle", "#thrtext", "#thrwarn", "#threrr", "#thrbtns", "#thrmsg", "#thrst", "#simstat", "#endp",
-                ".row>.f2", ".row>.f1", ".xs", "#thrclose", "#end", "#load"):
+    for sel in ("#loadp", "#simstat", "#endp", ".row>.f2", ".row>.f1", "#end", "#load"):
         assert sel in css, sel
         if sel.startswith("#"):
-            assert 'id="%s"' % sel[1:].split(",")[0] in INDEX or sel in ("#thrclose,#end,#load",), sel
+            assert 'id="%s"' % sel[1:].split(",")[0] in INDEX or sel in ("#end,#load",), sel
 
 
 # ---------------------------------------------------------------- app.js remoto con node

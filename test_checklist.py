@@ -540,7 +540,6 @@ def test_flap_and_taxi_alt_links():
 
 def test_thrust_levers_show():
     cl = C.load()
-    keys = ["thr_gate_l", "thr_gate_r", "thr_pos_1", "thr_pos_2"]
     assert cl.links["takeoff.thrust-levers"] == {"check": {"detent": "BETWEEN"}, "verified": True}  # 50% N1: leve fuori dai detent (BETWEEN)
     det = {"before-start.thrust-levers": "IDLE", "takeoff.thrust-levers_2": ["FLX", "TOGA"], "takeoff.thrust-levers_3": "CLIMB",
            "go-around.thrust-levers": "TOGA", "go-around.thrust-levers_2": "CLIMB", "landing.thrust-levers": "IDLE",
@@ -548,7 +547,7 @@ def test_thrust_levers_show():
     for i, d in det.items():
         assert cl.links[i] == {"check": {"detent": d}, "verified": True}, i
         assert C.check_keys(cl.links[i]["check"]) == ["thr_det_l", "thr_det_r"]
-    assert [i.group for i in mon.ITEMS if i.key.startswith("thr_")] == ["Thrust"] * 12
+    assert [i.group for i in mon.ITEMS if i.key.startswith("thr_")] == ["Thrust"] * 6
     for bad in ({"detent": "NOPE"}, {"detent": []}, {"detent": "IDLE", "x": 1}, {"detent": ["IDLE", "BETWEEN"]}):  # BETWEEN solo da solo
         try:
             C._check_keys(bad, "x")
@@ -561,18 +560,18 @@ def test_thrust_levers_show():
         assert False
     except ValueError:
         pass
-    # righe: non calibrato -> solo NOW con i 4 grezzi; calibrato -> dettaglio dei detent
-    raw4 = {"thr_gate_l": "0.1", "thr_gate_r": "0.2", "thr_pos_1": "3", "thr_pos_2": "4"}
-    rows = {i["id"]: i for s in cl.evaluate_phase("landing", raw4, True, expected={"cal.thrust": ""})["subphases"] for i in s["items"]}
+    # righe: dettaglio dei detent (sempre attivo); detent non leggibile -> "na" con i grezzi gate
+    raw2 = {"thr_gate_l": "0.1", "thr_gate_r": "0.2"}
+    rows = {i["id"]: i for s in cl.evaluate_phase("landing", raw2, True)["subphases"] for i in s["items"]}
     r = rows["landing.thrust-levers"]
-    assert r["status"] == "none" and r["show"] is True and [v[1] for v in r["live"]] == ["0.1", "0.2", "3", "4"]
-    rows = {i["id"]: i for s in cl.evaluate_phase("landing", {"thr_det_l": "IDLE", "thr_det_r": "CLIMB", **raw4}, True, expected={"cal.thrust": "1"})["subphases"] for i in s["items"]}
+    assert r["status"] == "na" and [v[1] for v in r["live"]] == ["0.1", "0.2"]
+    rows = {i["id"]: i for s in cl.evaluate_phase("landing", {"thr_det_l": "IDLE", "thr_det_r": "CLIMB", **raw2}, True)["subphases"] for i in s["items"]}
     r = rows["landing.thrust-levers"]
     assert r["status"] == "bad" and "show" not in r and r["live"] == [["Thrust lever L detent", "IDLE"], ["Thrust lever R detent", "CLIMB"]]
     assert "actual CLIMB" in r["detail"]
-    raw = cl.evaluate_phase("landing", {}, True, raw={"thr_det_l": 2, "thr_gate_l": 0.5}, expected={"cal.thrust": "1"})
+    raw = cl.evaluate_phase("landing", {}, True, raw={"thr_det_l": 2, "thr_gate_l": 0.5})
     names = [n for s in raw["subphases"] for i in s["items"] if i["id"] == "landing.thrust-levers" for n, _ in i["raw"]]
-    assert names[:2] == ["Thrust lever L detent", "Thrust lever R detent"] and len(names) == 6
+    assert names[:2] == ["Thrust lever L detent", "Thrust lever R detent"] and len(names) == 4
 
 
 def test_inputs_items():
@@ -989,7 +988,7 @@ def test_gates_landing_and_go_around():
     st = _gated_state("landing")
     st.set_core({"on_ground": 0, "agl": 300, "alt": 400, "vs": -700, "ias": 140})
     st.set_monitor({"spoilers": 0})
-    assert _rows(st)["landing.ground-spoilers"]["gate"] == "on ground"  # le voci thrust-levers sono detent: senza calibrazione solo NOW (nessun gate)
+    assert _rows(st)["landing.ground-spoilers"]["gate"] == "on ground"  # le voci thrust-levers sono detent: gate attivo anche sulle leve
     st.set_core({"on_ground": 1, "agl": 0, "alt": 100, "vs": 0, "ias": 60})
     st.set_monitor({"spoilers": 0})
     assert _rows(st)["landing.ground-spoilers"]["status"] in ("ok", "bad")
