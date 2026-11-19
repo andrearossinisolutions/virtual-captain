@@ -240,6 +240,56 @@ class DeviceCodes:
                             "AND expires_at>? LIMIT 1", (family_id, now)).fetchone()
         return row is not None
 
+    # ---- website side: the signed-in user's own programs ----
+    def handle(self, family_id: str) -> str:
+        """Opaque id of a family for the browser: keyed HMAC, not derivable from the family id."""
+        return self.limiter.key("dev:" + family_id)[:24]
+
+    def list_for_user(self, user_id: int) -> list:
+        """One entry per live authorisation (not revoked, not expired): {id, name, last_used_at,
+        expires_at}. No IP (never stored). `online` is added by the router from the hub."""
+        now = self.clock()
+        with self.db.read() as c:
+            rows = c.execute("SELECT family_id, device_name, last_used_at, expires_at FROM device_tokens "
+                             "WHERE user_id=? AND revoked_at IS NULL AND expires_at>? "
+                             "ORDER BY created_at DESC, id DESC", (user_id, now)).fetchall()
+        seen, out = set(), []
+        for r in rows:
+            if r["family_id"] in seen:
+                continue
+            seen.add(r["family_id"])
+            out.append({"id": self.handle(r["family_id"]), "name": r["device_name"],
+                        "last_used_at": r["last_used_at"], "expires_at": r["expires_at"],
+                        "family_id": r["family_id"]})
+        return out
+
+    def _mine_keys(self, user_id: int) -> list:
+        return [f"drev:u:{user_id}"]
+
+    def revoke_for_user(self, user_id: int, handle) -> str:
+        """Revokes the family with this handle, if it is the user's own; returns its family_id.
+        Unknown or someone else's: the same 404, counted by the limiter."""
+        keys = self._mine_keys(user_id)
+        self._guard(keys)
+        match = None
+        if isinstance(handle, str) and len(handle) <= 64:
+            for d in self.list_for_user(user_id):
+                if same(d["id"], handle):
+                    match = d["family_id"]
+        if match is None:
+            self._wrong(keys, DeviceError(404, "not_found"))
+        with self.db.tx() as c:
+            c.execute("UPDATE device_tokens SET revoked_at=? WHERE family_id=? AND user_id=? "
+                      "AND revoked_at IS NULL", (self.clock(), match, user_id))
+        return match
+
+    def revoke_all_for_user(self, user_id: int) -> None:
+        """Revokes every live authorisation of the user and drops codes approved but not yet collected."""
+        with self.db.tx() as c:
+            c.execute("UPDATE device_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL",
+                      (self.clock(), user_id))
+            c.execute("DELETE FROM device_codes WHERE user_id=?", (user_id,))
+
     # ---- website side (signed in) ----
     def _keys(self, sess: dict, ip: str) -> list:
         return [f"dcode:s:{sess['sid']}", f"dcode:i:{ip}", f"dcode:u:{sess['uid']}"]

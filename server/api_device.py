@@ -8,12 +8,13 @@ from fastapi.responses import JSONResponse
 
 from server.accounts import Accounts, AccountError
 from server.api_auth import _body, _fail, client_ip, current_session, origin_check
+from server import wire
 from server.devicecode import DeviceCodes, DeviceError
 
 OK = {"ok": True}
 
 
-def build_device_router(accounts: Accounts, devices: DeviceCodes) -> APIRouter:
+def build_device_router(accounts: Accounts, devices: DeviceCodes, hub=None) -> APIRouter:
     router = APIRouter(prefix="/api/device")
     base = accounts.cfg.public_base_url
 
@@ -81,6 +82,36 @@ def build_device_router(accounts: Accounts, devices: DeviceCodes) -> APIRouter:
         sess = current_session(accounts, request, True)
         data = await _body(request)
         devices.decide(sess, data.get("user_code"), client_ip(request), False)
+        return JSONResponse(OK)
+
+    @router.get("/mine", include_in_schema=False)
+    async def mine(request: Request):
+        try:
+            sess = current_session(accounts, request, False)
+        except AccountError as e:
+            return _fail(e.status, e.code)
+        out = []
+        for d in devices.list_for_user(sess["uid"]):
+            online = hub is not None and hub.is_online(sess["uid"], d.pop("family_id"))
+            out.append(dict(d, online=online))
+        return JSONResponse({"devices": out})
+
+    @post("/mine/revoke")
+    async def mine_revoke(request):
+        sess = current_session(accounts, request, True)
+        data = await _body(request)
+        family = devices.revoke_for_user(sess["uid"], data.get("id"))
+        if hub is not None:
+            await hub.close_family(sess["uid"], family, wire.CLOSE_REVOKED)
+        return JSONResponse(OK)
+
+    @post("/mine/revoke-all")
+    async def mine_revoke_all(request):
+        sess = current_session(accounts, request, True)
+        await _body(request)
+        devices.revoke_all_for_user(sess["uid"])
+        if hub is not None:
+            await hub.close_user(sess["uid"], wire.CLOSE_REVOKED)
         return JSONResponse(OK)
 
     return router

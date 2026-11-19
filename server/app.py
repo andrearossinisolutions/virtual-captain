@@ -93,8 +93,13 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
         from server.hub import Hub
         hub = Hub(stale_after=config.agent_stale_after)  # in RAM: --workers 1 is mandatory
         app.state.hub = hub
+        from server import wire
+
+        async def close_program(user_id: int) -> None:  # password change, reset, deletion: no 10 s wait
+            await hub.close_user(user_id, wire.CLOSE_REVOKED)
+        accounts.on_revoke = close_program
         app.include_router(build_router(accounts))
-        app.include_router(build_device_router(accounts, devices))
+        app.include_router(build_device_router(accounts, devices, hub))
         app.include_router(build_agent_router(accounts, devices, hub))
 
     @app.middleware("http")

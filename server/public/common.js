@@ -12,6 +12,7 @@ var VC = (function () {
     too_large: "Please check the values you entered.",
     confirm_mismatch: "The characters do not match the code shown on your PC.",
     invalid_code: "This code is not valid, has expired or was already used. Start again from the program.",
+    not_found: "This program is no longer linked.",
     forbidden: "Please reload the page and try again."
   };
 

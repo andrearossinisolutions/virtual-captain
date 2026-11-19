@@ -174,6 +174,17 @@ def test_simbrief_label_everywhere():
         assert "SimBrief Pilot ID or username" in (PUBLIC_DIR / name).read_text(encoding="utf-8")
 
 
+def test_account_page_has_the_linked_programs_card():
+    html = (PUBLIC_DIR / "account.html").read_text(encoding="utf-8")
+    js = (PUBLIC_DIR / "account.js").read_text(encoding="utf-8")
+    assert "Linked programs" in html and "linked again" in html
+    for ident in ("devices", "msg-devices", "revoke-all"):
+        assert f'id="{ident}"' in html and ident in js
+    for path in ("/api/device/mine", "/api/device/mine/revoke", "/api/device/mine/revoke-all"):
+        assert path in js
+    assert "innerHTML" not in js and "textContent" in js  # names come from the server: text only
+
+
 def test_pages_and_scripts_match_the_module_tables():
     assert srv.ACCOUNT_PAGES["/account"] == "account.html"
     assert all((PUBLIC_DIR / n).is_file() for n in

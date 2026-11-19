@@ -23,6 +23,13 @@
 </form>
 </div>
 <div class="card">
+<h2>Linked programs</h2>
+<p class="hint">Programs on your PC that are linked to this account. After a revoke the program stops being connected and must be linked again.</p>
+<div id="devices"></div>
+<p class="msg" id="msg-devices" role="status" aria-live="polite"></p>
+<button type="button" id="revoke-all" class="danger" hidden>Revoke all</button>
+</div>
+<div class="card">
 <form id="password" method="post" novalidate>
 <h2>Change password</h2>
 <label for="current_password">Current password</label>

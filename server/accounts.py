@@ -57,6 +57,15 @@ class Accounts:
         self.cfg, self.db, self.mailer, self.clock = config, db, mailer, clock
         self.limiter = RateLimiter(db, clock, config.secret_key)
         self._last_cleanup = None
+        # async callable(user_id) set by app.py: closes the live program of the account right away
+        self.on_revoke: Optional[Callable[[int], object]] = None
+
+    async def _notify_revoked(self, user_id: int) -> None:
+        if self.on_revoke is not None:
+            try:
+                await self.on_revoke(user_id)
+            except Exception:  # noqa: BLE001  (the 10 s re-check closes it anyway; never log details)
+                log.warning("closing the program after a revocation failed")
 
     def maybe_cleanup(self) -> None:
         """First call after startup, then at most every 10 minutes: expired sessions, used or
@@ -305,6 +314,7 @@ class Accounts:
             c.execute("DELETE FROM sessions WHERE user_id=? AND id<>?", (sess["uid"], sess["sid"]))
             self._revoke_devices(c, sess["uid"], self.clock())
             c.execute("DELETE FROM email_tokens WHERE user_id=? AND kind='reset'", (sess["uid"],))
+        await self._notify_revoked(sess["uid"])
 
     async def change_email(self, sess: dict, new_email, password) -> Optional[Mail]:
         em = normalize_email(new_email)
@@ -337,6 +347,7 @@ class Accounts:
             c.execute("DELETE FROM users WHERE id=?", (sess["uid"],))  # cascades
             c.execute("DELETE FROM login_failures WHERE key=?", (key,))
             c.execute("DELETE FROM rate_events WHERE key=?", (key,))
+        await self._notify_revoked(sess["uid"])
 
     # ---- password reset ----
     def request_reset(self, email, ip: str) -> Optional[Mail]:
@@ -373,3 +384,4 @@ class Accounts:
             self._revoke_devices(c, uid, self.clock())
             c.execute("DELETE FROM email_tokens WHERE user_id=?", (uid,))
             c.execute("DELETE FROM login_failures WHERE key=?", (self.limiter.key(email),))
+        await self._notify_revoked(uid)

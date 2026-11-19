@@ -144,5 +144,30 @@ class Hub:
                 conn.pending = None
             conn.busy = False
 
+    def is_online(self, user_id: int, family_id: str) -> bool:
+        """True while the live connection of `user_id` belongs to this authorisation family."""
+        conn = self._agents.get(user_id)
+        return (conn is not None and conn.family_id == family_id
+                and self.monotonic() - conn.last_seen < self.stale_after)
+
+    async def _close_conn(self, conn: AgentConn, code: int, timeout: float) -> None:
+        self.drop_pending(conn)  # whoever waits for a result gets "offline" right away
+        try:
+            await asyncio.wait_for(conn.websocket.close(code=code), timeout)
+        except Exception:  # noqa: BLE001  (already closed, or too slow: give up)
+            pass
+
+    async def close_family(self, user_id: int, family_id: str, code: int, timeout: float = 5.0) -> None:
+        """Closes the live connection of `user_id` if it belongs to `family_id` (no DB access)."""
+        conn = self._agents.get(user_id)
+        if conn is not None and conn.family_id == family_id:
+            await self._close_conn(conn, code, timeout)
+
+    async def close_user(self, user_id: int, code: int, timeout: float = 5.0) -> None:
+        """Closes the live connection of `user_id`, whatever its family (no DB access)."""
+        conn = self._agents.get(user_id)
+        if conn is not None:
+            await self._close_conn(conn, code, timeout)
+
     def count(self) -> int:
         return len(self._agents)
