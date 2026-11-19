@@ -8,6 +8,7 @@ var VC = (function () {
     invalid_token: "This link is invalid or has expired.",
     invalid_credentials: "Email or password is incorrect.",
     too_many_attempts: "Too many attempts. Please try again later.",
+    busy: "Server busy, try again in a few seconds.",
     unauthenticated: "Your session has ended. Please sign in again.",
     too_large: "Please check the values you entered.",
     confirm_mismatch: "The characters do not match the code shown on your PC.",

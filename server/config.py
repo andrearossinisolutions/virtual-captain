@@ -113,6 +113,9 @@ class AppConfig:
     agent_hello_timeout: float = 5.0
     agent_family_recheck: float = 10.0
     agent_max_lifetime: float = 86400.0
+    account_user_minute: int = 10        # signed-in writes/hashes per user per minute (RAM)
+    account_ip_minute: int = 60          # the same, per IP
+    hash_queue_max: int = 8              # hashes waiting or running; above it: 503
     remote_commands: bool = True         # VC_REMOTE_COMMANDS=off: kill switch, the command route answers 503
 
 
@@ -185,5 +188,8 @@ def load_app_config(env: Mapping[str, str] = os.environ) -> AppConfig:
         agent_hello_timeout=float(_int(env, "AGENT_HELLO_TIMEOUT_SECONDS", 5)),
         agent_family_recheck=float(_int(env, "AGENT_FAMILY_RECHECK_SECONDS", 10)),
         agent_max_lifetime=float(_int(env, "AGENT_MAX_LIFETIME_SECONDS", 86400)),
+        account_user_minute=_int(env, "RATE_ACCOUNT_USER_MINUTE", 10),
+        account_ip_minute=_int(env, "RATE_ACCOUNT_IP_MINUTE", 60),
+        hash_queue_max=_int(env, "HASH_QUEUE_MAX", 8),
         remote_commands=(env.get("VC_REMOTE_COMMANDS") or "").strip().lower() != "off",
     )

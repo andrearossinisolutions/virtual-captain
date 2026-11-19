@@ -33,8 +33,9 @@ def client_ip(request: Request) -> str:
     return client_ip_from(request.client.host if request.client else "", request.headers)
 
 
-def _fail(status: int, code: str) -> JSONResponse:
-    return JSONResponse({"error": code}, status_code=status)
+def _fail(status: int, code: str, retry_after=None) -> JSONResponse:
+    headers = {"Retry-After": str(retry_after)} if retry_after else None
+    return JSONResponse({"error": code}, status_code=status, headers=headers)
 
 
 async def _body(request: Request) -> dict:
@@ -70,7 +71,8 @@ def origin_check(base: str, request: Request) -> None:
         raise AccountError(403, "forbidden")
 
 
-def current_session(accounts: Accounts, request: Request, need_csrf: bool) -> dict:
+def current_session(accounts: Accounts, request: Request, need_csrf: bool,
+                    limit: bool = False) -> dict:
     sess = accounts.session(request.cookies.get(COOKIE))
     if sess is None:
         raise AccountError(401, "unauthenticated")
@@ -79,6 +81,11 @@ def current_session(accounts: Accounts, request: Request, need_csrf: bool) -> di
         sent = request.headers.get("x-csrf-token") or ""
         if not sent or not same(sent, sess["csrf"]):
             raise AccountError(403, "forbidden")
+        if limit:  # hashing / sensitive account routes only: RAM limits, nothing written to the DB
+            cfg, lim = accounts.cfg, accounts.user_limiter
+            if not (lim.allow("acct_user", str(sess["uid"]), cfg.account_user_minute, 60)
+                    and lim.allow("acct_ip", client_ip(request), cfg.account_ip_minute, 60)):
+                raise AccountError(429, "too_many_attempts", 60)
     return sess
 
 
@@ -89,8 +96,8 @@ def build_router(accounts: Accounts) -> APIRouter:
     def check_origin(request: Request) -> None:
         origin_check(base, request)
 
-    def current(request: Request, need_csrf: bool) -> dict:
-        return current_session(accounts, request, need_csrf)
+    def current(request: Request, need_csrf: bool, limit: bool = False) -> dict:
+        return current_session(accounts, request, need_csrf, limit)
 
     def set_cookie(resp: JSONResponse, token: str) -> None:
         resp.set_cookie(COOKIE, token, max_age=int(SESSION_ABSOLUTE), path="/",
@@ -102,7 +109,7 @@ def build_router(accounts: Accounts) -> APIRouter:
             try:
                 return await fn(request, background)
             except AccountError as e:
-                return _fail(e.status, e.code)
+                return _fail(e.status, e.code, e.retry_after)
         wrapper.__name__ = fn.__name__
         return wrapper
 
@@ -134,8 +141,9 @@ def build_router(accounts: Accounts) -> APIRouter:
     async def verify(request, background):
         check_origin(request)
         data = await _body(request)
-        kind, session = await accounts.verify(data.get("token"), data.get("password"),
+        kind, session, notice = await accounts.verify(data.get("token"), data.get("password"),
                                               client_ip(request))
+        queue(background, notice)
         if session is None:  # email change: every session was closed, log in again
             return JSONResponse({"ok": True, "kind": kind})
         resp = JSONResponse({"ok": True, "kind": kind, "csrf_token": session[1]})
@@ -170,8 +178,8 @@ def build_router(accounts: Accounts) -> APIRouter:
     async def reset(request, background):
         check_origin(request)
         data = await _body(request)
-        await accounts.reset_password(data.get("token"), data.get("password"),
-                                      client_ip(request))
+        queue(background, await accounts.reset_password(data.get("token"), data.get("password"),
+                                                        client_ip(request)))
         return JSONResponse(OK)
 
     @router.get("/me", include_in_schema=False)
@@ -179,28 +187,28 @@ def build_router(accounts: Accounts) -> APIRouter:
         try:
             sess = current(request, False)
         except AccountError as e:
-            return _fail(e.status, e.code)
+            return _fail(e.status, e.code, e.retry_after)
         return JSONResponse({"email": sess["email"], "verified": sess["verified"],
                              "simbrief_id": sess["simbrief_id"], "csrf_token": sess["csrf"]})
 
     @post("/settings")
     async def settings(request, background):
-        sess = current(request, True)
+        sess = current(request, True, True)
         data = await _body(request)
         return JSONResponse({"ok": True, "simbrief_id":
                              accounts.set_simbrief_id(sess, data.get("simbrief_id"))})
 
     @post("/password")
     async def password(request, background):
-        sess = current(request, True)
+        sess = current(request, True, True)
         data = await _body(request)
-        await accounts.change_password(sess, data.get("current_password"),
-                                       data.get("new_password"))
+        queue(background, await accounts.change_password(sess, data.get("current_password"),
+                                                         data.get("new_password")))
         return JSONResponse(OK)
 
     @post("/email")
     async def email(request, background):
-        sess = current(request, True)
+        sess = current(request, True, True)
         data = await _body(request)
         queue(background, await accounts.change_email(sess, data.get("new_email"),
                                                       data.get("password")))
@@ -208,7 +216,7 @@ def build_router(accounts: Accounts) -> APIRouter:
 
     @post("/delete")
     async def delete(request, background):
-        sess = current(request, True)
+        sess = current(request, True, True)
         data = await _body(request)
         await accounts.delete_account(sess, data.get("password"))
         resp = JSONResponse(OK)

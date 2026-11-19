@@ -258,7 +258,7 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
         try:
             sess = current_session(accounts, request, False)
         except AccountError as e:
-            return _fail(e.status, e.code)
+            return _fail(e.status, e.code, e.retry_after)
         return JSONResponse({"connected": hub.status(sess["uid"])})
 
     def client_key(request: Request) -> str:
@@ -270,7 +270,7 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
         try:
             sess = current_session(accounts, request, False)
         except AccountError as e:
-            return _fail(e.status, e.code)
+            return _fail(e.status, e.code, e.retry_after)
         if (not mem.allow("flight_user", str(sess["uid"]), FLIGHT_PER_USER_MINUTE, 60.0)
                 or not mem.allow("flight_ip", client_key(request), FLIGHT_PER_IP_MINUTE, 60.0)):
             return JSONResponse({"error": "rate_limited"}, status_code=429, headers={"Retry-After": "5", "Vary": "Cookie"})
@@ -328,7 +328,7 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
         try:
             sess = current_session(accounts, request, True)
         except AccountError as e:
-            return _fail(e.status, e.code)
+            return _fail(e.status, e.code, e.retry_after)
         if name not in wire.ENABLED_COMMANDS:
             return cmd_error(404, "not_found")
         if not cfg.remote_commands:

@@ -64,13 +64,13 @@ def cfg(tmp_path, **kw):
 def env(tmp_path):
     clock, mailer = Clock(), Mailer()
     app = create_app(cfg(tmp_path), mailer=mailer, clock=clock)
-    client = TestClient(app, base_url="https://testserver")
+    client = TestClient(app, base_url="https://vc.example.test")
     return client, mailer, clock, tmp_path
 
 
 def make_client(tmp_path, clock, mailer, peer=("203.0.113.9", 4000), **kw):
     app = create_app(cfg(tmp_path, **kw), mailer=mailer, clock=clock)
-    return TestClient(app, base_url="https://testserver", client=peer)
+    return TestClient(app, base_url="https://vc.example.test", client=peer)
 
 
 def register(client, email="a@example.test", simbrief_id=None):
@@ -597,7 +597,7 @@ def test_login_ip_limit(tmp_path):
 def test_change_password_revokes_other_sessions(env):
     client, mailer, _, tmp = env
     csrf = logged(client, mailer)
-    other = TestClient(client.app, base_url="https://testserver")
+    other = TestClient(client.app, base_url="https://vc.example.test")
     assert login(other).status_code == 200
     assert other.get("/api/auth/me").status_code == 200
     body = {"current_password": "wrong wrong wrong", "new_password": PW2}
@@ -606,8 +606,8 @@ def test_change_password_revokes_other_sessions(env):
     assert client.post("/api/auth/password", json=body, headers=hdr(csrf)).status_code == 200
     assert other.get("/api/auth/me").status_code == 401
     assert client.get("/api/auth/me").status_code == 200  # current session survives
-    assert login(TestClient(client.app, base_url="https://testserver"), password=PW).status_code == 401
-    assert login(TestClient(client.app, base_url="https://testserver"), password=PW2).status_code == 200
+    assert login(TestClient(client.app, base_url="https://vc.example.test"), password=PW).status_code == 401
+    assert login(TestClient(client.app, base_url="https://vc.example.test"), password=PW2).status_code == 200
     short = {"current_password": PW2, "new_password": "tiny"}
     assert client.post("/api/auth/password", json=short, headers=hdr(csrf)).status_code == 400
 
@@ -633,7 +633,7 @@ def test_change_email_needs_password_and_new_mailbox_confirmation(env):
 def test_change_email_to_taken_address_gives_same_answer_without_mail(env):
     client, mailer, _, _ = env
     verified(client, mailer, "taken@example.test")
-    other = TestClient(client.app, base_url="https://testserver")
+    other = TestClient(client.app, base_url="https://vc.example.test")
     csrf = logged(other, mailer)
     n = len(mailer.sent)
     r = other.post("/api/auth/email", json={"new_email": "taken@example.test", "password": PW},
@@ -641,8 +641,9 @@ def test_change_email_to_taken_address_gives_same_answer_without_mail(env):
     assert r.status_code == 200 and r.json() == {"ok": True} and len(mailer.sent) == n
 
 
-def test_simbrief_id_validation(env):
-    client, mailer, _, _ = env
+def test_simbrief_id_validation(tmp_path):
+    mailer = Mailer()
+    client = make_client(tmp_path, Clock(), mailer, account_user_minute=100)  # many writes in one test
     csrf = logged(client, mailer)
     for bad in ("1" * 41, "a;b", "<script>", "a\nb", "a/b", "caf\u00e9", "x@y", 5, None):
         r = client.post("/api/auth/settings", json={"simbrief_id": bad}, headers=hdr(csrf))
@@ -687,7 +688,7 @@ def test_delete_account_removes_everything(env):
 def test_user_isolation(env):
     client, mailer, _, _ = env
     csrf_a = logged(client, mailer, "a@example.test")
-    b = TestClient(client.app, base_url="https://testserver")
+    b = TestClient(client.app, base_url="https://vc.example.test")
     csrf_b = logged(b, mailer, "b@example.test", PW2)
     client.post("/api/auth/settings", json={"simbrief_id": "111"}, headers=hdr(csrf_a))
     b.post("/api/auth/settings", json={"simbrief_id": "222"}, headers=hdr(csrf_b))
@@ -699,7 +700,7 @@ def test_user_isolation(env):
     assert b.post("/api/auth/delete", json={"password": PW2}, headers=hdr(csrf_b)).status_code == 200
     assert client.get("/api/auth/me").json()["email"] == "a@example.test"
     # A's password does not open B's address
-    assert login(TestClient(client.app, base_url="https://testserver"), "b@example.test").status_code == 401
+    assert login(TestClient(client.app, base_url="https://vc.example.test"), "b@example.test").status_code == 401
 
 
 # ---------- reset ----------
@@ -718,8 +719,8 @@ def test_reset_flow_revokes_sessions_and_tokens(env):
     assert client.post("/api/auth/reset", json={"token": token, "password": PW2}).status_code == 200
     assert client.post("/api/auth/reset", json={"token": token, "password": PW2}).status_code == 400
     assert client.get("/api/auth/me").status_code == 401  # session revoked
-    assert login(TestClient(client.app, base_url="https://testserver"), password=PW).status_code == 401
-    assert login(TestClient(client.app, base_url="https://testserver"), password=PW2).status_code == 200
+    assert login(TestClient(client.app, base_url="https://vc.example.test"), password=PW).status_code == 401
+    assert login(TestClient(client.app, base_url="https://vc.example.test"), password=PW2).status_code == 200
 
 
 def test_reset_token_expires_and_kinds_do_not_mix(env):
@@ -856,7 +857,8 @@ def test_lying_content_length_cannot_bypass_cap(env):
             sent.append(msg)
 
         scope = {"type": "http", "method": "POST", "path": "/api/auth/login", "query_string": b"",
-                 "headers": [(b"content-type", b"application/json"), (b"content-length", b"10")],
+                 "headers": [(b"host", b"vc.example.test"), (b"content-type", b"application/json"),
+                     (b"content-length", b"10")],
                  "client": ("203.0.113.1", 1), "server": ("t", 443), "scheme": "https",
                  "http_version": "1.1", "root_path": ""}
         await app(scope, receive, send)
@@ -931,7 +933,7 @@ def test_cleanup_removes_expired_rows_and_caps_sessions(env):
     client, mailer, clock, tmp = env
     verified(client, mailer)
     for _ in range(12):
-        assert login(TestClient(client.app, base_url="https://testserver")).status_code == 200
+        assert login(TestClient(client.app, base_url="https://vc.example.test")).status_code == 200
     assert rows(tmp / "t.db", "sessions") == 10  # oldest revoked
     register(client, "old@example.test")
     login(client, "ghost@example.test")
@@ -965,3 +967,88 @@ def test_migration_idempotent_under_reopen(tmp_path):
     c = sqlite3.connect(tmp_path / "m.db")
     assert c.execute("PRAGMA user_version").fetchone()[0] == 4
     c.close()
+
+
+# ---------- C2: purge of unconfirmed sign-ups, security notices ----------
+
+def _exists(path, email):
+    c = sqlite3.connect(path)
+    try:
+        return c.execute("SELECT COUNT(*) FROM users WHERE email=?", (email,)).fetchone()[0] == 1
+    finally:
+        c.close()
+
+
+def test_purge_removes_stale_unverified_but_spares_verified_and_live_links(env):
+    client, mailer, clock, tmp = env
+    verified(client, mailer, "ok@example.test")
+    register(client, "old@example.test")          # link expires after 24 h
+    clock.advance(6 * 24 * 3600)
+    register(client, "fresh@example.test")        # link still alive after the 7 days
+    clock.advance(2 * 24 * 3600)                  # old: 8 days, no live link
+    client.post("/api/auth/forgot", json={"email": "nobody@example.test"})  # runs the cleanup
+    db = tmp / "t.db"
+    assert not _exists(db, "old@example.test")
+    assert _exists(db, "ok@example.test")
+    assert _exists(db, "fresh@example.test")      # younger than 7 days
+    clock.advance(30 * 24 * 3600)
+    clock.advance(601)
+    client.post("/api/auth/forgot", json={"email": "nobody@example.test"})
+    assert _exists(db, "ok@example.test")         # verified: never purged
+    assert not _exists(db, "fresh@example.test")
+
+
+def test_password_change_and_reset_send_a_notice_without_token(tmp_path):
+    mailer = Mailer()  # per-address cap raised: this flow sends 4 mails to the same address
+    client = make_client(tmp_path, Clock(), mailer, mail_addr_hourly=20)
+    csrf = logged(client, mailer)
+    n = len(mailer.sent)
+    body = {"current_password": PW, "new_password": PW2}
+    assert client.post("/api/auth/password", json=body, headers=hdr(csrf)).status_code == 200
+    to, subject, text = mailer.sent[-1]
+    assert len(mailer.sent) == n + 1 and to == "a@example.test"
+    assert "password was changed" in subject and "#" not in text and "http" not in text
+    client.cookies.clear()
+    client.post("/api/auth/forgot", json={"email": "a@example.test"})
+    token = mailer.token()
+    assert client.post("/api/auth/reset", json={"token": token, "password": PW}).status_code == 200
+    to, subject, text = mailer.sent[-1]
+    assert "password was changed" in subject and token not in text and "http" not in text
+
+
+def test_email_change_notice_goes_to_the_old_address_only_after_confirmation(env):
+    client, mailer, _, _ = env
+    csrf = logged(client, mailer)
+    client.post("/api/auth/email", json={"new_email": "new@example.test", "password": PW},
+                headers=hdr(csrf))
+    assert mailer.sent[-1][0] == "new@example.test"
+    n = len(mailer.sent)
+    token = mailer.token()
+    assert vpost(client, token).status_code == 200
+    to, subject, text = mailer.sent[-1]
+    assert len(mailer.sent) == n + 1 and to == "a@example.test"
+    assert "email address was changed" in subject and token not in text and "http" not in text
+
+
+def test_notice_respects_the_other_cap(tmp_path):
+    clock, mailer = Clock(), Mailer()
+    client = make_client(tmp_path, clock, mailer, mail_daily=1, mail_addr_hourly=10)
+    verified(client, mailer)                      # verify group: separate cap
+    csrf = login(client).json()["csrf_token"]
+    body = {"current_password": PW, "new_password": PW2}
+    n = len(mailer.sent)
+    assert client.post("/api/auth/password", json=body, headers=hdr(csrf)).status_code == 200
+    assert len(mailer.sent) == n + 1
+    body = {"current_password": PW2, "new_password": PW}
+    assert client.post("/api/auth/password", json=body, headers=hdr(csrf)).status_code == 200
+    assert len(mailer.sent) == n + 1              # 'other' daily cap reached: no second notice
+
+
+def test_reset_of_unverified_account_does_nothing(env):
+    client, mailer, _, _ = env
+    register(client)
+    n = len(mailer.sent)
+    client.post("/api/auth/forgot", json={"email": "a@example.test"})
+    assert len(mailer.sent) == n
+    assert client.post("/api/auth/reset", json={"token": "z" * 43, "password": PW2}).status_code == 400
+    assert len(mailer.sent) == n

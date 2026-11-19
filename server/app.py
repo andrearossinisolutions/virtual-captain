@@ -9,11 +9,14 @@ import logging
 import os
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 from typing import Callable, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from server import security
 from server.config import AppConfig, check_secret, load_app_config, load_smtp_config
 
 log = logging.getLogger("virtual_captain")
@@ -30,6 +33,8 @@ SECURITY_HEADERS = {
     "Content-Security-Policy": CSP,
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
     "Permissions-Policy": "geolocation=(), camera=(), microphone=(), payment=(), usb=()",
     "X-Robots-Tag": "noindex, nofollow",
     "Cache-Control": "no-cache",
@@ -51,8 +56,7 @@ ACCOUNT_SCRIPTS = {
 WEB_DIR = BASE_DIR.parent / "web"
 WEB_FILES = {"/app.js": ("app.js", "text/javascript; charset=utf-8"), "/app.css": ("app.css", "text/css; charset=utf-8")}
 
-# Known limit: the middleware does not add these headers to unhandled 500 errors
-# (Starlette answers those outside the middleware stack); Apache/clients see a bare 500.
+# Unhandled errors are answered outside the middleware stack: the 500 handler adds the headers itself.
 ROBOTS_TXT = "User-agent: *\nDisallow: /\n"
 
 
@@ -78,6 +82,7 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
     config = config if config is not None else load_app_config()
     check_secret(config.public_base_url, config.secret_key)
     mounted = bool(config.public_base_url)
+    security.set_queue_max(config.hash_queue_max)
     if not mounted:
         log.warning("PUBLIC_BASE_URL is not set: the account API /api/auth/* is NOT mounted")
     else:  # without it the account API stays off (no safe link/Origin)
@@ -89,6 +94,7 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
         from server.devicecode import DeviceCodes
         devices = DeviceCodes(accounts)
         app.state.devices = devices
+        app.state.accounts = accounts
         from server.api_agent import build_agent_router
         from server.hub import Hub
         hub = Hub(stale_after=config.agent_stale_after)  # in RAM: --workers 1 is mandatory
@@ -101,6 +107,20 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
         app.include_router(build_router(accounts))
         app.include_router(build_device_router(accounts, devices, hub))
         app.include_router(build_agent_router(accounts, devices, hub))
+
+    if mounted:  # Host must be the public host (or the local health check of deploy.sh)
+        host = urlparse(config.public_base_url).hostname
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=[host, "127.0.0.1", "localhost"])
+
+    @app.exception_handler(security.HashBusy)
+    async def hash_busy(request: Request, exc: security.HashBusy) -> JSONResponse:
+        return JSONResponse({"error": "busy"}, status_code=503, headers={"Retry-After": "5"})
+
+    @app.exception_handler(Exception)
+    async def server_error(request: Request, exc: Exception) -> JSONResponse:
+        log.error("unhandled error (%s)", type(exc).__name__)  # never the message or the request
+        return JSONResponse({"error": "server_error"}, status_code=500,
+                            headers={**SECURITY_HEADERS, "Cache-Control": "no-store"})
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):

@@ -33,3 +33,18 @@ def email_change_mail(base_url: str, token: str):
             "Confirm this address within 24 hours to use it for your Virtual Captain "
             f"account:\n\n{base_url}/verify#{token}\n\n"
             "If you did not ask for this, ignore this message." + SIGNATURE)
+
+
+def password_changed_mail():
+    return ("Your Virtual Captain password was changed",
+            "The password of your Virtual Captain account was just changed, and every linked "
+            "program and open session was signed out.\n\nIf it was you, nothing else to do. "
+            "If it was not you, use the password reset option on the sign-in page right away."
+            + SIGNATURE)
+
+
+def email_changed_mail():
+    return ("Your Virtual Captain email address was changed",
+            "The email address of your Virtual Captain account was just changed to a new "
+            "one, and every open session was signed out. This address no longer belongs to "
+            "the account.\n\nIf it was not you, contact the owner of the service." + SIGNATURE)

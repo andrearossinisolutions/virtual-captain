@@ -51,7 +51,7 @@ class AgentEnv(Env):
     def ws(self, token=None, client=None, headers=None, path="/ws/agent"):
         h = {} if headers is not None else {"Authorization": "Bearer " + (token or self.access)}
         h.update(headers or {})
-        return (client or self.prog).websocket_connect(path, headers=h)
+        return (client or self.prog).websocket_connect("wss://vc.example.test" + path, headers=h)
 
 
 @pytest.fixture
@@ -344,7 +344,7 @@ def test_verify_access_and_family_active(env):
 
 def second_account(e):
     from fastapi.testclient import TestClient as TC
-    web2 = TC(e.app, base_url="https://testserver", client=("203.0.113.77", 4000))
+    web2 = TC(e.app, base_url="https://vc.example.test", client=("203.0.113.77", 4000))
     web2.__enter__()
     csrf2 = logged(web2, e.mailer, email="b@example.test")
     s = e.start()
@@ -373,7 +373,7 @@ def test_status_is_isolated_between_accounts(env):
 
 def test_status_needs_a_session_and_is_never_cached(env):
     from fastapi.testclient import TestClient as TC
-    anon = TC(env.app, base_url="https://testserver")
+    anon = TC(env.app, base_url="https://vc.example.test")
     r = anon.get("/api/agent/status")
     assert r.status_code == 401 and r.headers["cache-control"] == "no-store"
     r = env.status()
@@ -440,8 +440,8 @@ def test_per_ip_limit_429_counts_failures_too(make_env):
 
 def test_forwarded_for_is_trusted_only_from_loopback(make_env):
     e = make_env(agent_ip_per_minute=1)
-    lo = TestClient(e.app, base_url="https://testserver", client=("127.0.0.1", 1))
-    other = TestClient(e.app, base_url="https://testserver", client=("203.0.113.50", 1))
+    lo = TestClient(e.app, base_url="https://vc.example.test", client=("127.0.0.1", 1))
+    other = TestClient(e.app, base_url="https://vc.example.test", client=("203.0.113.50", 1))
     bad = "x" * 43
     with lo, other:
         # behind the local Apache: the LAST X-Forwarded-For value is the client

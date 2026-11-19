@@ -215,7 +215,7 @@ def test_parse_caps():
 
 def test_needs_a_session_first_even_for_local_only_names(env):
     from fastapi.testclient import TestClient
-    anon = TestClient(env.app, base_url="https://testserver")
+    anon = TestClient(env.app, base_url="https://vc.example.test")
     for name in ("fields", "simdll-fetch", "thrust-cal", "nonsense"):
         r = anon.post("/api/flight/cmd/" + name, json={}, headers=hdr(env.csrf))
         assert r.status_code == 401 and r.headers["cache-control"] == "no-store"

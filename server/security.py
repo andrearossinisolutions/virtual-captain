@@ -19,6 +19,28 @@ EMAIL_MAX = 254
 
 _hasher = PasswordHasher(time_cost=2, memory_cost=32 * 1024, parallelism=1)
 _slots = threading.BoundedSemaphore(2)  # at most 2 hashes at once (RAM: 2 x 32 MiB)
+_pending = 0           # hashes waiting or running (touched only on the event loop)
+_queue_max = 8
+
+
+class HashBusy(Exception):
+    """Too many hashes in the queue: answered 503 + Retry-After before any hashing."""
+
+
+def set_queue_max(value: int) -> None:
+    global _queue_max
+    _queue_max = value
+
+
+async def _queued(fn, *args):
+    global _pending
+    if _pending >= _queue_max:
+        raise HashBusy()
+    _pending += 1
+    try:
+        return await run_in_threadpool(fn, *args)
+    finally:
+        _pending -= 1
 
 
 def _encodable(text: str) -> bool:
@@ -73,11 +95,11 @@ def _verify(stored: str, password: str) -> bool:
 
 
 async def hash_password(password: str) -> str:
-    return await run_in_threadpool(_hash, password)
+    return await _queued(_hash, password)
 
 
 async def verify_password(stored: str, password: str) -> bool:
-    return await run_in_threadpool(_verify, stored, password)
+    return await _queued(_verify, stored, password)
 
 
 # computed once at import (startup), so the first unknown-account login is not slower

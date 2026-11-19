@@ -26,7 +26,7 @@ PAGES = ["/", "/register", "/login", "/verify", "/forgot", "/reset", "/account",
 
 def mounted(tmp_path):
     cfg = AppConfig(public_base_url=BASE, db_path=str(tmp_path / "p.db"), secret_key="k" * 40)
-    return TestClient(create_app(cfg, mailer=lambda *a: None), base_url="https://testserver")
+    return TestClient(create_app(cfg, mailer=lambda *a: None), base_url="https://vc.example.test")
 
 
 def public_files():
@@ -385,3 +385,9 @@ def test_waiting_page_error_and_401_in_node(tmp_path):
     assert r["out"][0][0] == "Program connected" and r["out"][1][0] == "Program not connected"
     assert r["out"][1][3] is True
     assert run_waiting(tmp_path, [[401, {"error": "unauthenticated"}]])["replaced"] == ["/login"]
+
+
+def test_expired_link_hint_on_verify_login_and_forgot():
+    expected = "register again with the same address"
+    for name in ("verify.js", "login.html", "forgot.html"):
+        assert expected in (PUBLIC_DIR / name).read_text(encoding="utf-8"), name

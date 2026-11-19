@@ -26,8 +26,8 @@ class Env:
         self.clock, self.mailer, self.tmp = Clock(), Mailer(), tmp_path
         self.db = str(tmp_path / "t.db")
         self.app = create_app(cfg(tmp_path, **kw), mailer=self.mailer, clock=self.clock)
-        self.prog = TestClient(self.app, base_url="https://testserver", client=("198.51.100.7", 5000))
-        self.web = TestClient(self.app, base_url="https://testserver", client=("203.0.113.9", 4000))
+        self.prog = TestClient(self.app, base_url="https://vc.example.test", client=("198.51.100.7", 5000))
+        self.web = TestClient(self.app, base_url="https://vc.example.test", client=("203.0.113.9", 4000))
         self.csrf = logged(self.web, self.mailer)
 
     def start(self, **body):
@@ -202,7 +202,7 @@ def test_five_wrong_codes_lock_the_session(env):
 def test_lock_is_per_ip_too(env):
     for i in range(5):
         env.lookup(f"AAAA-BBB{i + 2}")
-    other = TestClient(env.app, base_url="https://testserver", client=("203.0.113.9", 4001))
+    other = TestClient(env.app, base_url="https://vc.example.test", client=("203.0.113.9", 4001))
     csrf = login(other).json()["csrf_token"]  # a fresh session from the same IP
     s = env.start()
     assert env.lookup(s["user_code"], other, csrf).status_code == 429
@@ -232,7 +232,7 @@ def test_no_enumeration_same_answer(tmp_path):
 
 def test_lookup_approve_deny_need_session_csrf_and_origin(env):
     s = env.start()
-    anon = TestClient(env.app, base_url="https://testserver")
+    anon = TestClient(env.app, base_url="https://vc.example.test")
     for path in ("lookup", "approve", "deny"):
         url = f"/api/device/{path}"
         body = {"user_code": s["user_code"]}
@@ -258,7 +258,7 @@ def test_program_endpoints_reject_foreign_origin(env):
 
 def test_approver_owns_the_token_and_it_is_not_valid_for_b(tmp_path):
     e = Env(tmp_path)
-    web_b = TestClient(e.app, base_url="https://testserver", client=("203.0.113.50", 1))
+    web_b = TestClient(e.app, base_url="https://vc.example.test", client=("203.0.113.50", 1))
     csrf_b = logged(web_b, e.mailer, email="b@example.test")
     s = e.start()
     web_b.post("/api/device/lookup", json={"user_code": s["user_code"]}, headers=hdr(csrf_b))
@@ -404,7 +404,7 @@ def test_start_rate_limit_per_ip(tmp_path):
     for _ in range(3):
         e.start()
     assert e.prog.post("/api/device/start", json={}).status_code == 429
-    other = TestClient(e.app, base_url="https://testserver", client=("198.51.100.99", 1))
+    other = TestClient(e.app, base_url="https://vc.example.test", client=("198.51.100.99", 1))
     assert other.post("/api/device/start", json={}).status_code == 200
 
 
@@ -486,7 +486,7 @@ def test_approve_with_right_confirm_is_ok_and_case_insensitive(env):
 
 def test_lookup_by_another_user_does_not_enable_approve(tmp_path):
     e = Env(tmp_path)
-    web_b = TestClient(e.app, base_url="https://testserver", client=("203.0.113.50", 1))
+    web_b = TestClient(e.app, base_url="https://vc.example.test", client=("203.0.113.50", 1))
     csrf_b = logged(web_b, e.mailer, email="b@example.test")
     s = e.start()
     web_b.post("/api/device/lookup", json={"user_code": s["user_code"]}, headers=hdr(csrf_b))

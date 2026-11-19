@@ -15,7 +15,7 @@
   } else {
     VC.api("/api/auth/verify/preview", { token: token }).then(function (r) {
       if (!r.ok || !r.data.valid) {
-        if (r.ok) { invalid("This link is invalid or has expired."); }
+        if (r.ok) { invalid("This link is invalid or has expired. If the link expired, register again with the same address."); }
         else { invalid("We could not check the link. Open the link from your email again in a moment."); }
         return;
       }

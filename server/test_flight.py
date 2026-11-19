@@ -63,7 +63,7 @@ def test_no_connection_is_200_connected_false(env):
 
 
 def test_needs_a_session_cookie_and_nothing_else(env):
-    anon = TestClient(env.app, base_url="https://testserver")
+    anon = TestClient(env.app, base_url="https://vc.example.test")
     r = anon.get("/api/flight/state")
     assert r.status_code == 401 and r.headers["cache-control"] == "no-store"
     assert anon.get("/api/flight/state", headers={"Authorization": "Bearer " + env.access}).status_code == 401

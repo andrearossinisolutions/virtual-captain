@@ -82,7 +82,7 @@ def test_list_hides_expired(make_env):
 def test_list_needs_session(make_env):
     e = make_env()
     from fastapi.testclient import TestClient
-    anon = TestClient(e.app, base_url="https://testserver")
+    anon = TestClient(e.app, base_url="https://vc.example.test")
     assert anon.get("/api/device/mine").status_code == 401
 
 
@@ -170,7 +170,7 @@ def test_revoke_needs_session_csrf_and_origin(make_env):
     e = make_env()
     from fastapi.testclient import TestClient
     (d,) = mine(e)
-    anon = TestClient(e.app, base_url="https://testserver")
+    anon = TestClient(e.app, base_url="https://vc.example.test")
     for path, body in (("/api/device/mine/revoke", {"id": d["id"]}), ("/api/device/mine/revoke-all", {})):
         assert anon.post(path, json=body).status_code == 401
         assert e.web.post(path, json=body).status_code == 403                           # no CSRF

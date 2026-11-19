@@ -9,6 +9,7 @@ import secrets
 import sqlite3
 from typing import Optional, Tuple
 
+from server.audit import audit
 from server.accounts import LOCKED, AccountError, Accounts
 from server.ratelimit import DAY
 from server.security import is_token_shaped, new_token, same, token_hash
@@ -190,10 +191,11 @@ class DeviceCodes:
             return
         h, now = token_hash(token), self.clock()
         with self.db.tx() as c:
-            for row in c.execute("SELECT family_id FROM device_tokens WHERE refresh_hash=? "
+            for row in c.execute("SELECT family_id, user_id FROM device_tokens WHERE refresh_hash=? "
                                  "OR access_hash=?", (h, h)).fetchall():
                 c.execute("UPDATE device_tokens SET revoked_at=? WHERE family_id=? "
                           "AND revoked_at IS NULL", (now, row["family_id"]))
+                audit("device_revoked", row["user_id"])
 
     def verify_access_token(self, token) -> Optional[int]:
         """user_id for a valid access token, else None. For the future uplink (not a route).
@@ -281,6 +283,7 @@ class DeviceCodes:
         with self.db.tx() as c:
             c.execute("UPDATE device_tokens SET revoked_at=? WHERE family_id=? AND user_id=? "
                       "AND revoked_at IS NULL", (self.clock(), match, user_id))
+        audit("device_revoked", user_id)
         return match
 
     def revoke_all_for_user(self, user_id: int) -> None:
@@ -289,6 +292,7 @@ class DeviceCodes:
             c.execute("UPDATE device_tokens SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL",
                       (self.clock(), user_id))
             c.execute("DELETE FROM device_codes WHERE user_id=?", (user_id,))
+        audit("device_revoked", user_id)
 
     # ---- website side (signed in) ----
     def _keys(self, sess: dict, ip: str) -> list:
@@ -345,5 +349,7 @@ class DeviceCodes:
                                     ("approved" if approve else "denied", sess["uid"],
                                      row["device_code_hash"]))
                     if cur.rowcount == 1:
+                        if approve:
+                            audit("device_linked", sess["uid"])
                         return
         self._wrong(keys, failure)

@@ -28,7 +28,7 @@ def build_device_router(accounts: Accounts, devices: DeviceCodes, hub=None) -> A
                     body.update(e.extra)
                     return JSONResponse(body, status_code=e.status)
                 except AccountError as e:
-                    return _fail(e.status, e.code)
+                    return _fail(e.status, e.code, e.retry_after)
             wrapper.__name__ = fn.__name__
             router.add_api_route(path, wrapper, methods=["POST"], include_in_schema=False)
             return fn
@@ -71,7 +71,7 @@ def build_device_router(accounts: Accounts, devices: DeviceCodes, hub=None) -> A
 
     @post("/approve")
     async def approve(request):
-        sess = current_session(accounts, request, True)
+        sess = current_session(accounts, request, True, True)
         data = await _body(request)
         devices.decide(sess, data.get("user_code"), client_ip(request), True,
                        data.get("confirm"))
@@ -89,7 +89,7 @@ def build_device_router(accounts: Accounts, devices: DeviceCodes, hub=None) -> A
         try:
             sess = current_session(accounts, request, False)
         except AccountError as e:
-            return _fail(e.status, e.code)
+            return _fail(e.status, e.code, e.retry_after)
         out = []
         for d in devices.list_for_user(sess["uid"]):
             online = hub is not None and hub.is_online(sess["uid"], d.pop("family_id"))

@@ -7,9 +7,10 @@ import sqlite3
 from typing import Callable, Optional
 
 from server import mail_templates as tpl
+from server.audit import audit
 from server.config import AppConfig
 from server.db import Database
-from server.ratelimit import DAY, RateLimiter
+from server.ratelimit import DAY, MemoryRateLimiter, RateLimiter
 from server.wire import SIMBRIEF_RE  # one definition for the accounts and the remote load-plan command
 from server.security import (hash_password, is_token_shaped, new_token, normalize_email,
                              normalize_login_password, normalize_password, same, token_hash,
@@ -25,6 +26,7 @@ SESSION_TOUCH_EVERY = 60.0  # last_seen is refreshed at most once a minute (the 
 MAX_SESSIONS = 10
 CLEANUP_EVERY = 600.0
 ROTATED_KEEP = 7 * DAY
+UNVERIFIED_KEEP = 7 * DAY
 
 
 def normalize_simbrief(value) -> Optional[str]:
@@ -40,9 +42,9 @@ Mail = tuple  # (to, subject, body)
 
 
 class AccountError(Exception):
-    def __init__(self, status: int, code: str):
+    def __init__(self, status: int, code: str, retry_after: Optional[int] = None):
         super().__init__(code)
-        self.status, self.code = status, code
+        self.status, self.code, self.retry_after = status, code, retry_after
 
 
 BAD_REQUEST = (400, "invalid_request")
@@ -57,6 +59,7 @@ class Accounts:
         self.cfg, self.db, self.mailer, self.clock = config, db, mailer, clock
         self.limiter = RateLimiter(db, clock, config.secret_key)
         self._last_cleanup = None
+        self.user_limiter = MemoryRateLimiter()  # signed-in writes/hashes, RAM only
         # async callable(user_id) set by app.py: closes the live program of the account right away
         self.on_revoke: Optional[Callable[[int], object]] = None
 
@@ -84,6 +87,12 @@ class Accounts:
             # rotated/revoked refresh tokens are kept a while for reuse detection
             c.execute("DELETE FROM device_tokens WHERE expires_at < ? OR revoked_at < ?",
                       (now, now - ROTATED_KEEP))
+            # sign-ups never confirmed: gone after a week unless a verify link is still alive
+            # (verified accounts are never touched here)
+            c.execute("DELETE FROM users WHERE verified=0 AND created_at < ? AND NOT EXISTS "
+                      "(SELECT 1 FROM email_tokens t WHERE t.user_id=users.id AND t.kind='verify' "
+                      "AND t.used_at IS NULL AND t.expires_at > ?)",
+                      (now - UNVERIFIED_KEEP, now))
         self.limiter.purge()
 
     @staticmethod
@@ -108,6 +117,12 @@ class Accounts:
         per-address quota can delay a legitimate mail to that address for up to an hour."""
         return (self.limiter.allow("mail_addr", addr, [(self.cfg.mail_addr_hourly, 3600)])
                 and self.limiter.allow("mail_global_" + group, "all", [(self.cfg.mail_daily, DAY)]))
+
+    def _notice(self, addr: str, template: Callable) -> Optional[Mail]:
+        """Security notice (no link, no token) under the 'other' caps; None if capped."""
+        if not self._mail_allowed(addr, "other"):
+            return None
+        return (addr,) + template()
 
     def _ip_gate(self, ip: str, bucket: str = "ip_signup") -> None:
         if not self.limiter.allow(bucket, ip, [(self.cfg.ip_hourly, 3600), (self.cfg.ip_daily, DAY)]):
@@ -210,6 +225,7 @@ class Accounts:
                 raise AccountError(*BAD_REQUEST)  # token not consumed: the user can retry
             pw_hash = await hash_password(pw)  # one hash on this path
         session = None
+        old_email = None
         with self.db.tx() as c:
             row = self._find_token(c, token, ("verify", "email_change"))
             if row is None:
@@ -224,6 +240,8 @@ class Accounts:
             else:
                 if c.execute("SELECT 1 FROM users WHERE email=?", (row["new_email"],)).fetchone():
                     raise AccountError(*BAD_TOKEN)
+                old_email = c.execute("SELECT email FROM users WHERE id=?",
+                                      (row["user_id"],)).fetchone()["email"]
                 c.execute("UPDATE users SET email=?, verified=1 WHERE id=?",
                           (row["new_email"], row["user_id"]))
                 c.execute("DELETE FROM sessions WHERE user_id=?", (row["user_id"],))
@@ -231,7 +249,10 @@ class Accounts:
                           (row["user_id"],))
         if row["kind"] == "verify":
             session = self._new_session(row["user_id"])
-        return row["kind"], session
+        if old_email:
+            audit("email_changed", row["user_id"])
+        notice = self._notice(old_email, tpl.email_changed_mail) if old_email else None
+        return row["kind"], session, notice
 
     # ---- login / sessions ----
     async def login(self, email, password, ip: str):
@@ -242,6 +263,7 @@ class Accounts:
         pw = normalize_login_password(password)
         key = em or (email[:254].strip().lower() if isinstance(email, str) else "")
         if self.limiter.is_locked(key, self.cfg.login_max_failures, self.cfg.lockout_seconds):
+            audit("lockout", ref=self.limiter.key(key))
             raise AccountError(*LOCKED)
         user = None
         if em is not None:
@@ -253,6 +275,7 @@ class Accounts:
             ok = (await verify_password(user["pw_hash"], pw)) if user else await verify_dummy(pw)
         if not (ok and user and user["verified"] and user["pw_hash"]):
             self.limiter.record_failure(key)
+            audit("login_failed", user["id"] if user else None, self.limiter.key(key))
             raise AccountError(*BAD_CREDENTIALS)
         self.limiter.clear_failures(key)
         return self._new_session(user["id"])
@@ -303,7 +326,7 @@ class Accounts:
             raise AccountError(*BAD_CREDENTIALS)
         self.limiter.clear_failures(sess["email"])
 
-    async def change_password(self, sess: dict, current, new) -> None:
+    async def change_password(self, sess: dict, current, new) -> Optional[Mail]:
         new_pw = normalize_password(new)
         if new_pw is None:
             raise AccountError(*BAD_REQUEST)
@@ -314,7 +337,9 @@ class Accounts:
             c.execute("DELETE FROM sessions WHERE user_id=? AND id<>?", (sess["uid"], sess["sid"]))
             self._revoke_devices(c, sess["uid"], self.clock())
             c.execute("DELETE FROM email_tokens WHERE user_id=? AND kind='reset'", (sess["uid"],))
+        audit("password_changed", sess["uid"])
         await self._notify_revoked(sess["uid"])
+        return self._notice(sess["email"], tpl.password_changed_mail)
 
     async def change_email(self, sess: dict, new_email, password) -> Optional[Mail]:
         em = normalize_email(new_email)
@@ -347,6 +372,7 @@ class Accounts:
             c.execute("DELETE FROM users WHERE id=?", (sess["uid"],))  # cascades
             c.execute("DELETE FROM login_failures WHERE key=?", (key,))
             c.execute("DELETE FROM rate_events WHERE key=?", (key,))
+        audit("account_deleted", sess["uid"])
         await self._notify_revoked(sess["uid"])
 
     # ---- password reset ----
@@ -362,9 +388,10 @@ class Accounts:
             return None  # a suppressed mail keeps the previous reset link valid
         with self.db.tx() as c:
             token = self._create_token(c, user["id"], "reset", RESET_TTL)
+        audit("reset_requested", user["id"])
         return (em,) + tpl.reset_mail(self.cfg.public_base_url, token)
 
-    async def reset_password(self, token, new, ip: str) -> None:
+    async def reset_password(self, token, new, ip: str) -> Optional[Mail]:
         pw = normalize_password(new)
         if pw is None:
             raise AccountError(*BAD_REQUEST)
@@ -384,4 +411,6 @@ class Accounts:
             self._revoke_devices(c, uid, self.clock())
             c.execute("DELETE FROM email_tokens WHERE user_id=?", (uid,))
             c.execute("DELETE FROM login_failures WHERE key=?", (self.limiter.key(email),))
+        audit("reset_done", uid)
         await self._notify_revoked(uid)
+        return self._notice(email, tpl.password_changed_mail)
