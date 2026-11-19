@@ -5,16 +5,18 @@ import json
 import pathlib
 import re
 import threading
+import uuid
 import time
 from collections import deque
 from datetime import datetime
 
 import checklist as cl
 import checklist_eval as ceval
+import session as sess
 from checklist_latch import Latch
 import monitor as mon
 import thrust
-from brain import Briefing, join_dep, parse_dep
+from brain import Brain, Briefing, join_dep, parse_dep
 import dll_fetch
 import simconnect_backend
 from simbrief import fetch_latest, to_briefing
@@ -35,7 +37,7 @@ PLAN_RESET = ["runway", "ta", "v1", "vr", "v2", "flap", "fob", "zfw"]  # tornano
 REMEMBERED = ["thr_red_agl", "accel_agl"]  # unico campo dei dati di volo che si ricorda
 MODES = ("normal", "training")
 CL_MODES = ("complete", "simplified")
-CLR_KEYS = ("c", "w", "r", "a", "f", "t")  # CRAFT: cleared to, pista in uso (opzionale), route, altitude, frequency, transponder (solo memoria, mai salvato)
+CLR_KEYS = ("c", "w", "r", "a", "f", "t")  # CRAFT: cleared to, pista in uso (opzionale), route, altitude, frequency, transponder (squawk compreso: nel file di sessione del volo, non in ~/.virtual-captain.json)
 CLR_MAX = {"c": 40, "w": 12, "r": 400, "a": 20, "f": 20, "t": 4}
 
 
@@ -131,7 +133,8 @@ def _txt(v) -> str:
 
 
 class State:
-    def __init__(self, cfg_path: pathlib.Path = CFG, weather=None):
+    def __init__(self, cfg_path: pathlib.Path = CFG, weather=None, session_path: pathlib.Path | None = None,
+                 session_debounce: float = sess.DEBOUNCE_S, wall=time.time):
         self.lock = threading.RLock()
         self.weather = weather or Weather()  # senza rete di default; main.py passa quella reale
         self.cfg_path = cfg_path
@@ -149,7 +152,7 @@ class State:
         self.phase = "briefing"  # "briefing" | "flying"
         self.info = ""
         self.plan: dict = {}
-        self.clearance = _empty_clearance()  # NON persiste al riavvio
+        self.clearance = _empty_clearance()  # nel file di sessione (non in ~/.virtual-captain.json)
         self.rev = 0  # cambia quando il server modifica i campi (es. piano caricato)
         self.sim_ok: bool | None = None  # SimConnect: None = non ancora noto, True = dati freschi, False = non connesso
         self.sim_error = ""
@@ -176,6 +179,18 @@ class State:
         self.flight: list = []  # righe [etichetta, testo] dei dati di volo (vuoto fuori da "flying")
         self.pills: dict = {}  # GS, quota, VS per l'header
         self.monitor: list = []  # gruppi gia' etichettati: [[gruppo, [[nome, etichetta, atteso, grezzo], ...]], ...]
+        # Sessione del volo (None = nessuna persistenza: --sim e test). Il file lo scrive solo _flush_session (debounce).
+        self.session_path, self._debounce, self._wall = session_path, session_debounce, wall
+        self.flight_id = ""
+        self.last_seen: float | None = None  # ultimo campione live del sim (epoch)
+        self.brain_saved = {"done": [], "roll_done": [], "armed": False}  # stato del brain (lo aggiorna set_brain)
+        self.resumed = False  # True se il volo in corso arriva dal file di sessione (il brain non ripete callout/briefing)
+        self.restored_flying = False  # ripristinato in "flying": la consegna 2 verifica il sim e puo' chiamare end_flight_session()
+        self._ended = False  # volo chiuso: il file non si riscrive finche' non c'e' un nuovo piano o "Briefing complete"
+        self._dirty, self._timer, self._written = False, None, 0.0
+        self._io_lock = threading.Lock()  # serializza le scritture del file (mai preso mentre si tiene self.lock)
+        if session_path is not None:
+            self._restore_session()
 
     # -- modifiche dalla pagina --
     def update(self, data: dict):
@@ -198,6 +213,7 @@ class State:
                 self.checklist_mode = m if m in CL_MODES else "complete"
                 self._fix_cl_phase()
             self._save()
+            self._mark_session()
 
     def _set_origin(self, text: str) -> None:
         """Departure scritto come "ICAO/RWY": la pista (se valida) diventa il T/O runway."""
@@ -238,6 +254,7 @@ class State:
                 new[k] = v
         with self.lock:
             self.clearance.update(new)
+            self._mark_session()
 
     def clear_atis(self, keys=ATIS_KEYS) -> None:
         """Annotazioni ATIS vuote (default arrivo; chiamare con il lock preso)."""
@@ -250,6 +267,7 @@ class State:
             self.clearance = _empty_clearance()
             self.clearance["c"] = _clean_clr("c", self.fields.get("destination", ""))
             self.clearance["r"] = _clean_clr("r", (self.plan or {}).get("route") or "")
+            self._mark_session()
 
     def fetch_dll(self) -> None:
         """Scarica la SimConnect.dll in vendor/ (la conferma dell'utente e' gia' stata data dalla pagina) e la ricarica."""
@@ -283,11 +301,21 @@ class State:
     def set_phase(self, phase: str):
         if phase in ("briefing", "flying"):
             with self.lock:
+                was = self.phase
                 if phase == "flying" and self.phase != "flying":
                     self.cl_phase = self.cl_visible()[0]  # "Briefing complete": la checklist riparte dalla prima fase
                     self._save()
                 self.phase = phase
                 self._reset_gates()
+                if phase == "briefing" and was == "flying":
+                    self.end_flight_session()  # End flight: il prossimo volo non si pre-compila
+                elif phase == "flying" and was != "flying":
+                    self.brain_saved = {"done": [], "roll_done": [], "armed": False}
+                    self.resumed = False
+                    self._ended = False
+                    self._mark_session()
+                else:
+                    self._mark_session()
                 if phase == "briefing":
                     self.reset_clearance()  # ritorno in briefing: CRAFT riparte dal piano
                     self.clear_atis()
@@ -326,9 +354,13 @@ class State:
             self.flight = mon.flight_panel(raw, self.core) if live else []
             self.pills = mon.flight_pills(raw, self.core) if live else {}
             if live:  # i gate si aggiornano qui (~2 Hz, un solo thread), non dallo snapshot
+                before = self._gate_sig()
+                self.last_seen = self._wall()
                 self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo or self.cl_trust_links, self.checklist_mode == "simplified",
                                        None, self._expected(), self._wx_data(), self.gates, update=True,
                                        latched=self.latch, now=self.clock())
+                if self._gate_sig() != before or self.last_seen - self._written >= sess.HEARTBEAT_S:
+                    self._mark_session()  # cambio di gate/latch, o battito: saved_at resta fresco anche senza cambi
 
     def cl_visible(self) -> list[str]:
         return self.cl.visible_ids(self.checklist_mode == "simplified")
@@ -355,6 +387,7 @@ class State:
             if old in vis and vis.index(self.cl_phase) < vis.index(old):
                 self._reset_gates(self.cl_phase)  # solo retrocedere (es. go-around) azzera i gate di destinazione e successive; avanzare o ricaricare la fase no
             self._save()
+            self._mark_session()
 
     def load_plan(self, user: str | None = None):
         """Scarica l'ultimo piano: sovrascrive i campi del piano e svuota quelli che il piano non ha."""
@@ -389,6 +422,120 @@ class State:
                          + (f" — not in plan, enter manually: {', '.join(missing)}" if missing else ""))
             self.rev += 1
             self._save()
+            self.flight_id, self._ended, self.resumed = uuid.uuid4().hex, False, False  # piano nuovo = volo nuovo
+            self.brain_saved = {"done": [], "roll_done": [], "armed": False}
+            self._mark_session()
+
+    # -- sessione del volo (file ~/.virtual-captain-session.json) --
+    def _gate_sig(self):
+        return (frozenset(self.gates["open"]), frozenset(self.gates["done"]), self.latch.ids())
+
+    def set_brain(self, d: dict) -> None:
+        """Stato del brain (Brain.to_dict) da salvare; la consegna 2 lo chiama dal ciclo principale."""
+        with self.lock:
+            if d != self.brain_saved:
+                self.brain_saved = d
+                self._mark_session()
+
+    def _session_data(self) -> dict:
+        """Contenuto del file (lock preso). Solo dati del volo: niente monitor/pills/raw/log/token/coordinate/calibrazioni/timer."""
+        if not self.flight_id:
+            self.flight_id = uuid.uuid4().hex
+        return {"v": sess.VERSION, "saved_at": self._wall(), "flight_id": self.flight_id,
+                "fields": dict(self.fields), "plan": sess.strip_plan(self.plan), "plan_fields": dict(self.plan_fields),
+                "wt_unit": self.wt_unit, "info": self.info, "clearance": dict(self.clearance),
+                "phase": self.phase, "cl_phase": self.cl_phase, "brain": self.brain_saved, "last_seen": self.last_seen,
+                "gates": {"open": sorted(self.gates["open"]), "done": sorted(self.gates["done"])},
+                "latch": self.latch.to_dict()}
+
+    def _mark_session(self) -> None:
+        """Un cambio da salvare: scrittura con debounce (lock preso). Nessun file se la persistenza e' spenta o il volo e' chiuso."""
+        if self.session_path is None or self._ended:
+            return
+        self._dirty = True
+        if self._timer is None:
+            self._timer = threading.Timer(self._debounce, self.flush_session)
+            self._timer.daemon = True
+            self._timer.start()
+
+    def flush_session(self) -> None:
+        """Scrive subito il file se c'e' qualcosa da salvare (anche in chiusura del programma). Sotto il lock dello State solo la
+        costruzione dei dati; fsync/os.replace fuori, con un lock di scrittura separato. End flight vince sempre."""
+        with self._io_lock:
+            with self.lock:
+                t, self._timer = self._timer, None
+                if t is not None:
+                    t.cancel()
+                if self.session_path is None or self._ended or not self._dirty:
+                    return
+                self._dirty = False
+                data = self._session_data()
+            ok = sess.write_atomic(self.session_path, data)
+            with self.lock:
+                self._written = self._wall()  # anche in errore: il battito riprova tra HEARTBEAT_S, niente tempeste a 2 Hz
+                if self._ended:  # il volo e' finito mentre si scriveva: il file non deve restare
+                    sess.delete(self.session_path)
+
+    def end_flight_session(self) -> None:
+        """Fine del volo (End flight, fine volo rilevata): cancella il file e non lo riscrive fino al prossimo piano/volo."""
+        with self.lock:
+            self._ended, self._dirty, self.resumed, self.restored_flying = True, False, False, False
+            self.flight_id = ""
+            self.brain_saved = {"done": [], "roll_done": [], "armed": False}
+            t, self._timer = self._timer, None
+            if t is not None:
+                t.cancel()
+            if self.session_path is not None:
+                sess.delete(self.session_path)
+
+    def _restore_session(self) -> None:
+        """All'avvio: ripristina il volo dal file se e' lo stesso volo (regola in session.same_flight); nel dubbio no."""
+        data = sess.read(self.session_path)
+        if data is None or not sess.same_flight(data, self._wall()):
+            return
+        with self.lock:
+            f = data.get("fields")
+            if isinstance(f, dict):
+                for k, _ in ALL_FIELDS:
+                    v = f.get(k)
+                    if isinstance(v, (str, int, float)) and not isinstance(v, bool):
+                        self.fields[k] = clean_field(k, v)
+            if isinstance(data.get("plan"), dict):
+                self.plan = sess.strip_plan(data["plan"])
+            pf = data.get("plan_fields")
+            self.plan_fields = {k: str(pf[k]) for k in PLAN_RESET if isinstance(pf, dict) and isinstance(pf.get(k), (str, int, float))}
+            self.wt_unit = data["wt_unit"] if data.get("wt_unit") in ("kgs", "lbs") else ""
+            self.info = data["info"] if isinstance(data.get("info"), str) else ""
+            clr = data.get("clearance")
+            for k in CLR_KEYS:
+                if isinstance(clr, dict) and isinstance(clr.get(k), str):
+                    self.clearance[k] = _clean_clr(k, clr[k]) or ""
+            if data.get("phase") == "flying":
+                self.phase = "flying"
+            if self.cl.has_phase(data.get("cl_phase")):
+                self.cl_phase = data["cl_phase"]
+            self._fix_cl_phase()
+            tmp = Brain(Briefing())
+            tmp.from_dict(data.get("brain"))
+            self.brain_saved = tmp.to_dict()
+            known = {it["id"] for ph in self.cl.phases for sp in ph["subphases"] for it in sp["items"]}
+            g = data.get("gates")
+            for k in ("open", "done"):
+                v = g.get(k) if isinstance(g, dict) else None
+                self.gates[k] = {x for x in v if isinstance(x, str) and x in known} if isinstance(v, list) else set()
+            self.latch.from_dict(data.get("latch"))
+            self.latch._ids &= known  # id sconosciuti (checklist cambiata): scartati
+            ls = data.get("last_seen")
+            self.last_seen = float(ls) if isinstance(ls, (int, float)) and not isinstance(ls, bool) else None
+            fid = data.get("flight_id")
+            self.flight_id = fid if isinstance(fid, str) else ""
+            for ref, k in (("orig", "origin"), ("dest", "destination")):
+                icao = parse_dep(self.fields.get(k, ""))[0]
+                if icao and isinstance(self.plan.get(ref + "_metar"), str):
+                    self.weather.seed(icao, self.plan[ref + "_metar"])
+            self.restored_flying = self.resumed = self.phase == "flying"
+            self.rev += 1
+            self.log.appendleft(f"{datetime.now().strftime('%H:%M:%S')}  Flight restored")  # solo riga di log: nessuna frase, spoke_n invariato
 
     def _save(self):
         try:

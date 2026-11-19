@@ -71,6 +71,17 @@ class Brain:
     gear_checked: bool = False
     roll_done: set = field(default_factory=set)
     armed: bool = False  # callout del decollo attivi solo dopo essere stati fermi/lenti a terra
+    resumed: bool = False  # volo ripristinato dal file di sessione (la logica che lo usa e' della consegna 2)
+
+    def to_dict(self) -> dict:
+        return {"done": sorted(self.done), "roll_done": sorted(self.roll_done), "armed": self.armed}
+
+    def from_dict(self, d) -> None:
+        """Ripristino tollerante: valori mancanti o non validi = vuoti/False."""
+        d = d if isinstance(d, dict) else {}
+        self.done = {x for x in d.get("done", []) if isinstance(x, str)} if isinstance(d.get("done"), list) else set()
+        self.roll_done = {x for x in d.get("roll_done", []) if isinstance(x, str)} if isinstance(d.get("roll_done"), list) else set()
+        self.armed = d.get("armed") is True
 
     def _once(self, key, text, long_text=None):
         if key in self.done:

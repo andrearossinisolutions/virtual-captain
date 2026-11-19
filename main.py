@@ -14,6 +14,7 @@ import sys
 import time
 
 import firewall
+import session
 import snapshot
 import uplink
 import web
@@ -95,7 +96,7 @@ def main():
         print("⚠ Tailscale non trovato: pagina raggiungibile solo da questo PC. Avvia Tailscale o usa --host <IP>.")
     if "--no-firewall" not in sys.argv:
         firewall.ensure(port)
-    st = State(weather=Weather(fetch=(lambda icao: 1013.0 if icao == parse_dep(st.fields.get("origin"))[0] else 1009.0) if sim else online_fetch))
+    st = State(session_path=None if sim else session.SESSION, weather=Weather(fetch=(lambda icao: 1013.0 if icao == parse_dep(st.fields.get("origin"))[0] else 1009.0) if sim else online_fetch))
     st.cl_trust_links = "--test-links" in sys.argv  # solo prova: link valutati come verified + valori grezzi accanto alle voci
     st.cl_demo = sim  # solo in --sim: link della checklist trattati come verificati (resa dimostrativa)
     try:
@@ -184,6 +185,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        st.flush_session()  # ultimo salvataggio in sospeso (debounce)
         if up is not None:
             up.stop()
         if backend is not None:

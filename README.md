@@ -66,3 +66,7 @@ La pagina vive in `web/` (`index.html`, `app.css`, `app.js`). `web.py` la assemb
 Cartella `server/` (FastAPI + uvicorn, dietro Apache): al passo 1 serve solo una pagina segnaposto e `/healthz` (con lo sha del deploy), nessuna API, nessun legame col programma sul PC; dal passo U2 serve anche `/app.js` e `/app.css` da `web/` (whitelist) per la pagina `/flight`. Il deploy e' automatico: un push su `main` che tocca `server/` (escluse `server/deploy/` e i `.md`), `web/` o il workflow lancia `.github/workflows/deploy-server.yml` sul runner del VPS. **La repo e' pubblica: nessun segreto nei file.** Preparazione del VPS (passi A-I, verifiche e ritorni indietro): `server/DEPLOY.md`.
 
 Prova locale (venv fuori dalla repo): `pip install -r server/requirements-dev.txt`, poi `python -m pytest server/test_server.py` (senza fastapi i test del server vengono saltati) e `uvicorn server.app:app --host 127.0.0.1 --port 8100`.
+
+## File di sessione del volo
+
+`~/.virtual-captain-session.json` (separato da `~/.virtual-captain.json`) contiene i **dati del volo** (campi, piano senza coordinate, clearance con squawk, fase, stato del capitano e della checklist) per riprendere dopo un crash o un riavvio. Scrittura atomica con permessi 0600 su macOS/Linux; **su Windows 0600 non vale**: il file e' leggibile dall'utente del PC come gli altri file della home. Si cancella con End flight o con un nuovo piano; non e' mai scritto ne' letto con `--sim`. Si ripristina solo se e' stato salvato meno di 6 ore prima.
