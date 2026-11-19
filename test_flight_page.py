@@ -226,6 +226,10 @@ def test_remote_render_survives_every_checklist_phase_and_hostile_text(tmp_path)
         assert o["rdataHidden"] is False and o["bannerHidden"] is True and o["clname"], o
 
 
+def test_latched_rows_show_was_ok_now_line():
+    assert 'it.was_ok&&it.live' in JS and '"was OK \\u00b7 NOW: "' in JS and "i.show,i.latched,i.was_ok," in JS
+
+
 def test_wait_rows_are_rendered_as_waiting_with_gate_text_and_blue_icon():
     assert '"Waiting: "+(it.gate||it.detail||"")' in JS and "After TL" not in JS
     assert '(it.show||it.kind==="wait")&&it.live' in JS  # riga NOW anche in attesa

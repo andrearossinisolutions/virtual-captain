@@ -89,7 +89,7 @@ def _s(n):
 _HINTS = ("list", _s(16), 8)
 _ITEM = ("obj", {
     "id": _s(96), "text": _s(300), "response": _s(300), "type": _s(24), "status": _s(16), "kind": _s(24),
-    "detail": _s(300), "gate": _s(120), "show": ("bool",), "layout": _s(24), "expected": _s(120), "wx_hint": _s(16),
+    "detail": _s(300), "gate": _s(120), "latched": ("bool",), "was_ok": ("bool",), "show": ("bool",), "layout": _s(24), "expected": _s(120), "wx_hint": _s(16),
     "live": ("list", ("pair", 64, 120), 12),
     "inputs": ("list", ("obj", {"k": _s(32), "label": _s(80), "prefix": _s(24), "plan": ("bool",)}), 8),
     "fields": ("list", ("obj", {"k": _s(32), "label": _s(80), "src": _s(32)}), 8),

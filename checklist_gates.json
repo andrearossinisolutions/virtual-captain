@@ -18,6 +18,11 @@
   "non-precision-approach.flaps-2-at-s-speed": {"after_item": "non-precision-approach.flaps-1-at-green-dot-speed"},
   "non-precision-approach.landing-gear": {"after_item": "non-precision-approach.flaps-2-at-s-speed"},
   "non-precision-approach.flaps-3": {"after_item": "non-precision-approach.landing-gear"},
-  "non-precision-approach.flaps-full": {"after_item": "non-precision-approach.flaps-3"}
+  "non-precision-approach.flaps-full": {"after_item": "non-precision-approach.flaps-3"},
+  "go-around.landing-gear": {"vs_gt": 0},
+  "landing.thrust-levers": {"agl_le": 20},
+  "landing.ground-spoilers": {"ground": true},
+  "landing.thrust-levers_2": {"ground": true, "ias_le": 70},
+  "landing.thrust-levers_3": {"ground": true, "ias_le": 25}
  }
 }

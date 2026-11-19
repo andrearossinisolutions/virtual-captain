@@ -11,6 +11,7 @@ from datetime import datetime
 
 import checklist as cl
 import checklist_eval as ceval
+from checklist_latch import Latch
 import monitor as mon
 import thrust
 from brain import Briefing, join_dep, parse_dep
@@ -170,6 +171,7 @@ class State:
         saved = cfg.get("checklist_phase")
         self.cl_phase = saved if self.cl.has_phase(saved) else self.cl.ids[0]  # sconosciuta -> prima fase
         self._fix_cl_phase()
+        self.latch = Latch()  # voci soddisfatte congelate (aggiornato solo da set_monitor; azzerato come i gate)
         self.gates = {"open": set(), "done": set()}  # gate aperti e voci viste ok (aggiornati solo da set_monitor; azzerati con la fase/il piano)
         self.cl_demo = False  # SOLO --sim: tratta i link come verificati per vedere verde/rosso/grigio (in volo reale restano verified:false)
         self.cl_trust_links = False  # SOLO --test-links: valuta i link come verified:true, senza altri effetti demo
@@ -305,10 +307,12 @@ class State:
         if from_phase is None:
             self.gates["open"].clear()
             self.gates["done"].clear()
+            self.latch.clear_all()
             return
         ids = {it["id"] for ph in self.cl.phases[self.cl.ids.index(from_phase):] for sp in ph["subphases"] for it in sp["items"]}
         self.gates["open"] -= ids
         self.gates["done"] -= ids
+        self.latch.clear(ids)
 
     def set_core(self, values: dict | None) -> None:
         """Ultimo campione del core (da chiamare prima di set_monitor)."""
@@ -329,7 +333,8 @@ class State:
             self.pills = mon.flight_pills(raw, self.core) if live else {}
             if live:  # i gate si aggiornano qui (~2 Hz, un solo thread), non dallo snapshot
                 self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo or self.cl_trust_links, self.checklist_mode == "simplified",
-                                       None, self._expected(), self._wx_data(), self.gates, update=True)
+                                       None, self._expected(), self._wx_data(), self.gates, update=True,
+                                       latched=self.latch, now=self.clock())
 
     # -- calibrazione thrust --
     def set_calib_raw(self, raw: dict | None, now: float | None = None) -> None:
@@ -607,6 +612,7 @@ class State:
                     "cl_phase": self.cl_phase,
                     "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo or self.cl_trust_links,
                                                        self.checklist_mode == "simplified",
-                                                       self.raw if self.cl_trust_links else None, self._expected(), self._wx_data(), self.gates),
+                                                       self.raw if self.cl_trust_links else None, self._expected(), self._wx_data(), self.gates,
+                                                       latched=self.latch),
                     "test_links": self.cl_trust_links, "clearance": dict(self.clearance),
                     "thr_cal": self._thr_cal_view(), "calib": self._calib_view()}

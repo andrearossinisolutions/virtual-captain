@@ -20,7 +20,7 @@ UNREADABLE = "unreadable"
 REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "fld.v1", "fld.vr", "fld.v2", "fld.flap", "fld.fob", "fld.zfw", "fld.zfwcg", "plan.sid", "wx.qnh_dep", "wx.qnh_dest")
 GATE_ALT_REFS = ("fld.ta",)  # gate: quota >= valore del campo (piedi, anche FLnnn)
 GATE_AGL_REFS = ("fld.thr_red_agl", "fld.accel_agl")  # gate: AGL >= valore del campo
-GATE_RULES = ("alt_ge", "alt_le", "alt_ge_ref", "agl_ge_ref", "airborne", "vs_gt", "after_item")
+GATE_RULES = ("alt_ge", "alt_le", "alt_ge_ref", "agl_ge_ref", "agl_le", "airborne", "ground", "vs_gt", "ias_le", "after_item")
 QNH_TOL = 1.0  # hPa
 
 
@@ -265,6 +265,23 @@ def gate_state(rule: dict, ctx: dict) -> tuple:
             return "unknown", "on-ground n/a"
         if gnd >= 0.5:
             return "wait", "airborne"
+    if "agl_le" in rule:
+        if agl is None:
+            return "unknown", "AGL n/a"
+        if agl > rule["agl_le"]:
+            return "wait", f"below {rule['agl_le']:g} ft AGL"
+    if rule.get("ground"):
+        gnd = ctx.get("gnd")
+        if gnd is None:
+            return "unknown", "on-ground n/a"
+        if gnd < 0.5:
+            return "wait", "on ground"
+    if "ias_le" in rule:
+        ias = ctx.get("ias")
+        if ias is None:
+            return "unknown", "IAS n/a"
+        if ias > rule["ias_le"]:
+            return "wait", f"below {rule['ias_le']:g} kts"
     if "vs_gt" in rule:
         vs = ctx.get("vs")
         if vs is None:

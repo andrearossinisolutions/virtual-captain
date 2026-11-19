@@ -981,6 +981,20 @@ def test_gates_reset_only_when_going_back():
     assert not st.gates["open"] and not st.gates["done"]
 
 
+def test_gates_landing_and_go_around():
+    cl = C.load()
+    assert cl.gates["landing.thrust-levers"] == {"agl_le": 20} and cl.gates["landing.ground-spoilers"] == {"ground": True}
+    assert cl.gates["landing.thrust-levers_2"] == {"ground": True, "ias_le": 70} and cl.gates["landing.thrust-levers_3"] == {"ground": True, "ias_le": 25}
+    assert cl.gates["go-around.landing-gear"] == {"vs_gt": 0}
+    st = _gated_state("landing")
+    st.set_core({"on_ground": 0, "agl": 300, "alt": 400, "vs": -700, "ias": 140})
+    st.set_monitor({"spoilers": 0})
+    assert _rows(st)["landing.ground-spoilers"]["gate"] == "on ground"  # le voci thrust-levers sono detent: senza calibrazione solo NOW (nessun gate)
+    st.set_core({"on_ground": 1, "agl": 0, "alt": 100, "vs": 0, "ias": 60})
+    st.set_monitor({"spoilers": 0})
+    assert _rows(st)["landing.ground-spoilers"]["status"] in ("ok", "bad")
+
+
 def test_gates_approach_ladder():
     st = _gated_state("ils-approach")
     st.set_core({"on_ground": 0, "agl": 3000, "alt": 3000, "vs": -700})
@@ -998,6 +1012,7 @@ def test_gates_approach_ladder():
 if __name__ == "__main__":
     test_gates_file_validation_and_inventory()
     test_gates_in_state_takeoff_and_climb()
+    test_gates_landing_and_go_around()
     test_fob_zfw_items_and_tolerance()
     test_briefing_complete_restarts_checklist()
     test_inputs_items()

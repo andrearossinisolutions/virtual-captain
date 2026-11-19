@@ -290,9 +290,18 @@ def test_gate_in_evaluate():
     assert evaluate({"detent": "CLIMB"}, {}, gate=rule)["status"] == "none"  # esito none (non calibrato): nessun gate
 
 
+def test_landing_gate_rules():
+    assert _g({"agl_le": 20}, agl=50) == ("wait", "below 20 ft AGL") and _g({"agl_le": 20}, agl=15)[0] == "open" and _g({"agl_le": 20})[0] == "unknown"
+    assert _g({"ground": True}, gnd=0) == ("wait", "on ground") and _g({"ground": True}, gnd=1)[0] == "open" and _g({"ground": True})[0] == "unknown"
+    r = {"ground": True, "ias_le": 70}
+    assert _g(r, gnd=1, ias=90) == ("wait", "below 70 kts") and _g(r, gnd=1, ias=65)[0] == "open"
+    assert _g(r, gnd=0, ias=65) == ("wait", "on ground") and _g(r, gnd=1)[0] == "unknown"
+
+
 if __name__ == "__main__":
     test_gate_rules()
     test_gate_in_evaluate()
+    test_landing_gate_rules()
     test_qnh_gated_by_transition_level()
     test_qnh_source_in_detail()
     test_detent()

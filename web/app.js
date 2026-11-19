@@ -211,7 +211,7 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
   $("clprev").onclick=()=>clGo({step:-1});$("clnext").onclick=()=>clGo({step:1});
   $("clprev").disabled=RO()||idx<=0;$("clnext").disabled=RO()||idx>=ph.length-1;
   $("clname").textContent=c.phase.name;const sm=$("clsum");sm.textContent=c.bad+" out of spec";sm.className="clsum"+(c.bad?" bad":"");
-  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live,i.raw,i.show,i.expected,i.inputs,i.layout,i.atis_hint,i.datis_hint,i.wx_hint])]),showLive,s.test_links,RO()]);
+  const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live,i.raw,i.show,i.latched,i.was_ok,i.expected,i.inputs,i.layout,i.atis_hint,i.datis_hint,i.wx_hint])]),showLive,s.test_links,RO()]);
   if(bk!==clBodyKey){clBodyKey=bk;const y=window.scrollY,x=window.scrollX;
   const ae=document.activeElement,keep=craftEl&&ae&&craftEl.contains(ae)?[ae.dataset.c,ae.selectionStart,ae.selectionEnd]:null,keepF=ae&&ae.dataset&&ae.dataset.f?[ae.dataset.f,ae.selectionStart,ae.selectionEnd]:null;body.textContent="";
   const mk=(t,cls,txt)=>{const e=document.createElement(t);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e};
@@ -230,6 +230,7 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(s.test_links&&it.raw&&it.raw.length)tx.appendChild(mk("div","rw",it.raw.map(l=>l[0]+"="+l[1]).join(" \u00b7 ")));
       if((it.show||it.kind==="wait")&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","NOW: "+it.live.map(l=>l[1]).join(", ")));
       if(it.kind==="wait")tx.appendChild(mk("div","now nv","Waiting: "+(it.gate||it.detail||"")));
+      if(it.was_ok&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","was OK \u00b7 NOW: "+it.live.map(l=>l[1]).join(", ")));
       if(it.kind==="mismatch"){const mm=[...it.detail.matchAll(/actual ([^;,]+)/g)].map(m=>m[1].trim());
         tx.appendChild(mm.length?mk("div","now","NOW: "+mm.join(", ")):mk("div","d",it.detail))}
       r.appendChild(tx);body.appendChild(r)}}

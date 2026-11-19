@@ -7,7 +7,7 @@ import pathlib
 import icing
 import monitor as mon
 import thrust
-from checklist_eval import BY_KEY, GATE_AGL_REFS, GATE_ALT_REFS, GATE_RULES, REFS, _refs, evaluate, gate_ctx, qnh_actual
+from checklist_eval import _res, BY_KEY, GATE_AGL_REFS, GATE_ALT_REFS, GATE_RULES, REFS, _refs, evaluate, gate_ctx, qnh_actual
 
 HERE = pathlib.Path(__file__).resolve().parent
 ATIS_HINT = ("letter", "rwy", "qnh", "wind", "tl")  # dati ATIS annotati mostrati sotto una voce (ordine canonico della riga)
@@ -94,15 +94,16 @@ def _check_gate_rule(rule, where: str, order: dict) -> None:
     """Regola di un gate: chiavi note, valori del tipo giusto, riferimenti ammessi, after_item su una voce precedente della stessa fase."""
     if not isinstance(rule, dict) or not rule or set(rule) - set(GATE_RULES):
         raise ValueError(f"gates {where}: regola non valida")
-    for k in ("alt_ge", "alt_le", "vs_gt"):
+    for k in ("alt_ge", "alt_le", "vs_gt", "agl_le", "ias_le"):
         if k in rule and (isinstance(rule[k], bool) or not isinstance(rule[k], (int, float))):
             raise ValueError(f"gates {where}: {k!r} non numerico")
     if "alt_ge_ref" in rule and rule["alt_ge_ref"] not in GATE_ALT_REFS:
         raise ValueError(f"gates {where}: 'alt_ge_ref' non ammesso")
     if "agl_ge_ref" in rule and rule["agl_ge_ref"] not in GATE_AGL_REFS:
         raise ValueError(f"gates {where}: 'agl_ge_ref' non ammesso")
-    if "airborne" in rule and rule["airborne"] is not True:
-        raise ValueError(f"gates {where}: 'airborne' deve essere true")
+    for k in ("airborne", "ground"):
+        if k in rule and rule[k] is not True:
+            raise ValueError(f"gates {where}: {k!r} deve essere true")
     if "after_item" in rule:
         ref = rule["after_item"]
         me = order.get(where)
@@ -269,13 +270,16 @@ class Checklist:
         return self.phases[self.ids.index(phase_id)]
 
     def evaluate_phase(self, phase_id: str, labels: dict, demo: bool = False, simplified: bool = False, raw: dict | None = None,
-                       expected: dict | None = None, wx: dict | None = None, gates: dict | None = None, update: bool = False) -> dict:
+                       expected: dict | None = None, wx: dict | None = None, gates: dict | None = None, update: bool = False,
+                       latched=None, now: float = 0.0) -> dict:
         """Sottofasi e voci della fase con status/detail; "bad" = numero di voci rosse (solo quelle visibili). demo=True tratta i link come verificati.
         raw (solo --test-links): aggiunge a ogni voce con link "raw" = [[variabile, grezzo], ...].
         expected: valori attesi {riferimento: testo} per i link eq_ref/show_ref (da state.snapshot).
         wx: {"dep": METAR, "dest": METAR} dei dati parsati (da state.snapshot), per i check "ai" (anti-ice dinamico).
         gates: {"open": set, "done": set} di State (gate aperti = restano aperti; done = voci viste ok, per after_item); update=True li aggiorna
         (solo da State.set_monitor, mai dallo snapshot). Gate non aperto => status "wait" (non conta in "bad").
+        latched: Latch di State (voci soddisfatte congelate): con update=True osserva lo stato grezzo (istante now); una voce congelata ha status "ok",
+        kind "latched", latched=True e detail = quello grezzo (vuoto se ancora ok), la riga live resta quella reale. Non conta in "bad".
         simplified=True salta le voci escluse prima della valutazione e scarta le sottofasi rimaste vuote."""
         ph, bad, subs = self.phase(phase_id), 0, []
         g_open, g_done = (gates["open"], gates["done"]) if gates is not None else (set(), set())
@@ -295,6 +299,12 @@ class Checklist:
                 res = evaluate(link["check"], labels, demo or link["verified"], link.get("optional", False), exp, gate) if link else evaluate(None, labels)
                 if rule and gate is not None and res["status"] != "wait" and update and (res["status"] != "none"):
                     g_open.add(it["id"])  # gate aperto: resta aperto
+                raw_ok = res["status"] == "ok"
+                if latched is not None and update and gates is not None and link:
+                    latched.observe(it["id"], raw_ok, now)
+                is_latched = latched is not None and it["id"] in latched
+                if is_latched:
+                    res = _res("ok", "" if raw_ok else res["detail"], "latched")
                 if res["status"] == "ok":
                     done.add(it["id"])
                     if update and gates is not None:
@@ -302,6 +312,10 @@ class Checklist:
                 bad += res["status"] == "bad"
                 row = {"id": it["id"], "text": it["text"], "response": it["response"], "type": it["type"],
                        "live": live_values(link["check"], labels) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
+                if is_latched:
+                    row["latched"] = True
+                    if not raw_ok:
+                        row["was_ok"] = True  # grezzo non ok: la pagina scrive "was OK \u00b7 NOW: <live>"
                 if res["kind"] == "wait":
                     row["gate"] = res["detail"]
                 if link and ("show" in link["check"] or ("detent" in link["check"] and res["status"] == "none") or (_refs(link["check"]) and res["status"] == "none") or (ai is not None and res["status"] == "none")):
