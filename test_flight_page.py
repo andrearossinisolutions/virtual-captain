@@ -30,9 +30,8 @@ def js_ids():
 
 
 # id usati da app.js che la pagina remota NON ha di proposito (briefing, calibrazione, scaricamento DLL, comandi):
-LOCAL_ONLY = {"apt", "clmode", "cfg", "deploc", "edit", "end", "end2", "go", "grid", "info", "load", "mode", "plancfg",
-              "simbrief", "simdll", "simmsg", "simretry", "simstat", "tech", "thrback", "thrcal", "thrcard", "thrclear",
-              "thrclose", "threrr", "threrr", "thrmsg", "thrnext", "thrsum", "thrsumtxt", "thrskip", "thrcancel",
+LOCAL_ONLY = {"deploc", "simdll", "tech", "thrback", "thrcal", "thrcard", "thrclear",
+              "thrclose", "threrr", "thrmsg", "thrnext", "thrsum", "thrsumtxt", "thrskip", "thrcancel",
               "thrstart", "thrst", "thrtab", "thrtext", "thrtitle", "thrwarn", "thrbtns", "banner", "rdata", "rerr"}
 REMOTE_ONLY = {"banner", "rdata", "rerr"}
 
@@ -48,10 +47,18 @@ def test_every_id_used_by_app_js_is_in_flight_html_or_declared_local_only():
 def test_flight_html_has_the_views_the_remote_render_needs():
     need = {"main", "hdr", "sim", "chips", "sqk", "fpills", "more", "livesw", "fd", "fdbody", "cs", "csbody", "planflt", "log",
             "flt", "clcard", "clprev", "clstrip", "clnext", "clname", "clsum", "clbody", "clnextbtn", "speech", "sptxt", "sptime",
-            "banner", "rdata"}
+            "banner", "rdata", "cfg", "simbrief", "mode", "clmode", "load", "info", "apt", "plancfg", "grid", "simstat",
+            "simretry", "simmsg", "go", "end", "end2", "edit"}
     assert need <= ids(FLIGHT)
     assert not (ids(FLIGHT) - ids(INDEX) - REMOTE_ONLY), sorted(ids(FLIGHT) - ids(INDEX) - REMOTE_ONLY)  # nessun id inventato
     assert 'data-mode="remote"' in FLIGHT and "no-referrer" not in FLIGHT  # la politica e' nell'header, non nel markup
+
+
+def test_flight_html_briefing_section_has_no_technical_or_local_only_controls():
+    cfg = FLIGHT[FLIGHT.index('<section id="cfg">'):FLIGHT.index('<section id="flt"')]
+    for local in ("tech", "thr", "simdll", "Calibrat", "Download", "deploc"):
+        assert local not in cfg, local
+    assert 'id="simretry"' in cfg and 'id="simstat"' in cfg and 'id="go"' in cfg
 
 
 def test_flight_html_is_static_and_loads_only_whitelisted_files():
@@ -119,6 +126,8 @@ const document = { body, getElementById: (id) => els[id], createElement: () => m
   querySelectorAll: () => ({ forEach() {} }), addEventListener() {}, documentElement: { style: { setProperty() {} } }, activeElement: null };
 let n = 0;
 const fetch = (url) => {
+  if (url === "/api/auth/me")  // account data (CSRF token, SimBrief ID): not part of the state plan
+    return Promise.resolve({ ok: true, status: 200, headers: { get: () => null }, json: () => Promise.resolve({ csrf_token: "T", simbrief_id: "SB" }), text: () => Promise.resolve("") });
   urls.push(url);
   const [status, bodyObj, headers] = plan[Math.min(n++, plan.length - 1)];
   return Promise.resolve({ ok: status >= 200 && status < 300, status, headers: { get: (k) => (headers || {})[k] || null },
@@ -176,7 +185,7 @@ def test_remote_page_states(tmp_path):
     assert o[2]["bannerHidden"] is True and o[2]["rdataHidden"] is False and o[2]["clname"] == v["checklist"]["phase"]["name"]
     assert o[2]["sim"] == "SimConnect: demo" and "Gear up" in o[2]["log"] + o[2]["sptxt"]
     assert o[3]["banner"] == "No update for 25 s" and o[3]["rdataHidden"] is False
-    assert o[4]["banner"] == "Briefing in progress on the PC" and o[4]["rdataHidden"] is True
+    assert o[4]["bannerHidden"] is True and o[4]["rdataHidden"] is False  # briefing: the page shows the briefing view (U3)
     assert o[5]["banner"] == "Program not connected" and o[5]["rdataHidden"] is True
     assert r["urls"][0] == "/api/flight/state" and r["urls"][1] == "/api/flight/state"
     assert r["urls"][3] == "/api/flight/state?seq=1&epoch=4"  # after a snapshot: only changes are asked for

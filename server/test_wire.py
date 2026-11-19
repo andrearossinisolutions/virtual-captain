@@ -33,14 +33,18 @@ def base() -> dict:
         # not allowed: must be dropped
         "simbrief": "SECRET-ID", "info": "x", "sim_error": "boom", "dll_msg": "m", "labels": [["a", "b"]], "now": 1.0,
         "spoke_ago": 2.0, "test_links": True, "rev": 5, "thr_cal": {"when": "x"}, "calib": {"a": 1},
+        "dll_confirm": "Download?", "modes": ["normal", "training"], "cl_modes": ["complete", "simplified"], "dll_missing": False,
     }
 
 
 def test_allowlist_keeps_known_and_drops_the_rest():
     out = wire.sanitize_snapshot(base())
     assert set(out) <= set(wire.SNAPSHOT_FIELDS)
-    for k in ("simbrief", "info", "sim_error", "dll_msg", "labels", "now", "spoke_ago", "test_links", "rev", "thr_cal", "calib"):
+    for k in ("sim_error", "dll_msg", "dll_confirm", "now", "spoke_ago", "test_links", "thr_cal", "calib"):
         assert k not in out
+    # U3: the briefing view needs these (the user's own SimBrief ID goes back to the user's own page)
+    assert out["simbrief"] == "SECRET-ID" and out["info"] == "x" and out["labels"] == [["a", "b"]] and out["rev"] == 5
+    assert out["modes"] == ["normal", "training"] and out["cl_modes"] == ["complete", "simplified"] and out["dll_missing"] is False
     item = out["checklist"]["subphases"][0]["items"][0]
     assert "raw" not in item and item["live"] == [["l", "v"]]
     assert out["plan"]["star"] is None and out["wx_dep"] is None and out["spoke_n"] == 3
@@ -59,6 +63,63 @@ def test_hidden_labels_are_case_and_space_insensitive():
     d = base()
     d["flight"] = [[" position ", "x"], ["LATITUDE", "y"], ["Pitch", "1"]]
     assert wire.sanitize_snapshot(d)["flight"] == [["Pitch", "1"]]
+
+
+POS = "45.6301\u00b0 N  8.7202\u00b0 W"
+
+
+def with_flight(rows, phase="flying"):
+    d = base()
+    d["phase"] = phase
+    d["flight"] = rows
+    return d
+
+
+def test_position_row_is_kept_only_in_the_formatted_text_form():
+    out = wire.sanitize_snapshot(with_flight([["Position", POS], ["Pitch", "1"], ["Latitude", "45.6301"]]))
+    assert out["flight"] == [["Position", POS], ["Pitch", "1"]]
+    assert wire.sanitize_snapshot(with_flight([["Position", "\u2014"]]))["flight"] == [["Position", "\u2014"]]
+    assert "45.6301" not in json.dumps(wire.sanitize_snapshot(with_flight([["Latitude", "45.6301"]])))
+
+
+@pytest.mark.parametrize("bad", [
+    "45.6301 N  8.7202 W", "45.63\u00b0 N  8.72\u00b0 W", "91.0000\u00b0 N  8.7202\u00b0 W", "45.6301\u00b0 N  181.0000\u00b0 E",
+    "45.6301\u00b0 X  8.7202\u00b0 W", "-45.6301\u00b0 N  8.7202\u00b0 W", POS + "\n", POS + " ", "x" * 41, "", 12.5, None,
+    "45.6301\u00b0 N  8.7202\u00b0 W; 1.0000\u00b0 N  1.0000\u00b0 E"])
+def test_malformed_position_row_is_dropped_without_error(bad):
+    out = wire.sanitize_snapshot(with_flight([["Position", bad], ["Pitch", "1"]]))
+    assert out["flight"] == [["Pitch", "1"]]
+
+
+def test_position_row_with_odd_shape_or_label_is_dropped():
+    rows = [["Position", POS, "extra"], ["position", POS], [" Position ", POS], ["Position"], "Position"]
+    for r in rows:
+        try:
+            out = wire.sanitize_snapshot(with_flight([r, ["Pitch", "1"]]))
+        except wire.SnapshotError:
+            continue  # a non-row is a type error, never a leak
+        assert out["flight"] == [["Pitch", "1"]], r
+
+
+def test_position_never_leaves_in_the_briefing():
+    out = wire.sanitize_snapshot(with_flight([["Position", POS], ["Pitch", "1"]], phase="briefing"))
+    assert out["flight"] == [["Pitch", "1"]] and "45.6301" not in json.dumps(out)
+
+
+def test_position_is_not_accepted_in_the_monitor_and_waypoints_have_no_coordinates():
+    d = with_flight([])
+    d["monitor"] = [["G", [["Position", POS], ["Latitude", "1"], ["GS", "1 kt"]]]]
+    out = wire.sanitize_snapshot(d)
+    assert out["monitor"] == [["G", [["GS", "1 kt"]]]] and "lat" not in json.dumps(out["plan"])
+
+
+def test_extended_fields_are_bounded():
+    for key, bad in (("simbrief", "x" * 41), ("info", "x" * 301), ("labels", [["a", "b"]] * 25), ("labels", [["a" * 33, "b"]]),
+                     ("modes", ["a"] * 5), ("cl_modes", ["a" * 17]), ("rev", "1"), ("dll_missing", "yes")):
+        d = base()
+        d[key] = bad
+        with pytest.raises(wire.SnapshotError):
+            wire.sanitize_snapshot(d)
 
 
 def test_inputs_are_not_modified():
@@ -150,7 +211,7 @@ def test_output_is_json_serialisable_and_stable():
 
 def test_constants():
     assert wire.SNAPSHOT_VERSION == 1 and 1 in wire.SUPPORTED_SNAPSHOT_VERSIONS and wire.MAX_SNAPSHOT_TARGET == 65536
-    assert wire.T_SNAPSHOT == "snapshot" and {"position", "latitude", "longitude"} == set(wire.HIDDEN_ROW_LABELS)
+    assert wire.T_SNAPSHOT == "snapshot" and {"latitude", "longitude"} == set(wire.HIDDEN_ROW_LABELS)
     assert wire.MAX_SNAPSHOT_TARGET * 2 < wire.MAX_MSG
 
 

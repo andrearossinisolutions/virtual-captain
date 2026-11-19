@@ -11,7 +11,7 @@ function build(s){const g=$("grid"),apt=$("apt");g.textContent="";apt.textConten
     if(k==="dep_time"){const e=mk("div"),l2=mk("label","Local time"),dl=mk("input");dl.id="deploc";dl.disabled=true;e.append(l2,dl);apt.appendChild(e)}}
   const opts=(sel,list)=>{sel.textContent="";for(const m of list){const o=mk("option",m[0].toUpperCase()+m.slice(1));o.value=m;sel.appendChild(o)}};
   opts($("mode"),s.modes);opts($("clmode"),s.cl_modes);
-  document.querySelectorAll("[data-k]").forEach(i=>i.oninput=()=>{save();localTime()});$("mode").onchange=save;$("clmode").onchange=save;document.querySelectorAll("#cfg input").forEach(i=>i.onkeydown=nextField);$("simbrief").oninput=save;$("simdll").onclick=simDll;$("simretry").onclick=simRetry;
+  document.querySelectorAll("[data-k]").forEach(i=>{i.oninput=()=>{mark(i.dataset.k,i);save();localTime()};i.onchange=()=>{if(REMOTE)save(true)}});$("mode").onchange=()=>{mark("mode",$("mode"));save(true)};$("clmode").onchange=()=>{mark("checklist_mode",$("clmode"));save(true)};document.querySelectorAll("#cfg input").forEach(i=>i.onkeydown=nextField);$("simbrief").oninput=()=>{if(REMOTE)mark("simbrief",$("simbrief"));else save()};$("simdll").onclick=simDll;$("simretry").onclick=simRetry;
   for(const a of ["start","next","back","skip","cancel"])$("thr"+a).onclick=()=>thrAct(a);$("thrclose").onclick=()=>thrAct("cancel");
   $("thrclear").onclick=()=>{if(confirm("Clear the thrust levers calibration?"))thrAct("clear")}}
 let calKey="";
@@ -29,7 +29,7 @@ function calib(s){const c=s.calib,t=s.thr_cal,k=JSON.stringify([c,t]);if(k===cal
   const tb=$("thrtab");tb.textContent="";const mk=(tag,txt,cls)=>{const e=document.createElement(tag);e.textContent=txt;if(cls)e.className=cls;return e};
   const h=document.createElement("tr");h.appendChild(mk("th","Variable"));h.appendChild(mk("th","Live"));for(const x of c.heads)h.appendChild(mk("th",x));tb.appendChild(h);
   for(const r of c.rows){const tr=document.createElement("tr");if(r.guide)tr.className="gd";tr.appendChild(mk("td",r.name));tr.appendChild(mk("td",r.live===""?"n/d":r.live,"lv"));for(const v of r.vals)tr.appendChild(mk("td",v));tb.appendChild(tr)}}
-function localTime(){const el=$("deploc");if(!el)return;const v=(document.querySelector('[data-k="dep_time"]').value||"").trim();
+function localTime(){const el=$("deploc"),dt=document.querySelector('[data-k="dep_time"]');if(!el||!dt)return;const v=(dt.value||"").trim();
   const m=v.match(/^(\d{1,2})[:.]?(\d{2})$/);if(!m||+m[1]>23||+m[2]>59){el.value="";return}
   const n=new Date(),d=new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate(),+m[1],+m[2]));
   el.value=d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",hour12:false})}
@@ -39,9 +39,18 @@ function nextField(e){if(e.key!=="Enter")return;e.preventDefault();
 async function simDll(){const r=$("simmsg");if(!confirm(last&&last.dll_confirm||"Download SimConnect.dll?"))return;
   r.textContent="";try{await api("/api/simdll-fetch",{confirm:true})}catch(e){r.textContent="Download failed: "+e.message}}
 async function simRetry(){const r=$("simmsg");r.textContent="";try{await api("/api/sim-retry",{})}catch(e){r.textContent="Retry failed: "+e.message}}
-function fill(s){document.querySelectorAll("[data-k]").forEach(i=>i.value=s.fields[i.dataset.k]);$("simbrief").value=s.simbrief;$("mode").value=s.mode;$("clmode").value=s.checklist_mode;localTime()}
+const rDirty=new Map();let rPre="",rBuilt=false;  // remoto: campi modificati e non ancora confermati dal PC (fill non li sovrascrive); ID SimBrief dell'account
+const keep=(k,el)=>REMOTE&&(rDirty.has(k)||document.activeElement===el);  // fill() lascia stare campi con focus o modifiche non inviate
+function fill(s){document.querySelectorAll("[data-k]").forEach(i=>{if(!keep(i.dataset.k,i))i.value=(s.fields||{})[i.dataset.k]??""});
+  const sb=$("simbrief");if(!keep("simbrief",sb))sb.value=s.simbrief||(REMOTE?rPre:"");
+  if(!keep("mode",$("mode")))$("mode").value=s.mode;if(!keep("checklist_mode",$("clmode")))$("clmode").value=s.checklist_mode;localTime()}
 function collect(){const o={simbrief:$("simbrief").value,mode:$("mode").value,checklist_mode:$("clmode").value};document.querySelectorAll("[data-k]").forEach(i=>o[i.dataset.k]=i.value);return o}
-function save(){clearTimeout(timer);timer=setTimeout(async()=>{try{const s=await api("/api/fields",collect());lastRev=s.rev}catch(e){}},400)}
+function rBody(){const o={};for(const [k,el] of rDirty)if(k!=="simbrief")o[k]=el.value;return o}  // remoto: solo i campi modificati (mai simbrief: viaggia con load-plan)
+function mark(k,el){if(REMOTE)rDirty.set(k,el)}
+async function rSave(){clearTimeout(timer);timer=null;const b=rBody();if(!Object.keys(b).length)return;
+  const done=()=>{for(const k in b){const el=rDirty.get(k);if(el&&el.value===b[k])rDirty.delete(k)}};
+  try{const s=await api("/api/fields",b);done();fill(s)}catch(e){if(last)fill(last)}}  // errore: i campi restano in rDirty (messaggio in rerr), non si perdono
+function save(now){clearTimeout(timer);if(REMOTE){timer=setTimeout(rSave,now?0:1200);return}timer=setTimeout(async()=>{try{const s=await api("/api/fields",collect());lastRev=s.rev}catch(e){}},400)}
 function planHtml(p,open){if(!p||!(p.route||p.waypoints&&p.waypoints.length))return null;
   const box=document.createElement("div");box.className="plan";
   const head=[p.flight,p.aircraft,p.cruise_alt&&("FL"+Math.round(p.cruise_alt/100)),p.distance_nm&&(p.distance_nm+" nm"),p.ete,p.alternate&&("ALTN "+p.alternate)].filter(Boolean).join(" · ");
@@ -238,20 +247,21 @@ function render(){const s=last;if(!s)return;const fly=s.phase==="flying";
   if(view==="flight"&&shownView!=="flight")window.scrollTo(0,0);shownView=view;  // solo al cambio vista: la vista Volo parte dall'alto (pills visibili)
   $("main").classList.toggle("fv",view==="flight");$("cfg").hidden=view!=="config";$("flt").hidden=view!=="flight";$("chips").hidden=$("more").hidden=$("sqk").hidden=$("fpills").hidden=view!=="flight";
   const a=$("sim");a.textContent=s.sim_demo?"SimConnect: demo":s.sim_ok===null?"SimConnect: waiting":s.sim_ok?"SimConnect: connected":s.dll_missing?"SimConnect: DLL missing":"SimConnect: not connected";a.className="pill "+(s.sim_ok===null?"":s.sim_ok?"ok":"bad");
-  $("simstat").textContent=s.sim_demo?"Demo flight: the simulator is not read.":s.sim_ok?"Connected to MSFS.":(s.sim_error||"Waiting for MSFS…");$("simmsg").textContent=s.dll_fetching?"Downloading…":(s.dll_msg||"");$("simdll").hidden=!s.dll_missing;$("simdll").disabled=!!s.dll_fetching;$("simretry").hidden=!!s.sim_demo;
+  $("simstat").textContent=s.sim_demo?"Demo flight: the simulator is not read.":s.sim_ok?"Connected to MSFS.":(s.sim_error||(REMOTE&&s.dll_missing?"SimConnect.dll is missing: download it from the program on the PC.":"Waiting for MSFS…"));$("simmsg").textContent=s.dll_fetching?"Downloading…":(s.dll_msg||"");$("simdll").hidden=!s.dll_missing;$("simdll").disabled=!!s.dll_fetching;$("simretry").hidden=!!s.sim_demo;
   $("go").textContent=fly?"Back to flight":"Briefing complete";$("go").className="big "+(fly?"fly":"");$("end").hidden=!fly;$("end2").hidden=!fly;
   $("info").textContent=s.info;chips(s);checklist(s);cockpit(s);fdata(s);fpills(s);plans(s);if(!REMOTE)calib(s);
   speech(s);
   const l=s.log;
   $("log").textContent="";for(const t of l.slice(1)){const li=document.createElement("li");li.textContent=t;$("log").appendChild(li)}}
 function apply(s){const prev=last;last=s;
-  if(!prev||prev.phase!==s.phase)view=REMOTE||s.phase==="flying"?"flight":"config";  // cambio di fase → vista di default
+  if(!prev||prev.phase!==s.phase)view=s.phase==="flying"?"flight":"config";  // cambio di fase → vista di default
   render()}
 async function poll(){try{const s=await api("/api/state");
   if(lastRev===-1){build(s);fill(s);lastRev=s.rev}else if(s.rev!==lastRev){fill(s);lastRev=s.rev}apply(s)}catch(e){const a=$("sim");a.textContent="Connection lost…";a.className="pill bad"}setTimeout(poll,1500)}
 let rseq=null,repoch=null,rlast=null;
-function norm(s){const d={fields:{},plan:{},flight:[],monitor:[],pills:{},pill_defs:[],log:[],cl_phases:[],clearance:{},rwy_bad:{},atis_warn:{},wx_dep:null,wx_dest:null,info:"",test_links:false,checklist:null,spoke_n:0};
+function norm(s){const d={fields:{},plan:{},flight:[],monitor:[],pills:{},pill_defs:[],log:[],cl_phases:[],clearance:{},rwy_bad:{},atis_warn:{},wx_dep:null,wx_dest:null,info:"",test_links:false,checklist:null,spoke_n:0,labels:[],modes:[],cl_modes:[],simbrief:"",rev:0,dll_missing:false};
   for(const k in d)if(s[k]===undefined)s[k]=d[k];return s}
+function rRO(){document.querySelectorAll("#cfg input:not(#deploc),#cfg select,#go,#end,#end2,#simretry").forEach(e=>e.disabled=RO());if(RO())$("load").disabled=true;else if($("info").textContent!=="Loading…")$("load").disabled=false}  // sola lettura: controlli del briefing spenti
 function rbanner(t){const b=$("banner");b.textContent=t||"";b.hidden=!t}
 function rdata(on){$("rdata").hidden=!on}
 function remoteApply(d){
@@ -261,8 +271,11 @@ function remoteApply(d){
     rseq=d.seq;repoch=d.epoch;rlast=norm(d.snapshot);rlast.spoke_ago=d.spoke_ago}
   else if(d.unchanged&&rlast){rlast.spoke_ago=d.spoke_ago}
   if(!rlast){rdata(false);rbanner("Program connected: waiting for the first data");return}
-  if(rlast.phase==="briefing"){rdata(false);rbanner("Briefing in progress on the PC");return}
-  rdata(true);rbanner(d.age!=null&&d.age>20?"No update for "+Math.round(d.age)+" s":RO()?"Remote control is off on the PC":"");apply(rlast)}
+  if(!rBuilt&&rlast.labels.length){build(rlast);rBuilt=true;fill(rlast);lastRev=rlast.rev;rPrefill()}else if(rlast.rev!==lastRev){fill(rlast);lastRev=rlast.rev}
+  if(rlast.phase==="briefing"&&!rlast.labels.length){rdata(false);rbanner("Update the program on the PC to edit the briefing remotely");return}
+  rRO();rdata(true);rbanner(d.age!=null&&d.age>20?"No update for "+Math.round(d.age)+" s":RO()?"Remote control is off on the PC":"");apply(rlast)}
+async function rPrefill(){try{await rToken();const v=rSb;  // ID SimBrief dell'account (da /api/auth/me, gia' letto per il token CSRF) nel campo vuoto: mai inviato da solo
+  if(/^[A-Za-z0-9 ._-]{1,40}$/.test(v)){rPre=v;if(!$("simbrief").value&&!rDirty.has("simbrief"))$("simbrief").value=rPre}}catch(e){}}
 async function rpoll(){const w=await rfetch();if(w!==null)setTimeout(rpoll,w)}
 async function rfetch(){let wait=3000;  // una lettura dello stato: ritorna l'attesa prima della prossima (null: pagina lasciata)
   try{const r=await fetch("/api/flight/state"+(rseq!==null&&repoch!==null?"?seq="+rseq+"&epoch="+repoch:""),{credentials:"same-origin",cache:"no-store"});
@@ -278,7 +291,7 @@ const CMD_PATHS={"/api/fields":"fields","/api/load-plan":"load-plan","/api/phase
 const CMD_ERR={busy:"The program is busy, try again in a moment.",program_offline:"Program not connected.",commands_unsupported:"This program version cannot be controlled from the site: update it on the PC.",commands_disabled:"Remote control is off on the PC.",commands_off:"Remote control is switched off on the server."};
 const LOAD_ERR={network:"SimBrief is not reachable.",not_found:"SimBrief did not find this ID or username.",bad_plan:"The SimBrief plan could not be read."};
 const MERGE_MS=600,SNAP_WAIT_MS=5000;  // finestra in cui le modifiche ai campi si fondono in una richiesta; attesa massima dello snapshot
-let rCsrf=null,rq=[],rRunning=false,rErrTimer=null;
+let rCsrf=null,rSb="",rq=[],rRunning=false,rErrTimer=null;
 const rSleep=ms=>new Promise(r=>setTimeout(r,ms));
 const rFail=(t,silent)=>{const e=new Error(t);e.fixed=true;e.silent=!!silent;return e};
 const rClean=v=>typeof v==="string"?v.replace(/[\x00-\x1f\x7f-\x9f]/g," "):Array.isArray(v)?v.map(rClean):v&&typeof v==="object"?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,rClean(x)])):v;
@@ -288,7 +301,7 @@ async function rToken(force){if(rCsrf&&!force)return rCsrf;
   if(r.status===401){location.replace("/login");throw rFail("Please sign in again.",true)}
   if(!r.ok)throw rFail("Request failed.");
   const d=await r.json();if(!d||typeof d.csrf_token!=="string")throw rFail("Request failed.");
-  rCsrf=d.csrf_token;return rCsrf}
+  rCsrf=d.csrf_token;rSb=typeof d.simbrief_id==="string"?d.simbrief_id:"";return rCsrf}
 async function rPost(name,body){
   for(let n=0;;n++){const tok=await rToken(n>0);
     const r=await fetch("/api/flight/cmd/"+name,{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json","X-CSRF-Token":tok},body:JSON.stringify(body)});
@@ -328,11 +341,11 @@ function remoteApi(path,body){const name=CMD_PATHS[path];if(!name)return Promise
     rq.push({name,body:Object.assign({},body),ws:[[res,rej]],started:false,wait:(name==="fields"||name==="clearance")&&!body.reset?MERGE_MS:0});
     if(!rRunning)rRun()})}
 $("load").onclick=async()=>{$("load").disabled=true;$("info").textContent="Loading…";
-  try{const s=await api("/api/load-plan",{simbrief:$("simbrief").value});fill(s);lastRev=s.rev;apply(s)}catch(e){$("info").textContent="SimBrief error: "+e.message}$("load").disabled=false};
-$("go").onclick=async()=>{await api("/api/fields",collect());
+  try{const raw=$("simbrief").value,v=raw.trim();if(REMOTE)await rSave();const s=await api("/api/load-plan",REMOTE&&!v?{}:{simbrief:raw});rDirty.delete("simbrief");fill(s);lastRev=s.rev;apply(s)}catch(e){$("info").textContent="SimBrief error: "+e.message}$("load").disabled=false};
+$("go").onclick=async()=>{try{if(REMOTE)await rSave();else await api("/api/fields",collect());
   if(phase==="flying"){view="flight";render()}  // la lettura continua, si torna solo alla vista Volo
-  else{const s=await api("/api/phase",{phase:"flying"});phase=s.phase;apply(s)}};
-$("end").onclick=$("end2").onclick=async()=>{const s=await api("/api/phase",{phase:"briefing"});phase=s.phase;apply(s)};
+  else{const s=await api("/api/phase",{phase:"flying"});phase=s.phase;apply(s)}}catch(e){if(!REMOTE)throw e}};
+$("end").onclick=$("end2").onclick=async()=>{try{const s=await api("/api/phase",{phase:"briefing"});phase=s.phase;apply(s)}catch(e){if(!REMOTE)throw e}};  // remoto: confirm() in rSend, poi {"phase":"briefing","confirm":true}
 $("speech").onclick=()=>{spExp=!spExp;if(last)speech(last)};
 if(window.ResizeObserver)new ResizeObserver(()=>document.documentElement.style.setProperty("--sp-h",$("speech").offsetHeight+"px")).observe($("speech"));
 

@@ -9,17 +9,40 @@
 <div class="banner" id="rerr" role="alert" hidden></div>
 <div id="rdata" hidden>
 <header id="hdr"><h1>Virtual Captain</h1><span class="pill" id="sim"></span>
-  <div class="chips" id="chips"></div><span class="chip" id="sqk"></span><div class="chips" id="fpills"></div>
-  <details id="more"><summary>More</summary>
+  <div class="chips" id="chips" hidden></div><span class="chip" id="sqk" hidden></span><div class="chips" id="fpills" hidden></div>
+  <details id="more" hidden><summary>More</summary>
     <label class="livesw"><input type="checkbox" id="livesw"> Show real values on checklist</label>
     <details class="card cs" id="fd"><summary>Flight data</summary><div id="fdbody"></div></details>
     <details class="card cs" id="cs"><summary>Cockpit state</summary><div id="csbody"></div></details>
     <div id="planflt"></div>
+    <div class="morebtns"><button class="ghost" id="edit">Edit briefing</button><button class="ghost" id="end2" hidden>End flight (stop reading)</button></div>
     <h2>Earlier</h2><div class="card"><ul id="log"></ul></div>
   </details>
 </header>
 
-<section id="flt">
+<section id="cfg">
+  <h2>Briefing</h2>
+  <div class="card">
+    <div class="row"><div class="f2"><label for="simbrief">SimBrief ID or username</label><input id="simbrief" enterkeyhint="next" autocapitalize="off" autocorrect="off"></div>
+    <div class="f1"><label for="mode">Mode</label><select id="mode"></select></div>
+    <div class="f1"><label for="clmode">Checklists</label><select id="clmode"></select></div></div>
+    <p id="loadp"><button id="load">Load latest plan</button></p>
+    <p id="info"></p>
+    <div class="grid" id="apt"></div>
+    <div id="plancfg"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+  <div class="card">
+    <label>SimConnect</label>
+    <p id="simstat" class="meta"></p>
+    <div class="row"><button class="ghost" id="simretry">Retry</button></div>
+    <p id="simmsg" class="meta"></p>
+  </div>
+  <button class="big" id="go">Briefing complete</button>
+  <p id="endp"><button class="ghost" id="end" hidden>End flight (stop reading)</button></p>
+</section>
+
+<section id="flt" hidden>
   <div class="card clcard cl" id="clcard">
     <div class="clbar"><button class="clnav" id="clprev" aria-label="Previous phase">&lsaquo;</button><div class="clstrip" id="clstrip"></div><button class="clnav" id="clnext" aria-label="Next phase">&rsaquo;</button></div>
     <div class="clname" id="clname"></div><div class="clsum" id="clsum"></div>

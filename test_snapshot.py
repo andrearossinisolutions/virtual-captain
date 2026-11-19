@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -43,9 +44,10 @@ def test_real_snapshot_keeps_the_allowlist_and_drops_the_rest():
     snap = make_state().snapshot()
     view = snapshot.remote_view(snap)
     assert set(view) <= set(wire.SNAPSHOT_FIELDS)
-    for k in ("simbrief", "info", "sim_error", "dll_missing", "dll_msg", "dll_confirm", "thr_cal", "calib", "labels", "modes",
-              "cl_modes", "rev", "now", "spoke_ago", "test_links"):
+    for k in ("sim_error", "dll_msg", "dll_confirm", "dll_fetching", "thr_cal", "calib", "now", "spoke_ago", "test_links"):
         assert k in snap and k not in view, k
+    for k in ("simbrief", "info", "labels", "modes", "cl_modes", "rev", "dll_missing"):  # briefing view on the site (U3)
+        assert k in snap and k in view, k
     assert view["phase"] == "flying" and view["checklist"]["subphases"] and view["pills"]["gs"]
 
 
@@ -53,10 +55,21 @@ def test_position_never_leaves_the_pc():
     st = make_state(big=True)
     snap = st.snapshot()
     assert any(r[0] == "Position" for r in snap["flight"])  # il dato c'e' nello snapshot locale...
-    j = snapshot.dumps(snapshot.remote_view(snap))
-    for s in (str(LAT), str(LON), "12.34", "65.43", "Position", "Latitude", "Longitude", '"lat"', '"lon"'):  # ...ma non in quello remoto
+    view = snapshot.remote_view(snap)
+    j = snapshot.dumps(view)
+    for s in ("Latitude", "Longitude", '"lat"', '"lon"'):  # ...mai numerico/grezzo nel remoto
         assert s not in j, s
-    assert "45.6" not in j and "8.7" not in j
+    assert not re.search(r"[:\[,]-?\d+\.\d{3,}[,\]}]", j)  # nessun numero JSON con decimali (coordinate grezze)
+    # ...solo la riga Position gia' formattata (4 decimali, nessun URL) e solo in volo
+    pos = [r for r in view["flight"] if r[0] == "Position"]
+    assert pos and pos[0][1] == dict(snap["flight"])["Position"] and "http" not in j and "maps" not in j
+
+
+def test_position_does_not_leave_in_the_briefing():
+    st = make_state()
+    st.set_phase("briefing")
+    j = snapshot.dumps(snapshot.remote_view(st.snapshot()))
+    assert "Position" not in j and "12.3456" not in j and "65.4321" not in j
 
 
 def test_checklist_item_keys_are_all_covered_by_the_allowlist():

@@ -61,7 +61,11 @@ SUPPORTED_SNAPSHOT_VERSIONS = frozenset({1})
 MAX_SNAPSHOT_TARGET = 65536   # bytes: the program trims (waypoints, then monitor) above 96 KB, the tests keep the worst case here
 MAX_DEPTH = 8
 KEY_RE = re.compile(r"^[a-z0-9_]{1,32}$")
-HIDDEN_ROW_LABELS = frozenset({"position", "latitude", "longitude"})  # rows with these labels never leave the PC
+HIDDEN_ROW_LABELS = frozenset({"latitude", "longitude"})  # rows with these labels never leave the PC
+# The "Position" row of flight[] is the only place a position may leave the PC: formatted text with 4 decimals, never numbers.
+POSITION_LABEL = "position"
+POSITION_DASH = "\u2014"
+POSITION_RE = re.compile(r"(\d{1,2})\.\d{4}\u00b0 [NS]  (\d{1,3})\.\d{4}\u00b0 [EW]", re.ASCII)
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
@@ -118,6 +122,9 @@ SNAPSHOT_FIELDS = {
     "clearance": ("map", _s(400), 8),
     "log": ("list", _s(300), 30),
     "spoke_n": ("int",),
+    # extended in U3 (briefing view on the site)
+    "simbrief": _s(40), "info": _s(300), "labels": ("list", ("pair", 32, 40), 24),
+    "modes": ("list", _s(16), 4), "cl_modes": ("list", _s(16), 4), "rev": ("int",), "dll_missing": ("bool",),
 }
 MAX_MONITOR_ROWS = 150
 MAX_CHECKLIST_ITEMS = 100
@@ -175,6 +182,30 @@ def _walk(v, schema, path, depth):
     raise SnapshotError("bad schema")  # pragma: no cover
 
 
+def _position_ok(value) -> bool:
+    """A Position value is either the dash or the formatted text with degrees in range (never raw numbers)."""
+    if not isinstance(value, str) or len(value) > 40:
+        return False
+    if value == POSITION_DASH:
+        return True
+    m = POSITION_RE.fullmatch(value)
+    return bool(m) and int(m.group(1)) <= 90 and int(m.group(2)) <= 180
+
+
+def _flight_rows(raw, phase) -> list:
+    """Rows of flight[] for the site: Latitude/Longitude rows dropped; Position kept only if well formed and the
+    program is not in the briefing; a malformed Position row is dropped (no error)."""
+    rows = []
+    for r in raw:
+        if isinstance(r, (list, tuple)) and r and _hidden(r[0]):
+            continue
+        if isinstance(r, (list, tuple)) and r and isinstance(r[0], str) and r[0].strip().lower() == POSITION_LABEL:
+            if phase == "briefing" or len(r) != 2 or r[0] != "Position" or not _position_ok(r[1]):
+                continue
+        rows.append(r)
+    return rows
+
+
 def _hidden(label) -> bool:
     return isinstance(label, str) and label.strip().lower() in HIDDEN_ROW_LABELS
 
@@ -195,7 +226,7 @@ def sanitize_snapshot(data) -> dict:
             raw = data[key]
             if not isinstance(raw, list):
                 raise SnapshotError("flight: bad list")
-            out[key] = _walk([r for r in raw if not (isinstance(r, (list, tuple)) and r and _hidden(r[0]))], schema, key, 0)
+            out[key] = _walk(_flight_rows(raw, data.get("phase")), schema, key, 0)
         else:
             out[key] = _walk(data[key], schema, key, 0)
     if "phase" not in out:
@@ -218,8 +249,8 @@ def _monitor(raw):
         for r in g[1]:
             if not isinstance(r, (list, tuple)) or not 1 <= len(r) <= 4:
                 raise SnapshotError("monitor: bad row")
-            if _hidden(r[0]):
-                continue
+            if _hidden(r[0]) or (isinstance(r[0], str) and r[0].strip().lower() == POSITION_LABEL):
+                continue  # the monitor never carries a position (only flight[] does, validated)
             rows.append(_walk(list(r), _MONITOR_ROW, "monitor.row", 3))
         rows_total += len(rows)
         out.append([name, rows])

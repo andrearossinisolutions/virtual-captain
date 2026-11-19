@@ -376,3 +376,87 @@ def test_adapter_source_rules():
     for local in ("simdll", "thrust-cal"):
         assert local not in body
     assert "confirm(" in body and body.count("confirm(") == 1
+
+
+@needs_node
+def test_briefing_phase_shows_the_briefing_view_and_default_view_follows_the_phase(tmp_path):
+    out = run_js(tmp_path, PRELUDE + """
+t.handlers["GET /api/flight/state"] = () => [200, t.state(1, {phase: "briefing", info: "Plan loaded", simbrief: "SB1"})];
+await t.run("rfetch()");
+const a = {banner: t.els.banner.__store.textContent, hidden: t.els.rdata.__store.hidden, view: t.run("view"), cfg: t.els.cfg.__store.hidden,
+           flt: t.els.flt.__store.hidden, info: t.els.info.__store.textContent};
+t.handlers["GET /api/flight/state"] = () => [200, t.state(2, {phase: "flying"})];
+await t.run("rfetch()");
+out.r = {a, view2: t.run("view"), cfg2: t.els.cfg.__store.hidden, flt2: t.els.flt.__store.hidden};
+""")
+    r = out["r"]
+    assert r["a"] == {"banner": "", "hidden": False, "view": "config", "cfg": False, "flt": True, "info": "Plan loaded"}
+    assert r["view2"] == "flight" and r["cfg2"] is True and r["flt2"] is False
+
+
+@needs_node
+def test_only_modified_fields_are_sent_and_the_simbrief_id_never_goes_with_fields(tmp_path):
+    out = run_js(tmp_path, PRELUDE + """
+t.handlers["GET /api/flight/state"] = () => [200, t.state(1)];
+await t.run("rfetch()");
+t.handlers["POST /api/flight/cmd/fields"] = () => [200, {ok: true}];
+t.run('rDirty.set("v1", {value: "150"}); rDirty.set("mode", {value: "training"})');
+await t.run("rSave()");
+t.run('rDirty.clear()'); 
+await t.run("rSave()");   // nothing modified: nothing sent
+const posts = t.log.fetches.filter(f => f.key === "POST /api/flight/cmd/fields").map(f => f.body);
+out.r = {posts, pre: t.run("rPre"), body: (t.run('rDirty.set("simbrief", {value: "X"}); rDirty.set("v1", {value: "1"})'), t.run("JSON.stringify(rBody())"))};
+""")
+    r = out["r"]
+    assert r["posts"] == [{"v1": "150", "mode": "training"}] and r["pre"] == "SB" and r["body"] == '{"v1":"1"}'
+
+
+@needs_node
+def test_end_flight_asks_for_confirmation_and_sends_the_confirm_flag(tmp_path):
+    out = run_js(tmp_path, PRELUDE + """
+t.handlers["GET /api/flight/state"] = () => [200, t.state(1)];
+await t.run("rfetch()");
+t.handlers["POST /api/flight/cmd/phase"] = () => [200, {ok: true}];
+t.confirmAnswer = false;
+await t.els.end.__store.onclick();
+const n0 = t.log.fetches.filter(f => f.key === "POST /api/flight/cmd/phase").length;
+t.confirmAnswer = true;
+await t.els.end.__store.onclick();
+out.r = {n0, posts: t.log.fetches.filter(f => f.key === "POST /api/flight/cmd/phase").map(f => f.body), confirms: t.log.confirms.length};
+""")
+    r = out["r"]
+    assert r["n0"] == 0 and r["posts"] == [{"phase": "briefing", "confirm": True}] and r["confirms"] == 2
+
+
+@needs_node
+def test_load_plan_uses_the_typed_id_and_the_field_is_not_overwritten(tmp_path):
+    out = run_js(tmp_path, PRELUDE + """
+t.handlers["GET /api/flight/state"] = () => [200, t.state(1, {simbrief: "OLD"})];
+await t.run("rfetch()");
+t.handlers["POST /api/flight/cmd/fields"] = () => [200, {ok: true}];
+t.handlers["POST /api/flight/cmd/load-plan"] = () => [200, {ok: true}];
+t.els.simbrief.__store.value = "TYPED";
+await t.els.simbrief.__store.oninput();
+t.run('rDirty.set("v1", {value: "150"})');
+await t.els.load.__store.onclick();
+out.r = {posts: t.log.fetches.filter(f => f.key.startsWith("POST")).map(f => [f.key, f.body]), dirty: t.run('rDirty.has("simbrief")')};
+""")
+    r = out["r"]
+    assert r["posts"][-1] == ["POST /api/flight/cmd/load-plan", {"simbrief": "TYPED"}]
+    assert ["POST /api/flight/cmd/fields", {"v1": "150"}] in r["posts"] and r["dirty"] is False
+
+
+@needs_node
+def test_failed_fields_stay_dirty_and_old_program_without_labels_gets_a_hint(tmp_path):
+    out = run_js(tmp_path, PRELUDE + """
+t.handlers["GET /api/flight/state"] = () => [200, t.state(1)];
+await t.run("rfetch()");
+t.handlers["POST /api/flight/cmd/fields"] = () => [409, {error: "busy"}];
+t.run('rDirty.set("v1", {value: "150"})');
+await t.run("rSave()");
+const kept = t.run('rDirty.has("v1")');
+t.handlers["GET /api/flight/state"] = () => [200, t.state(2, {phase: "briefing", labels: []})];
+await t.run("rfetch()");
+out.r = {kept, banner: t.els.banner.__store.textContent, hidden: t.els.rdata.__store.hidden};
+""")
+    assert out["r"] == {"kept": True, "banner": "Update the program on the PC to edit the briefing remotely", "hidden": True}

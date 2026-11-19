@@ -1,8 +1,9 @@
 """Snapshot del volo per il server pubblico: solo cio' che e' nell'allowlist di server/wire.py.
 
 Logica pura, nessun import di SimConnect, voce, server web o librerie di rete: il thread dell'uplink la usa
-dopo aver preso `State.snapshot()`. La posizione (lat/lon) non esce mai: Position, Latitude, Longitude e le
-coordinate dei waypoint non sono nell'allowlist.
+dopo aver preso `State.snapshot()`. La posizione esce solo come riga "Position" di flight[] gia' formattata
+(4 decimali, vedi wire._flight_rows), mai in briefing; Latitude, Longitude e le coordinate dei waypoint non sono
+nell'allowlist.
 """
 from __future__ import annotations
 

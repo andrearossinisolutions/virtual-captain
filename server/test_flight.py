@@ -93,8 +93,8 @@ def test_snapshot_is_stored_sanitised_and_served(env, rep):
         snap = out["snapshot"]
         assert snap["log"] == ["MARK"] and snap["flight"] == [["GS", "1 kt"]]
         assert snap["plan"]["waypoints"] == [{"ident": "X", "alt": 1}]
-        assert "simbrief" not in snap and "info" not in snap
-        for s in (LAT, LON, "SECRET-ID", "Position"):
+        assert snap["simbrief"] == "SECRET-ID" and snap["info"] == "x"  # the user's own briefing data (U3)
+        for s in (LAT, LON, "Position"):  # a malformed Position row is dropped, nothing numeric leaves
             assert s not in r.text
 
 
