@@ -57,7 +57,7 @@ main.fv{max-width:none;padding:12px 16px}
 .cli.st-ok{border-left-color:var(--ok)}.cli.st-ok .ic{color:var(--ok)}
 .cli.st-bad{border-left-color:var(--bad);background:rgba(227,86,74,.08)}.cli.st-bad .ic{color:var(--bad)}
 .cli.st-opt{border-left-color:var(--opt)}.cli.st-opt .ic{color:var(--opt)}
-.cli.st-wait{border-left-color:#5d6d7d}.cli.st-wait .ic{color:var(--mut);opacity:.7}.cli.st-na{border-left-color:#5d6d7d}.cli.st-na .ic{color:#6b7c8d;font-size:12px;font-weight:500}.cli .ic.w{flex:0 0 5.2em;min-width:5.2em;white-space:nowrap;text-align:left}.cli .rw{font:12px ui-monospace,monospace;color:var(--mut);word-break:break-all}
+.cli.st-wait{border-left-color:#4c9be8}.cli.st-wait .ic{color:#4c9be8}.cli.st-na{border-left-color:#5d6d7d}.cli.st-na .ic{color:#6b7c8d;font-size:12px;font-weight:500}.cli .ic.w{flex:0 0 5.2em;min-width:5.2em;white-space:nowrap;text-align:left}.cli .rw{font:12px ui-monospace,monospace;color:var(--mut);word-break:break-all}
 .cli.t-atc .e,.cli.t-announce .e,.cli.t-note .e{font-style:italic;color:var(--mut)}
 .badge{display:inline-block;font-size:11px;font-style:normal;font-weight:700;letter-spacing:.05em;border:1px solid var(--bd);border-radius:6px;padding:1px 6px;margin-right:6px;color:var(--warn)}
 .cli .a.set{color:var(--fg);font-weight:600}

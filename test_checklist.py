@@ -865,7 +865,139 @@ def test_ai_links():
     assert not any(i.startswith(("climb.engine-anti-ice", "descent-preparation.engine-anti-ice")) for i in cl.excluded)
 
 
+def _gated_state(phase):
+    st = State(pathlib.Path(tempfile.mkdtemp()) / "c.json")
+    st.fields.update({"ta": "6000", "thr_red_agl": "1500", "accel_agl": "1500"})
+    st.set_phase("flying")
+    st.set_cl_phase(phase)
+    return st
+
+
+def _rows(st):
+    return {i["id"]: i for s in st.snapshot()["checklist"]["subphases"] for i in s["items"]}
+
+
+def test_gates_file_validation_and_inventory():
+    cl = C.load()
+    g = cl.gates
+    expected = {"takeoff.landing-gear", "takeoff.thrust-levers_3", "takeoff.packs-pb", "takeoff.ground-spoilers", "takeoff.nose-light-sw",
+                "takeoff.runway-turn-off-lights-sw", "takeoff.at-f-speed-flaps-1", "takeoff.at-s-speed-flaps-0", "climb.barometric-reference",
+                "climb.engine-anti-ice", "climb.landing-lights", "descent-checklist.landing-lights", "descent-checklist.efis-option",
+                "go-around.thrust-levers_2", "ils-approach.flaps-2", "ils-approach.landing-gear", "ils-approach.flaps-3", "ils-approach.flaps-full",
+                "non-precision-approach.flaps-2-at-s-speed", "non-precision-approach.landing-gear", "non-precision-approach.flaps-3",
+                "non-precision-approach.flaps-full"}
+    assert set(g) >= expected and all(i in cl.links for i in g)
+    assert "delay_s" not in str(g["takeoff.packs-pb"]) and g["takeoff.packs-pb"] == {"agl_ge_ref": "fld.thr_red_agl"}  # i 10 s sono l'intervallo tra i pack
+    assert "ils-approach.flaps-1-at-green-dot-speed" not in g and "takeoff.autopilot" not in g or "show" in cl.links["takeoff.autopilot"]["check"]
+    gates_json = json.loads((HERE / "checklist_gates.json").read_text(encoding="utf-8"))
+    bad = [{"subphases": {"nope": {"alt_ge": 1}}}, {"items": {"nope": {"alt_ge": 1}}}, {"subphases": {"climb.at-10000-ft": {"zzz": 1}}},
+           {"subphases": {"climb.at-10000-ft": {"alt_ge_ref": "fld.v1"}}}, {"subphases": {"climb.at-10000-ft": {"agl_ge_ref": "fld.ta"}}},
+           {"subphases": {"climb.at-10000-ft": {}}}, {"subphases": {"climb.at-10000-ft": {"alt_ge": "x"}}}, {"foo": {}},
+           {"items": {"takeoff.at-s-speed-flaps-0": {"after_item": "nope"}}},
+           {"items": {"takeoff.at-f-speed-flaps-1": {"after_item": "takeoff.at-s-speed-flaps-0"}}},  # non precedente
+           {"items": {"climb.barometric-reference": {"after_item": "takeoff.at-s-speed-flaps-0"}}},  # altra fase
+           {"items": {"takeoff.positive-climb": {"alt_ge": 1}}}]  # voce senza link
+    for b in bad:
+        try:
+            C.Checklist(cl.data, cl.links, None, b)
+            assert False, b
+        except ValueError:
+            pass
+    C.Checklist(cl.data, cl.links, None, gates_json)
+
+
+def test_gates_in_state_takeoff_and_climb():
+    st = _gated_state("takeoff")
+    st.set_core({"on_ground": 1, "agl": 0, "alt": 100, "vs": 0})
+    st.set_monitor({"gear": 1})
+    r = _rows(st)
+    assert r["takeoff.landing-gear"]["status"] == "wait" and r["takeoff.landing-gear"]["gate"] == "airborne"
+    assert r["takeoff.packs-pb"]["status"] == "wait" and r["takeoff.packs-pb"]["gate"] == "after thrust reduction 1500 ft AGL"
+    assert st.snapshot()["checklist"]["bad"] == sum(i["status"] == "bad" for i in _rows(st).values())  # wait non conta in bad
+    st.set_core({"on_ground": 0, "agl": 100, "alt": 200, "vs": 800})
+    st.set_monitor({"gear": 1})
+    r = _rows(st)
+    assert r["takeoff.landing-gear"]["status"] == "bad" and r["takeoff.landing-gear"]["kind"] == "mismatch"  # gate aperto: valutata
+    st.set_core({"on_ground": 0, "agl": 100, "alt": 200, "vs": 0})  # un gate aperto resta aperto (VS oscilla)
+    st.set_monitor({"gear": 1})
+    assert _rows(st)["takeoff.landing-gear"]["status"] == "bad"
+    st.set_core({"on_ground": 0, "agl": 1600, "alt": 2000, "vs": 800})
+    st.set_monitor({"gear": 0, "pack1": 1, "pack2": 1})
+    r = _rows(st)
+    assert r["takeoff.packs-pb"]["status"] == "ok"  # subito valutata, nessun ritardo
+    assert r["takeoff.at-s-speed-flaps-0"]["status"] == "wait" and r["takeoff.at-s-speed-flaps-0"]["gate"].startswith("after ")
+    st.set_monitor({"flap": 1})
+    st.set_monitor({"flap": 1})
+    assert _rows(st)["takeoff.at-f-speed-flaps-1"]["status"] == "ok"
+    st.set_monitor({"flap": 0})
+    assert _rows(st)["takeoff.at-s-speed-flaps-0"]["status"] in ("ok", "bad")  # dopo Flaps 1 il gate si apre
+    st.set_cl_phase("climb")
+    st.set_core({"on_ground": 0, "agl": 3000, "alt": 5000, "vs": 800})
+    st.set_monitor({"baro_std": 0, "baro_hpa": 1013})
+    r = _rows(st)
+    assert r["climb.barometric-reference"]["status"] == "wait" and r["climb.barometric-reference"]["gate"] == "after TA 6000 ft"
+    assert r["climb.landing-lights"]["gate"] == "above 10000 ft"
+    st.set_core({"on_ground": 0, "agl": 7000, "alt": 7000, "vs": 800})
+    st.set_monitor({"baro_std": 0, "baro_hpa": 1013})
+    assert _rows(st)["climb.barometric-reference"]["status"] == "bad"
+    st.fields["ta"] = ""
+    st.set_cl_phase("takeoff")
+    st.set_cl_phase("climb")  # reset dei gate con il cambio di fase
+    st.set_monitor({"baro_std": 0, "baro_hpa": 1013})
+    assert _rows(st)["climb.barometric-reference"]["gate"] == "TA not set"
+
+
+def test_gates_descent_and_reset():
+    st = _gated_state("descent-checklist")
+    st.set_core({"on_ground": 0, "agl": 20000, "alt": 20000, "vs": -1500})
+    st.set_monitor({"landing_l": 0, "landing_r": 0})
+    assert _rows(st)["descent-checklist.landing-lights"]["gate"] == "below 10000 ft"
+    st.set_core({"on_ground": 0, "agl": 9000, "alt": 9000, "vs": -1500})
+    st.set_monitor({"landing_l": 0, "landing_r": 0})
+    assert _rows(st)["descent-checklist.landing-lights"]["status"] == "bad"
+    assert "descent-checklist.landing-lights" in st.gates["open"]
+    st.set_phase("briefing")
+    assert not st.gates["open"] and not st.gates["done"]
+    st.set_phase("flying")
+    st.set_cl_phase("descent-checklist")
+    st.set_core({"on_ground": 0, "agl": 20000, "alt": 20000, "vs": -1500})
+    st.set_monitor({"landing_l": 0, "landing_r": 0})
+    assert _rows(st)["descent-checklist.landing-lights"]["status"] == "wait"
+
+
+def test_gates_reset_only_when_going_back():
+    st = _gated_state("takeoff")
+    st.gates["open"].update({"takeoff.landing-gear", "climb.landing-lights"})
+    st.gates["done"].add("takeoff.at-f-speed-flaps-1")
+    st.set_cl_phase("takeoff")  # ricliccare la fase corrente
+    st.set_cl_phase(1)
+    st.set_cl_phase("climb")
+    assert st.gates["open"] == {"takeoff.landing-gear", "climb.landing-lights"} and st.gates["done"] == {"takeoff.at-f-speed-flaps-1"}
+    st.set_cl_phase("climb")
+    assert len(st.gates["open"]) == 2
+    st.set_cl_phase(-1)  # indietro: azzera destinazione e successive
+    assert st.cl_phase == "after-takeoff" and st.gates["open"] == {"takeoff.landing-gear"} and st.gates["done"] == {"takeoff.at-f-speed-flaps-1"}
+    st.set_cl_phase("takeoff")
+    assert not st.gates["open"] and not st.gates["done"]
+
+
+def test_gates_approach_ladder():
+    st = _gated_state("ils-approach")
+    st.set_core({"on_ground": 0, "agl": 3000, "alt": 3000, "vs": -700})
+    st.set_monitor({"flap": 0, "gear": 1})
+    r = _rows(st)
+    assert r["ils-approach.flaps-1-at-green-dot-speed"]["status"] == "bad"  # primo gradino senza gate
+    assert r["ils-approach.flaps-2"]["status"] == "wait" and r["ils-approach.landing-gear"]["status"] == "wait"
+    assert r["ils-approach.flaps-2"]["gate"].startswith("after Flaps 1")
+    st.set_monitor({"flap": 1, "gear": 1})
+    r = _rows(st)
+    assert r["ils-approach.flaps-1-at-green-dot-speed"]["status"] == "ok" and r["ils-approach.flaps-2"]["status"] == "bad"
+    assert r["ils-approach.landing-gear"]["status"] == "wait" and r["ils-approach.flaps-3"]["status"] == "wait"
+
+
 if __name__ == "__main__":
+    test_gates_file_validation_and_inventory()
+    test_gates_in_state_takeoff_and_climb()
     test_fob_zfw_items_and_tolerance()
     test_briefing_complete_restarts_checklist()
     test_inputs_items()

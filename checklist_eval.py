@@ -18,6 +18,9 @@ BY_KEY = {it.key: it for it in mon.ITEMS}
 UNVERIFIED = "unverified"
 UNREADABLE = "unreadable"
 REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "fld.v1", "fld.vr", "fld.v2", "fld.flap", "fld.fob", "fld.zfw", "fld.zfwcg", "plan.sid", "wx.qnh_dep", "wx.qnh_dest")
+GATE_ALT_REFS = ("fld.ta",)  # gate: quota >= valore del campo (piedi, anche FLnnn)
+GATE_AGL_REFS = ("fld.thr_red_agl", "fld.accel_agl")  # gate: AGL >= valore del campo
+GATE_RULES = ("alt_ge", "alt_le", "alt_ge_ref", "agl_ge_ref", "airborne", "vs_gt", "after_item")
 QNH_TOL = 1.0  # hPa
 
 
@@ -209,9 +212,86 @@ def _single(check: dict, labels: dict, expected: dict | None = None) -> dict:
     return _res("bad", f"expected {' / '.join(want)}, actual {cur}", "mismatch")
 
 
-def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: bool = False, expected: dict | None = None) -> dict:
+_GATE_LABEL = {"fld.thr_red_agl": "thrust reduction", "fld.accel_agl": "acceleration", "fld.ta": "TA"}
+
+
+def gate_ctx(expected: dict | None, done=(), names: dict | None = None) -> dict:
+    """Contesto dei gate dai valori attesi (sys.* e fld.* come testo): numeri o None se vuoti/non leggibili.
+    done: id delle voci gia' soddisfatte (after_item); names: id -> testo per i messaggi."""
+    e = expected or {}
+    ctx = {k: _num(e.get(f"sys.{k}")) for k in ("alt", "agl", "ias", "vs", "gnd")}
+    ctx["fld.ta"] = altitude_ft(e.get("fld.ta") or "")
+    for ref in GATE_AGL_REFS:
+        ctx[ref] = _num(e.get(ref))
+    ctx.update(done=set(done), names=dict(names or {}))
+    return ctx
+
+
+def gate_state(rule: dict, ctx: dict) -> tuple:
+    """Regole del gate (tutte in AND): ("open", "") | ("wait", testo) | ("unknown", motivo: dato non leggibile o campo vuoto).
+    Pura. La prima regola non soddisfatta decide il testo."""
+    alt, agl = ctx.get("alt"), ctx.get("agl")
+    if "alt_ge" in rule:
+        if alt is None:
+            return "unknown", "altitude n/a"
+        if alt < rule["alt_ge"]:
+            return "wait", f"above {rule['alt_ge']:g} ft"
+    if "alt_le" in rule:
+        if alt is None:
+            return "unknown", "altitude n/a"
+        if alt > rule["alt_le"]:
+            return "wait", f"below {rule['alt_le']:g} ft"
+    if "alt_ge_ref" in rule:
+        ref = rule["alt_ge_ref"]
+        want = ctx.get(ref)
+        if want is None:
+            return "unknown", f"{_GATE_LABEL.get(ref, ref)} not set"
+        if alt is None:
+            return "unknown", "altitude n/a"
+        if alt < want:
+            return "wait", f"after {_GATE_LABEL.get(ref, ref)} {want:g} ft"
+    if "agl_ge_ref" in rule:
+        ref = rule["agl_ge_ref"]
+        want = ctx.get(ref)
+        if want is None:
+            return "unknown", f"{_GATE_LABEL.get(ref, ref)} altitude not set"
+        if agl is None:
+            return "unknown", "AGL n/a"
+        if agl < want:
+            return "wait", f"after {_GATE_LABEL.get(ref, ref)} {want:g} ft AGL"
+    if rule.get("airborne"):
+        gnd = ctx.get("gnd")
+        if gnd is None:
+            return "unknown", "on-ground n/a"
+        if gnd >= 0.5:
+            return "wait", "airborne"
+    if "vs_gt" in rule:
+        vs = ctx.get("vs")
+        if vs is None:
+            return "unknown", "VS n/a"
+        if vs <= rule["vs_gt"]:
+            return "wait", f"VS above {rule['vs_gt']:g}"
+    # Limite noto: se la voce precedente non diventa mai ok (gradino saltato) la voce resta in attesa (blu, mai rosso). Non funziona su voci optional (mai ok).
+    if "after_item" in rule and rule["after_item"] not in ctx.get("done", ()):
+        return "wait", "after " + str((ctx.get("names") or {}).get(rule["after_item"]) or rule["after_item"])
+    return "open", ""
+
+
+def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: bool = False, expected: dict | None = None,
+             gate: tuple | None = None) -> dict:
     """Valuta un collegamento. verified=False (link non ancora verificato) => sempre "na" (se c'e' un check).
-    {"show": [...]} => sempre "none" (si mostra solo il valore). optional=True: il "bad" diventa "opt"."""
+    {"show": [...]} => sempre "none" (si mostra solo il valore). optional=True: il "bad" diventa "opt".
+    gate: (regola, contesto) di una voce in attesa di un evento (checklist_gates.json); gate non aperto => "wait" con il motivo, prima di ogni
+    valutazione (anche unverified), tranne dove l'esito sarebbe "none" (show, atteso vuoto, senza link)."""
+    res = _evaluate_link(check, labels, verified, optional, expected)
+    if gate and res["status"] != "none":
+        st, txt = gate_state(*gate)
+        if st != "open":
+            return _res("wait", txt, "wait")
+    return res
+
+
+def _evaluate_link(check: dict | None, labels: dict, verified: bool, optional: bool, expected: dict | None) -> dict:
     if not check or "show" in check or "show_ref" in check:
         return _res("none")
     if "detent" in check:

@@ -7,7 +7,7 @@ import pathlib
 import icing
 import monitor as mon
 import thrust
-from checklist_eval import BY_KEY, REFS, _refs, evaluate, qnh_actual
+from checklist_eval import BY_KEY, GATE_AGL_REFS, GATE_ALT_REFS, GATE_RULES, REFS, _refs, evaluate, gate_ctx, qnh_actual
 
 HERE = pathlib.Path(__file__).resolve().parent
 ATIS_HINT = ("letter", "rwy", "qnh", "wind", "tl")  # dati ATIS annotati mostrati sotto una voce (ordine canonico della riga)
@@ -90,6 +90,26 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
             raise ValueError(f"{where}: etichetta {e!r} non valida per {key}")
 
 
+def _check_gate_rule(rule, where: str, order: dict) -> None:
+    """Regola di un gate: chiavi note, valori del tipo giusto, riferimenti ammessi, after_item su una voce precedente della stessa fase."""
+    if not isinstance(rule, dict) or not rule or set(rule) - set(GATE_RULES):
+        raise ValueError(f"gates {where}: regola non valida")
+    for k in ("alt_ge", "alt_le", "vs_gt"):
+        if k in rule and (isinstance(rule[k], bool) or not isinstance(rule[k], (int, float))):
+            raise ValueError(f"gates {where}: {k!r} non numerico")
+    if "alt_ge_ref" in rule and rule["alt_ge_ref"] not in GATE_ALT_REFS:
+        raise ValueError(f"gates {where}: 'alt_ge_ref' non ammesso")
+    if "agl_ge_ref" in rule and rule["agl_ge_ref"] not in GATE_AGL_REFS:
+        raise ValueError(f"gates {where}: 'agl_ge_ref' non ammesso")
+    if "airborne" in rule and rule["airborne"] is not True:
+        raise ValueError(f"gates {where}: 'airborne' deve essere true")
+    if "after_item" in rule:
+        ref = rule["after_item"]
+        me = order.get(where)
+        if ref not in order or (me is not None and (order[ref][0] != me[0] or order[ref][1] >= me[1])):
+            raise ValueError(f"gates {where}: 'after_item' deve essere una voce precedente della stessa fase")
+
+
 def _check_craft(it: dict) -> None:
     fields = it.get("fields")
     if not isinstance(fields, list) or [f.get("k") for f in fields if isinstance(f, dict)] != list(CRAFT_KEYS):
@@ -154,7 +174,7 @@ def live_values(check: dict | None, labels: dict) -> list:
 
 
 class Checklist:
-    def __init__(self, data: dict, links: dict, simplified: dict | None = None):
+    def __init__(self, data: dict, links: dict, simplified: dict | None = None, gates: dict | None = None):
         self.data, self.links = data, links
         self.phases = data["phases"]
         ids, items = set(), {}
@@ -203,6 +223,37 @@ class Checklist:
         if len(excl) != len(set(excl)):
             raise ValueError("simplified: id duplicati")
         self.excluded = frozenset(excl)
+        self.names = {iid: it["text"] for iid, it in items.items()}
+        self._init_gates(gates or {}, items)
+
+    def _init_gates(self, gates: dict, items: dict) -> None:
+        """Gate (voci in attesa di un evento): per id sottofase (vale per tutte le sue voci) e per id voce (sostituisce quello della sottofase).
+        Risultato: self.gates = {id voce: regola}, solo per le voci action/announce con link (le altre non possono avere un esito)."""
+        sub_ids = {sp["id"]: sp for ph in self.phases for sp in ph["subphases"]}
+        order = {it["id"]: (pi, n) for pi, ph in enumerate(self.phases) for n, it in enumerate(i for sp in ph["subphases"] for i in sp["items"])}
+        if set(gates) - {"version", "subphases", "items"}:
+            raise ValueError("gates: chiavi sconosciute")
+        subs, its = gates.get("subphases", {}), gates.get("items", {})
+        if not isinstance(subs, dict) or not isinstance(its, dict):
+            raise ValueError("gates: 'subphases' e 'items' devono essere oggetti")
+        for sid, rule in subs.items():
+            if sid not in sub_ids:
+                raise ValueError(f"gates: sottofase inesistente: {sid}")
+            _check_gate_rule(rule, sid, order)
+        for iid, rule in its.items():
+            if iid not in items:
+                raise ValueError(f"gates: voce inesistente: {iid}")
+            _check_gate_rule(rule, iid, order)
+        self.gates = {}
+        for sid, rule in subs.items():
+            for it in sub_ids[sid]["items"]:
+                if it["id"] in self.links:
+                    self.gates[it["id"]] = rule
+        for iid, rule in its.items():
+            if iid in self.links:
+                self.gates[iid] = rule
+            else:
+                raise ValueError(f"gates: {iid} non ha un link")
 
     def has_phase(self, phase_id) -> bool:
         return isinstance(phase_id, str) and phase_id in self.ids
@@ -218,13 +269,17 @@ class Checklist:
         return self.phases[self.ids.index(phase_id)]
 
     def evaluate_phase(self, phase_id: str, labels: dict, demo: bool = False, simplified: bool = False, raw: dict | None = None,
-                       expected: dict | None = None, wx: dict | None = None) -> dict:
+                       expected: dict | None = None, wx: dict | None = None, gates: dict | None = None, update: bool = False) -> dict:
         """Sottofasi e voci della fase con status/detail; "bad" = numero di voci rosse (solo quelle visibili). demo=True tratta i link come verificati.
         raw (solo --test-links): aggiunge a ogni voce con link "raw" = [[variabile, grezzo], ...].
         expected: valori attesi {riferimento: testo} per i link eq_ref/show_ref (da state.snapshot).
         wx: {"dep": METAR, "dest": METAR} dei dati parsati (da state.snapshot), per i check "ai" (anti-ice dinamico).
+        gates: {"open": set, "done": set} di State (gate aperti = restano aperti; done = voci viste ok, per after_item); update=True li aggiorna
+        (solo da State.set_monitor, mai dallo snapshot). Gate non aperto => status "wait" (non conta in "bad").
         simplified=True salta le voci escluse prima della valutazione e scarta le sottofasi rimaste vuote."""
         ph, bad, subs = self.phase(phase_id), 0, []
+        g_open, g_done = (gates["open"], gates["done"]) if gates is not None else (set(), set())
+        done = set(g_done)
         for sp in ph["subphases"]:
             rows = []
             for it in sp["items"]:
@@ -235,10 +290,20 @@ class Checklist:
                 if link and "ai" in link["check"]:  # anti-ice dinamico: testo e richiesta ON dalla regola (METAR, SAT, TAT)
                     ai = icing.ai_rule(link["check"]["ai"], labels, wx)
                     exp = {**(expected or {}), "ai.on": "1" if ai["on"] else "", "ai.text": ai["text"]}
-                res = evaluate(link["check"], labels, demo or link["verified"], link.get("optional", False), exp) if link else evaluate(None, labels)
+                rule = self.gates.get(it["id"]) if gates is not None else None
+                gate = (rule, gate_ctx(expected, done, self.names)) if rule and it["id"] not in g_open else None
+                res = evaluate(link["check"], labels, demo or link["verified"], link.get("optional", False), exp, gate) if link else evaluate(None, labels)
+                if rule and gate is not None and res["status"] != "wait" and update and (res["status"] != "none"):
+                    g_open.add(it["id"])  # gate aperto: resta aperto
+                if res["status"] == "ok":
+                    done.add(it["id"])
+                    if update and gates is not None:
+                        g_done.add(it["id"])
                 bad += res["status"] == "bad"
                 row = {"id": it["id"], "text": it["text"], "response": it["response"], "type": it["type"],
                        "live": live_values(link["check"], labels) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
+                if res["kind"] == "wait":
+                    row["gate"] = res["detail"]
                 if link and ("show" in link["check"] or ("detent" in link["check"] and res["status"] == "none") or (_refs(link["check"]) and res["status"] == "none") or (ai is not None and res["status"] == "none")):
                     row["show"] = True  # solo da mostrare: la pagina scrive sempre "NOW: <valore>"
                 refs = ([link["check"]["show_ref"]] if "show_ref" in link["check"] else _refs(link["check"])) if link else []
@@ -272,4 +337,5 @@ def load(base: pathlib.Path = HERE) -> Checklist:
     data = json.loads((base / "checklist.json").read_text(encoding="utf-8"))
     links = json.loads((base / "checklist_links.json").read_text(encoding="utf-8"))
     simplified = json.loads((base / "checklist_simplified.json").read_text(encoding="utf-8"))
-    return Checklist(data, links, simplified)
+    gates = json.loads((base / "checklist_gates.json").read_text(encoding="utf-8"))
+    return Checklist(data, links, simplified, gates)

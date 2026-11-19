@@ -1,4 +1,4 @@
-from checklist_eval import evaluate
+from checklist_eval import evaluate, gate_ctx, gate_state
 
 
 def test_none_and_single():
@@ -251,7 +251,48 @@ def test_ai():
     assert evaluate(c, OFF, optional=True, expected={"ai.on": "1"})["status"] == "opt"
 
 
+def _g(rule, **sys_):
+    e = {f"sys.{k}": str(v) for k, v in sys_.items()}
+    return gate_state(rule, gate_ctx(e))
+
+
+def test_gate_rules():
+    assert _g({"alt_ge": 10000}, alt=9000) == ("wait", "above 10000 ft") and _g({"alt_ge": 10000}, alt=10000)[0] == "open"
+    assert _g({"alt_ge": 10000})[0] == "unknown"  # quota non leggibile
+    assert _g({"alt_le": 10000}, alt=12000) == ("wait", "below 10000 ft") and _g({"alt_le": 10000}, alt=9000)[0] == "open"
+    ta = lambda v, alt: gate_state({"alt_ge_ref": "fld.ta"}, gate_ctx({"fld.ta": v, "sys.alt": alt}))
+    assert ta("6000", "5000") == ("wait", "after TA 6000 ft") and ta("6000", "6000")[0] == "open" and ta("FL070", "6000")[1] == "after TA 7000 ft"
+    assert ta("", "9000") == ("unknown", "TA not set") and ta("abc", "9000")[0] == "unknown"
+    ag = lambda ref, v, agl: gate_state({"agl_ge_ref": ref}, gate_ctx({ref: v, "sys.agl": agl}))
+    assert ag("fld.thr_red_agl", "1500", "800") == ("wait", "after thrust reduction 1500 ft AGL") and ag("fld.thr_red_agl", "1500", "1500")[0] == "open"
+    assert ag("fld.accel_agl", "", "800")[0] == "unknown" and ag("fld.accel_agl", "1500", "")[0] == "unknown"
+    assert _g({"airborne": True}, gnd=1) == ("wait", "airborne") and _g({"airborne": True}, gnd=0)[0] == "open" and _g({"airborne": True})[0] == "unknown"
+    assert _g({"vs_gt": 0}, vs=0) == ("wait", "VS above 0") and _g({"vs_gt": 0}, vs=300)[0] == "open"
+    r = {"after_item": "x.a"}
+    assert gate_state(r, gate_ctx({}, names={"x.a": "Flaps 1"})) == ("wait", "after Flaps 1")
+    assert gate_state(r, gate_ctx({}, done={"x.a"}))[0] == "open"
+    assert _g({"airborne": True, "vs_gt": 0}, gnd=0, vs=-5)[0] == "wait"  # AND
+
+
+def test_gate_in_evaluate():
+    c = {"key": "gear", "eq": "UP"}
+    rule = ({"alt_ge": 10000}, gate_ctx({"sys.alt": "5000"}))
+    r = evaluate(c, {"gear": "DOWN"}, gate=rule)
+    assert r == {"status": "wait", "kind": "wait", "detail": "above 10000 ft"}  # prima del trigger: mai rosso
+    assert evaluate(c, {"gear": "DOWN"}, verified=False, gate=rule)["status"] == "wait"  # precede anche unverified
+    assert evaluate(c, {}, gate=rule)["status"] == "wait"
+    open_ = ({"alt_ge": 10000}, gate_ctx({"sys.alt": "11000"}))
+    assert evaluate(c, {"gear": "DOWN"}, gate=open_)["status"] == "bad" and evaluate(c, {"gear": "UP"}, gate=open_)["status"] == "ok"
+    unk = ({"alt_ge": 10000}, gate_ctx({}))
+    assert evaluate(c, {"gear": "UP"}, gate=unk)["status"] == "wait"  # quota non leggibile: in attesa
+    assert evaluate({"show": ["gear"]}, {"gear": "UP"}, gate=rule)["status"] == "none"  # show: nessun gate
+    assert evaluate(None, {}, gate=rule)["status"] == "none"
+    assert evaluate({"detent": "CLIMB"}, {}, gate=rule)["status"] == "none"  # esito none (non calibrato): nessun gate
+
+
 if __name__ == "__main__":
+    test_gate_rules()
+    test_gate_in_evaluate()
     test_qnh_gated_by_transition_level()
     test_qnh_source_in_detail()
     test_detent()

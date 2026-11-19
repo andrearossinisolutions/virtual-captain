@@ -28,7 +28,7 @@ def base() -> dict:
         "cl_phases": [{"id": "a", "name": "A"}], "cl_phase": "a",
         "checklist": {"bad": 0, "phase": {"id": "a", "name": "A"}, "subphases": [
             {"id": "a.x", "name": "", "items": [{"id": "a.1", "text": "t", "response": "r", "type": "action", "live": [["l", "v"]],
-                                                  "status": "ok", "kind": "none", "detail": "", "raw": [["VAR", LAT]]}]}]},
+                                                  "status": "ok", "kind": "none", "detail": "", "gate": "after TA 6000 ft", "bogus": "x", "raw": [["VAR", LAT]]}]}]},
         "clearance": {"c": "", "t": "1234"}, "log": ["12:00  hi"], "spoke_n": 3,
         # not allowed: must be dropped
         "simbrief": "SECRET-ID", "info": "x", "sim_error": "boom", "dll_msg": "m", "labels": [["a", "b"]], "now": 1.0,
@@ -47,6 +47,7 @@ def test_allowlist_keeps_known_and_drops_the_rest():
     assert out["modes"] == ["normal", "training"] and out["cl_modes"] == ["complete", "simplified"] and out["dll_missing"] is False
     item = out["checklist"]["subphases"][0]["items"][0]
     assert "raw" not in item and item["live"] == [["l", "v"]]
+    assert item["gate"] == "after TA 6000 ft" and "bogus" not in item  # gate (testo) ammesso, campi sconosciuti scartati
     assert out["plan"]["star"] is None and out["wx_dep"] is None and out["spoke_n"] == 3
 
 

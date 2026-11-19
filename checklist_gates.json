@@ -1,0 +1,23 @@
+{
+ "version": 1,
+ "subphases": {
+  "takeoff.when-positive-climb": {"airborne": true, "vs_gt": 0},
+  "takeoff.at-thrust-reduction-altitude": {"agl_ge_ref": "fld.thr_red_agl"},
+  "climb.at-transition-altitude": {"alt_ge_ref": "fld.ta"},
+  "climb.at-10000-ft": {"alt_ge": 10000},
+  "descent-checklist.at-10000-ft": {"alt_le": 10000},
+  "go-around.at-go-around-thrust-reduction-alt": {"agl_ge_ref": "fld.thr_red_agl"}
+ },
+ "items": {
+   "takeoff.at-f-speed-flaps-1": {"agl_ge_ref": "fld.accel_agl"},
+  "takeoff.at-s-speed-flaps-0": {"after_item": "takeoff.at-f-speed-flaps-1"},
+  "ils-approach.flaps-2": {"after_item": "ils-approach.flaps-1-at-green-dot-speed"},
+  "ils-approach.landing-gear": {"after_item": "ils-approach.flaps-2"},
+  "ils-approach.flaps-3": {"after_item": "ils-approach.landing-gear"},
+  "ils-approach.flaps-full": {"after_item": "ils-approach.flaps-3"},
+  "non-precision-approach.flaps-2-at-s-speed": {"after_item": "non-precision-approach.flaps-1-at-green-dot-speed"},
+  "non-precision-approach.landing-gear": {"after_item": "non-precision-approach.flaps-2-at-s-speed"},
+  "non-precision-approach.flaps-3": {"after_item": "non-precision-approach.landing-gear"},
+  "non-precision-approach.flaps-full": {"after_item": "non-precision-approach.flaps-3"}
+ }
+}

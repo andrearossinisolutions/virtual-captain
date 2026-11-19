@@ -224,3 +224,10 @@ def test_remote_render_survives_every_checklist_phase_and_hostile_text(tmp_path)
     assert len(r["out"]) >= len(views) + 1
     for o in r["out"][:len(views) + 1]:  # an exception in render() would surface as "Connection lost"
         assert o["rdataHidden"] is False and o["bannerHidden"] is True and o["clname"], o
+
+
+def test_wait_rows_are_rendered_as_waiting_with_gate_text_and_blue_icon():
+    assert '"Waiting: "+(it.gate||it.detail||"")' in JS and "After TL" not in JS
+    assert '(it.show||it.kind==="wait")&&it.live' in JS  # riga NOW anche in attesa
+    css = (ROOT / "web" / "app.css").read_text(encoding="utf-8")
+    assert ".cli.st-wait{border-left-color:#4c9be8}" in css

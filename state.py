@@ -126,6 +126,11 @@ def _mode(m):
     return {"allenamento": "training", "silenziosa": "normal", "silent": "normal"}.get(m, m if m in MODES else "normal")
 
 
+def _txt(v) -> str:
+    n = mon.to_number(v)
+    return "" if n is None else str(n)
+
+
 class State:
     def __init__(self, cfg_path: pathlib.Path = CFG, weather=None):
         self.lock = threading.RLock()
@@ -165,6 +170,7 @@ class State:
         saved = cfg.get("checklist_phase")
         self.cl_phase = saved if self.cl.has_phase(saved) else self.cl.ids[0]  # sconosciuta -> prima fase
         self._fix_cl_phase()
+        self.gates = {"open": set(), "done": set()}  # gate aperti e voci viste ok (aggiornati solo da set_monitor; azzerati con la fase/il piano)
         self.cl_demo = False  # SOLO --sim: tratta i link come verificati per vedere verde/rosso/grigio (in volo reale restano verified:false)
         self.cl_trust_links = False  # SOLO --test-links: valuta i link come verified:true, senza altri effetti demo
         self.raw: dict = {}  # {chiave: grezzo|None} per mostrare i valori letti in --test-links
@@ -284,6 +290,7 @@ class State:
                     self.cl_phase = self.cl_visible()[0]  # "Briefing complete": la checklist riparte dalla prima fase
                     self._save()
                 self.phase = phase
+                self._reset_gates()
                 if phase == "briefing":
                     self.reset_clearance()  # ritorno in briefing: CRAFT riparte dal piano
                     self.clear_atis()
@@ -292,6 +299,16 @@ class State:
                     self.flight, self.pills = [], {}
                     self.labels = {}
                     self.raw = {}
+
+    def _reset_gates(self, from_phase: str | None = None) -> None:
+        """Azzera i gate: tutti (None) oppure quelli della fase indicata e delle successive (retrocessione di fase, go-around); lock preso."""
+        if from_phase is None:
+            self.gates["open"].clear()
+            self.gates["done"].clear()
+            return
+        ids = {it["id"] for ph in self.cl.phases[self.cl.ids.index(from_phase):] for sp in ph["subphases"] for it in sp["items"]}
+        self.gates["open"] -= ids
+        self.gates["done"] -= ids
 
     def set_core(self, values: dict | None) -> None:
         """Ultimo campione del core (da chiamare prima di set_monitor)."""
@@ -310,6 +327,9 @@ class State:
             self.raw = dict(raw) if live and raw else {}
             self.flight = mon.flight_panel(raw, self.core) if live else []
             self.pills = mon.flight_pills(raw, self.core) if live else {}
+            if live:  # i gate si aggiornano qui (~2 Hz, un solo thread), non dallo snapshot
+                self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo or self.cl_trust_links, self.checklist_mode == "simplified",
+                                       None, self._expected(), self._wx_data(), self.gates, update=True)
 
     # -- calibrazione thrust --
     def set_calib_raw(self, raw: dict | None, now: float | None = None) -> None:
@@ -440,16 +460,18 @@ class State:
     def set_cl_phase(self, target) -> None:
         """target: id di fase (str) oppure passo +1/-1 (int). Valore non valido => ValueError; ai limiti il passo non fa nulla."""
         with self.lock:
+            vis, old = self.cl_visible(), self.cl_phase
             if isinstance(target, str):
-                if target not in self.cl_visible():
+                if target not in vis:
                     raise ValueError("unknown checklist phase")
                 self.cl_phase = target
             elif isinstance(target, int) and not isinstance(target, bool) and target in (-1, 1):
-                vis = self.cl_visible()
                 i = vis.index(self.cl_phase) + target
                 self.cl_phase = vis[min(max(i, 0), len(vis) - 1)]
             else:
                 raise ValueError("step must be +1 or -1")
+            if old in vis and vis.index(self.cl_phase) < vis.index(old):
+                self._reset_gates(self.cl_phase)  # solo retrocedere (es. go-around) azzera i gate di destinazione e successive; avanzare o ricaricare la fase no
             self._save()
 
     def load_plan(self, user: str | None = None):
@@ -480,6 +502,7 @@ class State:
             self.weather.seed(icao, self.plan.get("orig_metar"))
             self.weather.seed(data.get("destination"), self.plan.get("dest_metar"))
             self.reset_clearance()
+            self._reset_gates()
             self.info = (f"{icao or data['origin']} → {data['destination']}  (generated: {_when(data['generated'])})"
                          + (f" — not in plan, enter manually: {', '.join(missing)}" if missing else ""))
             self.rev += 1
@@ -515,6 +538,10 @@ class State:
         alt = self.core.get("alt")
         e["fld.atis_tl"] = tl  # livello di transizione dell'ATIS di arrivo: la voce baro a TL si valuta solo sotto
         e["sys.alt"] = "" if alt is None else str(alt)  # quota letta dal monitor (pill ALT), piedi
+        e["fld.thr_red_agl"], e["fld.accel_agl"] = self.fields.get("thr_red_agl", ""), self.fields.get("accel_agl", "")
+        e["sys.agl"], e["sys.ias"], e["sys.vs"] = (_txt(self.core.get(k)) for k in ("agl", "ias", "vs"))
+        gnd = mon.to_number(self.core.get("on_ground"))
+        e["sys.gnd"] = "" if gnd is None else ("1" if gnd >= 0.5 else "0")
         e["cal.thrust"] = "1" if self.thrust_cal else ""  # vuoto: i link {"detent"} mostrano solo NOW
         e["plan.sid"] = str((self.plan or {}).get("sid") or "")
         return e
@@ -580,6 +607,6 @@ class State:
                     "cl_phase": self.cl_phase,
                     "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo or self.cl_trust_links,
                                                        self.checklist_mode == "simplified",
-                                                       self.raw if self.cl_trust_links else None, self._expected(), self._wx_data()),
+                                                       self.raw if self.cl_trust_links else None, self._expected(), self._wx_data(), self.gates),
                     "test_links": self.cl_trust_links, "clearance": dict(self.clearance),
                     "thr_cal": self._thr_cal_view(), "calib": self._calib_view()}
