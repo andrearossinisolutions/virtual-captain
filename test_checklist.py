@@ -418,7 +418,10 @@ def test_expected_links():
     assert vv({"v1": "0", "vr": "0", "v2": "0"}, {})["detail"] == "V1: expected set, actual 0; VR: expected set, actual 0; V2: expected set, actual 0"
     assert "V2: expected set, actual not set" in vv({"v1": "140", "vr": "145"}, {})["detail"]
     assert vv({"v1": "140", "vr": "145", "v2": "150"}, full)["status"] == "ok"
-    assert vv({"v1": "140", "vr": "145", "v2": "150"}, {})["status"] == "none"  # compilati, campi vuoti: come prima (dubbio per Andrea)
+    assert vv({"v1": "140", "vr": "145", "v2": "150"}, {})["status"] == "ok"  # valori nel sim, campi vuoti: completata (20/11)
+    assert vv({"v1": "140", "vr": "145", "v2": "150"}, {"fld.v1": " ", "fld.vr": "", "fld.v2": None})["status"] == "ok"
+    assert vv({"v1": "140", "vr": "145", "v2": "150"}, {}, "taxi-checklist", "t-o-data-v1-vr-v2")["status"] == "ok"
+    assert vv({"v1": "140", "vr": "145", "v2": "150"}, {"fld.v1": "140"})["status"] == "ok" and vv({"v1": "141", "vr": "145", "v2": "150"}, {"fld.v1": "140"})["status"] == "bad"
     d = vv({"v1": "140", "vr": "145", "v2": "151"}, full)
     assert d["status"] == "bad" and d["detail"] == "V2: expected 150, actual 151" and d["live"] == [["V1", "140"], ["VR", "145"], ["V2", "151"]]
     assert vv({"v1": "0", "vr": "0", "v2": "0"}, {}, "taxi-checklist", "t-o-data-v1-vr-v2")["status"] == "bad"
@@ -1107,7 +1110,7 @@ def test_atc_transponder_manual_item_shows_raw_until_the_map_is_known():
 def test_gsx_links():
     cl = C.load()
     fc, ct, bd = "cockpit-preparation.start-fueling", "cockpit-preparation.start-catering", "cockpit-preparation.start-boarding-passengers"
-    assert cl.links[fc]["check"] == {"gsx": ["gsx_refuel"]} and cl.links[ct]["check"] == {"gsx": ["gsx_cater"]} and cl.links[bd]["check"] == {"gsx": ["gsx_board"]}
+    assert cl.links[fc]["check"] == {"gsx": ["gsx_refuel"], "set": "done"} and cl.links[ct]["check"] == {"gsx": ["gsx_cater"], "set": "done"} and cl.links[bd]["check"] == {"gsx": ["gsx_board"], "set": "done"}  # verdi solo a servizio completato (20/11)
     assert not any("fueling-catering" in i["id"] for p in cl.phases for sp in p["subphases"] for i in sp["items"])
     first = [i["id"] for i in cl.phase("cockpit-preparation")["subphases"][0]["items"]]
     assert first == [fc, ct]  # prima voce della fase, poi i controlli successivi
@@ -1128,10 +1131,14 @@ def test_gsx_links():
     labels = mon.clean_labels({"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 4})
     rows = {i["id"]: i for s in cl.evaluate_phase(ph, labels, raw={"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 4})["subphases"] for i in s["items"]}
     assert rows[fc]["status"] == "ok" and rows[fc]["raw"] == [["FSDT_GSX_REFUELING_STATE", "6"]]
-    assert rows[ct]["status"] == "ok" and rows[ct]["raw"] == [["FSDT_GSX_CATERING_STATE", "5"]]
-    # servizi indipendenti: refuel ancora REQUESTED non blocca il catering gia' partito (e viceversa)
-    mix = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": 4, "gsx_cater": 5}))["subphases"] for i in s["items"]}
+    assert rows[ct]["status"] == "bad" and rows[ct]["raw"] == [["FSDT_GSX_CATERING_STATE", "5"]]
+    # servizi indipendenti: refuel ancora REQUESTED (rosso) non blocca il catering gia' completato (verde); IN PROGRESS e' rosso (verde solo a COMPLETED)
+    mix = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": 4, "gsx_cater": 6}))["subphases"] for i in s["items"]}
     assert mix[fc]["status"] == "bad" and mix[ct]["status"] == "ok"
+    for st in (1, 2, 3, 4, 5):
+        r = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": st}))["subphases"] for i in s["items"]}
+        assert r[fc]["status"] == "bad", st
+    assert {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": 6}))["subphases"] for i in s["items"]}[fc]["status"] == "ok"
     assert rows[bd]["status"] == "bad" and rows[bd]["type"] == "announce"
     # grezzo sempre accanto allo stato (live_raw, anche senza --test-links) e riga NOW sempre mostrata
     lv = {i["id"]: i for s in cl.evaluate_phase(ph, labels, live_raw={"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 1})["subphases"] for i in s["items"]}

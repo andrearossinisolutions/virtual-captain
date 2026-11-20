@@ -140,6 +140,11 @@ def test_v_speeds_all_eq_ref():
     assert ev({"v1": "0", "vr": "0", "v2": "0"}, {})["status"] == "none"  # briefing vuoto: solo NOW
     assert ev({"v1": "0", "vr": "0", "v2": "0"}, {"fld.v1": "", "fld.vr": " ", "fld.v2": None})["status"] == "none"
     assert ev({"v1": "140", "vr": "0", "v2": "0"}, {"fld.v1": "140"})["status"] == "ok"  # voce vuota saltata
+    req = {**c, "required": True}
+    evr = lambda lab, e: evaluate(req, lab, expected=e)
+    assert evr({"v1": "140", "vr": "145", "v2": "150"}, {})["status"] == "ok"  # sim pieno, pagina vuota: completata
+    assert all(evr({"v1": "0", "vr": "0", "v2": "0"}, e)["status"] == "bad" for e in ({}, exp))  # tutto vuoto: rosso
+    assert evr({"v1": "140", "vr": "145", "v2": "150"}, {"fld.v2": "151"})["status"] == "bad"
     assert evaluate(c, {}, verified=False, expected=exp)["kind"] == "unverified"
 
 

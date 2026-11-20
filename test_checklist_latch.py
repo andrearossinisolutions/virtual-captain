@@ -178,3 +178,20 @@ def test_sample_gap_does_not_freeze():
     _tick(st, 1, dt=1.0)
     _tick(st, 1, dt=1.5)
     assert F1 in st.latch.ids()
+
+
+def test_gsx_service_latch_green_after_return_to_avail():
+    from checklist_eval import evaluate
+    import monitor as mon
+    chk = {"gsx": ["gsx_refuel"], "set": "done"}
+    la, t = Latch(), 0.0
+    for st in ("AVAIL", "REQUESTED", "IN PROGRESS"):  # non completato: rosso, niente latch
+        r = evaluate(chk, {"gsx_refuel": st})
+        assert r["status"] == "bad" and la.observe("fc", r["status"] == "ok", t) is False
+        t += 1.0
+    for _ in range(3):  # COMPLETED stabile: verde e congelato
+        la.observe("fc", evaluate(chk, {"gsx_refuel": "COMPLETED"})["status"] == "ok", t)
+        t += 1.0
+    assert "fc" in la
+    assert evaluate(chk, {"gsx_refuel": "AVAIL"})["status"] == "bad" and "fc" in la  # ritorno ad AVAIL: il latch tiene il verde
+    assert evaluate(chk, {"gsx_refuel": None})["status"] == "na"  # None: neutro

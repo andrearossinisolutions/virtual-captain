@@ -325,6 +325,8 @@ def _evaluate_link(check: dict | None, labels: dict, verified: bool, optional: b
         res = _unfilled(check, labels)
         if res:
             return res
+        if not any(_active(c, expected) for c in check["all"] if ref_of(c)):
+            return _res("ok")  # V1/VR/V2 tutti presenti nel sim (> 0) ma campi della pagina vuoti: completata (decisione 20/11)
     if "ai" in check:
         if not _want(expected, "ai.on"):
             return _res("none")  # regola non attiva (promemoria, METAR assente, niente icing): solo testo e NOW
