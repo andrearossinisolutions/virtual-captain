@@ -347,12 +347,20 @@ def _evaluate_link(check: dict | None, labels: dict, verified: bool, optional: b
     return res
 
 
+def _gsx_requested(check: dict, labels: dict) -> bool:
+    """Voce "start" (set active): tutti i servizi non ancora avviati sono REQUESTED (almeno uno); AVAIL/NOT AVAIL/BYPASSED restano rossi, non letto resta neutro."""
+    pend = [labels.get(k) for k in check["gsx"] if labels.get(k) not in mon.GSX_ACTIVE]
+    return bool(pend) and all(v == "REQUESTED" for v in pend)
+
+
 def _evaluate(check: dict, labels: dict, verified: bool, expected: dict | None = None) -> dict:
     if not verified:
         return _res("na", UNVERIFIED, "unverified")
     if "detent" in check:
         check = detent_all(check)
     if "gsx" in check:
+        if check.get("set", "active") == "active" and _gsx_requested(check, labels):
+            return _res("wait", "Requested", "requested")  # servizio chiesto, GSX non e' ancora partito: si aspetta (non e' "bad")
         check = gsx_all(check)
     if "ai" in check:
         check = ai_all(check)

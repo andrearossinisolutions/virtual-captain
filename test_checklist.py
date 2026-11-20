@@ -1134,15 +1134,18 @@ def test_gsx_links():
     assert rows[ct]["status"] == "ok" and rows[ct]["raw"] == [["FSDT_GSX_CATERING_STATE", "5"]]
     # servizi indipendenti: refuel ancora REQUESTED (rosso) non blocca il catering gia' IN PROGRESS (verde)
     mix = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": 4, "gsx_cater": 5}))["subphases"] for i in s["items"]}
-    assert mix[fc]["status"] == "bad" and mix[ct]["status"] == "ok"
-    for st, want in ((1, "bad"), (2, "bad"), (3, "bad"), (4, "bad"), (5, "ok"), (6, "ok")):  # voce start: verde da IN PROGRESS
-        r = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": st}))["subphases"] for i in s["items"]}
+    assert mix[fc]["status"] == "wait" and mix[fc]["kind"] == "requested" and mix[fc]["detail"] == "Requested" and mix[ct]["status"] == "ok"
+    for st, want in ((1, "bad"), (2, "bad"), (3, "bad"), (4, "wait"), (5, "ok"), (6, "ok")):  # voce start: REQUESTED in attesa, verde da IN PROGRESS
+        ev = cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": st}))
+        r = {i["id"]: i for s in ev["subphases"] for i in s["items"]}
         assert r[fc]["status"] == want, st
+        assert ev["bad"] == sum(i["status"] == "bad" for s in ev["subphases"] for i in s["items"])  # wait non conta nei bad
+    assert not any(i["status"] == "bad" and i["id"] == fc for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": 4}))["subphases"] for i in s["items"])
     # voce di completamento: rossa fino a COMPLETED
     for st, want in ((4, "bad"), (5, "bad"), (6, "ok")):
         r = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": st}))["subphases"] for i in s["items"]}
         assert r[cr]["status"] == want, st
-    assert rows[bd]["status"] == "bad" and rows[bd]["type"] == "announce"
+    assert rows[bd]["status"] == "wait" and rows[bd]["type"] == "announce"  # boarding REQUESTED (4)
     # grezzo sempre accanto allo stato (live_raw, anche senza --test-links) e riga NOW sempre mostrata
     lv = {i["id"]: i for s in cl.evaluate_phase(ph, labels, live_raw={"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 1})["subphases"] for i in s["items"]}
     assert "raw" not in lv[bd] and lv[bd]["show"] is True and lv[bd]["live"] == [["GSX", "Boarding AVAIL"]]

@@ -233,7 +233,10 @@ def test_gsx():
     assert all(evaluate(c, {"gsx_refuel": a, "gsx_cater": b})["status"] == "ok" for a in mon.GSX_ACTIVE for b in mon.GSX_ACTIVE)
     assert evaluate(c, ok)["status"] == "ok"
     r = evaluate(c, {"gsx_refuel": "IN PROGRESS", "gsx_cater": "REQUESTED"})
+    assert r["status"] == "wait" and r["kind"] == "requested" and r["detail"] == "Requested"  # servizio chiesto: in attesa
+    r = evaluate(c, {"gsx_refuel": "IN PROGRESS", "gsx_cater": "AVAIL"})
     assert r["status"] == "bad" and "GSX catering state" in r["detail"]
+    assert evaluate(c, {"gsx_refuel": "AVAIL", "gsx_cater": "REQUESTED"})["status"] == "bad"  # un rosso vale piu' di un wait
     assert evaluate(c, {"gsx_refuel": "AVAIL", "gsx_cater": None})["status"] == "bad"  # un rosso vale piu' di un n/d
     assert evaluate(c, {"gsx_refuel": "COMPLETED", "gsx_cater": None})["status"] == "na"  # lvar muta: senza colore
     assert evaluate(c, {})["status"] == "na" and evaluate({"gsx": ["gsx_board"]}, {"gsx_board": "COMPLETED"})["status"] == "ok"

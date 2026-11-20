@@ -200,5 +200,23 @@ def test_gsx_completion_latch_green_after_return_to_avail():
 def test_gsx_start_item_green_from_in_progress():
     from checklist_eval import evaluate
     chk = {"gsx": ["gsx_refuel"]}  # voce "start": verde da IN PROGRESS
-    for st, want in (("AVAIL", "bad"), ("REQUESTED", "bad"), ("IN PROGRESS", "ok"), ("COMPLETED", "ok")):
+    for st, want in (("AVAIL", "bad"), ("NOT AVAIL", "bad"), ("BYPASSED", "bad"), ("REQUESTED", "wait"), ("IN PROGRESS", "ok"), ("COMPLETED", "ok"), (None, "na")):
         assert evaluate(chk, {"gsx_refuel": st})["status"] == want, st
+    assert evaluate(chk, {"gsx_refuel": "REQUESTED"}) == {"status": "wait", "kind": "requested", "detail": "Requested"}
+    done = {"gsx": ["gsx_refuel"], "set": "done"}  # completamento invariato: REQUESTED e IN PROGRESS restano rossi
+    assert evaluate(done, {"gsx_refuel": "REQUESTED"})["status"] == "bad" and evaluate(done, {"gsx_refuel": "IN PROGRESS"})["status"] == "bad"
+
+
+def test_gsx_start_item_latch_unchanged_by_requested():
+    from checklist_eval import evaluate
+    chk = {"gsx": ["gsx_refuel"]}
+    la, t = Latch(), 0.0
+    for st in ("AVAIL", "REQUESTED"):  # non ancora avviato: niente latch
+        r = evaluate(chk, {"gsx_refuel": st})
+        assert la.observe("fs", r["status"] == "ok", t) is False
+        t += 1.0
+    for _ in range(3):  # IN PROGRESS stabile: verde e congelato
+        la.observe("fs", evaluate(chk, {"gsx_refuel": "IN PROGRESS"})["status"] == "ok", t)
+        t += 1.0
+    assert "fs" in la
+    assert evaluate(chk, {"gsx_refuel": "REQUESTED"})["status"] == "wait" and "fs" in la  # il latch tiene il verde

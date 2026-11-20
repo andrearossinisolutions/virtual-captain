@@ -631,6 +631,8 @@ def test_announce_no_now_markup():
     assert 'if(!noNow&&(it.show||it.kind==="wait")&&it.live&&it.live.length)tx.appendChild(nowNode(mk,"NOW: "' in p
     assert 'if(!noNow&&it.was_ok&&it.live&&it.live.length)' in p and 'if(!noNow&&it.kind==="mismatch"&&!it.show){' in p
     assert 'if(it.kind==="wait")tx.appendChild(nowNode(mk,"Waiting: "' in p  # Waiting: non toccato
+    assert 'if(it.kind==="requested")tx.appendChild(nowNode(mk,"Requested",true));' in p  # GSX start REQUESTED: solo "Requested", anche senza test links
+    assert 'if(it.kind==="requested")' in p and p.index('it.kind==="requested"') < p.index("noNow&&it.was_ok")  # non dipende da noNow
 
 
 def test_optional_markup():
