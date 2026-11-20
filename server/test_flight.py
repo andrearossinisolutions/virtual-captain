@@ -436,3 +436,322 @@ def test_web_files_not_served_without_the_api(tmp_path):
     c = TestClient(srv.create_app(AppConfig(db_path=str(tmp_path / "x.db"))))
     assert c.get("/app.js").status_code == 404 and c.get("/app.css").status_code == 404
     assert c.get("/api/flight/state").status_code == 404 and c.get("/flight").status_code == 404
+
+
+# ---------- deltas (U4, C3) ----------
+
+def dmsg(seq, base, d=None, rm=None, dv=1):
+    body = {"t": "delta", "dv": dv, "seq": seq, "base": base, "d": {} if d is None else d}
+    if rm is not None:
+        body["rm"] = rm
+    return json.dumps(body)
+
+
+def ping_then(ws):
+    """Everything the server sent before the pong (a resync comes before it), in order."""
+    ws.send_text(json.dumps({"t": "ping"}))
+    out = []
+    while True:
+        m = json.loads(ws.receive_text())
+        if m == {"t": "pong"}:
+            return out
+        out.append(m)
+
+
+def snap_of(e, client=None):
+    return state(e, client)["snapshot"]
+
+
+def test_welcome_announces_delta_and_the_kill_switch_removes_it(make_env):
+    e = make_env()
+    with open_agent(e) as ws:
+        pass
+    with e.ws() as ws:
+        assert json.loads(ws.receive_text())["feat"] == ["delta"]
+    off = make_env(delta=False)
+    with off.ws() as ws:
+        assert json.loads(ws.receive_text()) == {"t": "welcome", "v": 1, "heartbeat": 5, "max_msg": 262144}
+
+
+def test_config_reads_vc_delta():
+    import pathlib
+    import re
+    src = (pathlib.Path(__file__).parent / "config.py").read_text(encoding="utf-8")
+    assert re.search(r'delta=\(env\.get\("VC_DELTA"\)', src)
+    assert "VC_DELTA" in (pathlib.Path(__file__).parent / "env.example").read_text(encoding="utf-8")
+
+
+def body_snapshot(e):
+    """The snapshot part of the polling response, as served (text, not parsed)."""
+    return e.web.get("/api/flight/state").text.split('"snapshot":')[1]
+
+
+@pytest.fixture
+def short_window(monkeypatch):
+    """The 4-messages-in-2-s limit shrunk to 0.3 s so the tests can pace their messages with short sleeps."""
+    monkeypatch.setattr(api_agent, "SNAP_WINDOW", 0.3)
+
+
+def slow():
+    time.sleep(0.35)  # longer than the shrunk window of `short_window`
+
+
+def test_delta_is_applied_and_polling_matches_a_full_snapshot(env):
+    full2 = view("M2", pills={"a": "x"})
+    with open_agent(env) as ws:
+        ws.send_text(msg(1))
+        assert wait_for(seq_is(env, 1))
+        ws.send_text(dmsg(2, 1, {"log": ["M2"], "pills": {"a": "x"}}))
+        assert wait_for(seq_is(env, 2))
+        assert ping_then(ws) == []  # no resync
+        by_delta = body_snapshot(env)
+        ws.send_text(msg(3, full2))
+        assert wait_for(seq_is(env, 3))
+        assert body_snapshot(env) == by_delta  # same bytes as the full snapshot (join of the sections)
+        assert snap_of(env) == full2
+
+
+def test_removal_by_delta_and_spoke_n_tracking(env):
+    with open_agent(env) as ws:
+        ws.send_text(msg(1, view("M1", pills={"a": "x"})))
+        assert wait_for(seq_is(env, 1))
+        ws.send_text(dmsg(2, 1, {"spoke_n": 2}, ["pills"]))
+        assert wait_for(seq_is(env, 2))
+        s = snap_of(env)
+        assert "pills" not in s and s["spoke_n"] == 2 and s["log"] == ["M1"]
+        assert state(env)["spoke_ago"] is not None  # spoke_n changed by a delta
+
+
+def test_hub_joined_text_equals_the_direct_dump_and_tombstones_stay():
+    hub = Hub()
+    conn = hub.new_conn(object(), "f")
+    hub.register(1, conn)
+    v = {"phase": "flying", "log": ["\u00e9"], "fields": {"b": "1", "a": "2"}, "pills": {"z": "y"}}
+    hub.store_snapshot(conn, 1, v)
+    assert conn.snapshot_text == json.dumps(v, separators=(",", ":"), sort_keys=True)
+    new = wire.apply_delta(conn.view, {"log": ["x"]}, ["pills"])
+    assert hub.store_delta(conn, 2, new, ["log"], ["pills"]) is True
+    assert conn.snapshot_text == json.dumps(new, separators=(",", ":"), sort_keys=True)
+    assert conn.sections["pills"] == (None, 2) and conn.sections["log"][1] == 2 and conn.sections["phase"][1] == 1
+    hub.store_snapshot(conn, 3, {"phase": "flying"})  # a full one: whatever disappeared becomes a tombstone
+    assert conn.sections["log"] == (None, 3) and conn.sections["phase"][1] == 3
+
+
+def test_hub_epoch_is_random_per_process():
+    starts = {Hub().new_conn(object(), "f").epoch for _ in range(6)}
+    assert len(starts) > 1  # 30 random bits: six hubs never all start at the same number
+    hub = Hub()
+    a, b = hub.new_conn(object(), "f").epoch, hub.new_conn(object(), "f").epoch
+    assert b == a + 1 and 0 < a < 2 ** 31
+
+
+def test_hub_subscribers_are_notified_and_can_leave():
+    async def go():
+        hub = Hub()
+        ev, other = hub.subscribe(1), hub.subscribe(2)
+        conn = hub.new_conn(object(), "f")
+        hub.register(1, conn)
+        assert ev.is_set() and not other.is_set()
+        ev.clear()
+        hub.store_snapshot(conn, 1, {"phase": "flying"})
+        assert ev.is_set() and not other.is_set()
+        ev.clear()
+        hub.unsubscribe(1, ev)
+        hub.store_snapshot(conn, 2, {"phase": "flying"})
+        assert not ev.is_set() and 1 not in hub._subs
+        hub.unsubscribe(1, ev)  # twice: harmless
+    import asyncio
+    asyncio.run(go())
+
+
+def test_hub_refuses_a_state_over_the_cap_for_full_and_delta(monkeypatch):
+    hub = Hub()
+    conn = hub.new_conn(object(), "f")
+    hub.register(1, conn)
+    hub.store_snapshot(conn, 1, {"phase": "flying"})
+    big = {"phase": "flying", "log": ["x" * 300] * 30}
+    before = (conn.snapshot_text, dict(conn.sections), conn.seq)
+    monkeypatch.setattr(wire, "MAX_STATE_BYTES", 100)
+    assert hub.store_delta(conn, 2, big, ["log"], []) is False
+    assert hub.store_snapshot(conn, 2, big) is False
+    assert (conn.snapshot_text, conn.sections, conn.seq) == before
+
+
+@pytest.mark.parametrize("bad_delta", [
+    dmsg(3, 2, {"log": ["X"]}),                  # gap: base is not the previous seq
+    dmsg(1, 0, {"log": ["X"]}),                  # wrong base (seq = base + 1, but the state is at seq 1)
+])
+def test_gap_and_wrong_base_give_resync_and_keep_the_connection(env, bad_delta):
+    with open_agent(env) as ws:
+        ws.send_text(msg(1))
+        assert wait_for(seq_is(env, 1))
+        ws.send_text(bad_delta)
+        assert ping_then(ws) == [{"t": "resync"}]
+        assert snap_of(env)["log"] == ["M1"] and state(env)["seq"] == 1  # nothing applied
+        assert env.connected()
+
+
+def test_deltas_are_ignored_until_a_full_snapshot_then_all_is_normal(env, short_window):
+    with open_agent(env) as ws:
+        ws.send_text(msg(1))
+        assert wait_for(seq_is(env, 1))
+        ws.send_text(dmsg(5, 4, {"log": ["X"]}))   # gap -> resync
+        assert ping_then(ws) == [{"t": "resync"}]
+        slow()
+        ws.send_text(dmsg(2, 1, {"log": ["OK-BUT-IGNORED"]}))  # right base, yet ignored: no new resync either
+        assert ping_then(ws) == []
+        assert snap_of(env)["log"] == ["M1"]
+        slow()
+        ws.send_text(msg(6, view("FULL")))
+        assert wait_for(seq_is(env, 6))
+        slow()
+        ws.send_text(dmsg(7, 6, {"log": ["AFTER"]}))
+        assert wait_for(seq_is(env, 7))
+        assert ping_then(ws) == [] and snap_of(env)["log"] == ["AFTER"]
+
+
+def test_delta_before_any_full_snapshot_gives_resync(env):
+    with open_agent(env) as ws:
+        ws.send_text(dmsg(1, 0, {"phase": "flying"}))
+        assert ping_then(ws) == [{"t": "resync"}]
+        assert state(env)["snapshot"] is None and env.connected()
+
+
+@pytest.mark.parametrize("bad", [
+    dmsg(2, 1, {"log": ["X"]}, dv=2), dmsg(2, 1, {"log": ["X"]}, dv=True),
+    json.dumps({"t": "delta", "dv": 1, "seq": "2", "base": 1, "d": {}}),
+    json.dumps({"t": "delta", "dv": 1, "seq": True, "base": 1, "d": {}}),
+    json.dumps({"t": "delta", "dv": 1, "seq": 2, "base": True, "d": {}}),
+    json.dumps({"t": "delta", "dv": 1, "seq": 2, "base": 1.0, "d": {}}),
+    json.dumps({"t": "delta", "dv": 1, "seq": 2, "base": 1, "d": []}),
+    json.dumps({"t": "delta", "dv": 1, "seq": 2, "base": 1, "d": {}, "rm": "log"}),
+    dmsg(2, 1, {"log": "not a list"}),            # rejected by the allowlist
+    dmsg(2, 1, None, ["phase"]),                  # phase can never be removed
+])
+def test_malformed_delta_gives_resync_without_closing(env, bad):
+    with open_agent(env) as ws:
+        ws.send_text(msg(1))
+        assert wait_for(seq_is(env, 1))
+        ws.send_text(bad)
+        assert ping_then(ws) == [{"t": "resync"}]
+        assert snap_of(env)["log"] == ["M1"] and env.connected()
+
+
+def test_delta_over_the_size_cap_gives_resync_not_a_fault(make_env, monkeypatch, short_window):
+    e = make_env()
+    monkeypatch.setattr(wire, "MAX_STATE_BYTES", 400)
+    with open_agent(e) as ws:
+        ws.send_text(msg(1))
+        assert wait_for(seq_is(e, 1))
+        ws.send_text(dmsg(2, 1, {"log": ["x" * 290] * 3}))
+        assert ping_then(ws) == [{"t": "resync"}]
+        assert snap_of(e)["log"] == ["M1"]
+        slow()
+        ws.send_text(msg(3, view("F")))  # a full snapshot after the resync: back to normal
+        assert wait_for(seq_is(e, 3))
+        slow()
+        ws.send_text(dmsg(4, 3, {"log": ["small"]}))
+        assert wait_for(seq_is(e, 4)) and snap_of(e)["log"] == ["small"]
+        assert e.connected()
+
+
+def test_invalid_delta_counts_toward_the_five_in_a_row_that_close_1008(env, short_window):
+    bad_full = json.dumps({"t": "snapshot", "sv": 1, "seq": 9, "d": {"log": ["no phase"]}})
+    with open_agent(env) as ws:
+        ws.send_text(msg(1))
+        slow()
+        ws.send_text(dmsg(2, 1, {"log": "bad"}))   # invalid #1 (resync sent)
+        assert ping_then(ws) == [{"t": "resync"}]
+        for _ in range(3):                          # invalid #2..#4: still open
+            slow()
+            ws.send_text(bad_full)
+        slow()
+        assert ping_then(ws) == [] and env.connected()
+        ws.send_text(bad_full)                      # #5
+        assert closed_code(ws) == 1008
+
+
+def test_delta_rate_limits_apply_like_snapshots(env):
+    with open_agent(env) as ws:
+        ws.send_text(msg(1))
+        for n in range(2, 9):
+            ws.send_text(dmsg(n, n - 1, {"log": [str(n)]}))
+        assert closed_code(ws) == 4004
+
+
+def test_kill_switch_answers_resync_and_keeps_the_connection(make_env):
+    e = make_env(delta=False)
+    with open_agent(e) as ws:
+        ws.send_text(msg(1))
+        assert wait_for(seq_is(e, 1))
+        ws.send_text(dmsg(2, 1, {"log": ["X"]}))
+        assert ping_then(ws) == [{"t": "resync"}]
+        ws.send_text(msg(3, view("FULL")))
+        assert wait_for(seq_is(e, 3)) and snap_of(e)["log"] == ["FULL"]
+
+
+def test_deltas_of_two_accounts_never_mix(env):
+    web2, tok_b = second_account(env)
+    try:
+        with open_agent(env) as ws_a, open_agent(env, token=tok_b["access_token"]) as ws_b:
+            ws_a.send_text(msg(1, view("A0")))
+            ws_b.send_text(msg(1, view("B0")))
+            assert wait_for(seq_is(env, 1)) and wait_for(seq_is(env, 1, web2))
+            ws_a.send_text(dmsg(2, 1, {"log": ["MARK-A"]}))
+            ws_b.send_text(dmsg(2, 1, {"log": ["MARK-B"]}))
+            assert wait_for(seq_is(env, 2)) and wait_for(seq_is(env, 2, web2))
+            ra, rb = env.web.get("/api/flight/state"), web2.get("/api/flight/state")
+            assert "MARK-A" in ra.text and "MARK-B" not in ra.text
+            assert "MARK-B" in rb.text and "MARK-A" not in rb.text
+            ws_a.send_text(dmsg(8, 7, {"log": ["X"]}))  # A's resync does not touch B
+            assert ping_then(ws_a) == [{"t": "resync"}]
+            assert ping_then(ws_b) == []
+    finally:
+        web2.close()
+
+
+def test_logs_never_hold_the_delta_content(env, caplog):
+    with caplog.at_level(logging.DEBUG):
+        with open_agent(env) as ws:
+            ws.send_text(msg(1))
+            assert wait_for(seq_is(env, 1))
+            ws.send_text(dmsg(2, 1, {"log": ["SECRET-DELTA-XYZ"]}))
+            ws.send_text(dmsg(9, 7, {"log": ["SECRET-DELTA-XYZ"]}))
+            ws.send_text(dmsg(3, 2, {"log": {"SECRET-DELTA-XYZ": 1}}))
+            ping_then(ws)
+    assert "SECRET-DELTA-XYZ" not in caplog.text
+
+
+def test_a_70kb_full_snapshot_is_followed_by_a_small_delta_without_resync(env):
+    items = [{"id": "i%d" % n, "text": "t" * 290, "response": "r" * 290, "detail": "d" * 290} for n in range(80)]
+    big = view("BIG", checklist={"bad": 0, "phase": {"id": "p", "name": "P"},
+                                 "subphases": [{"id": "s", "name": "S", "items": items}]})
+    size = len(json.dumps(big))
+    assert 65536 < size < 96 * 1024, size  # between the old delta cap and the program's own trim limit
+    with open_agent(env) as ws:
+        ws.send_text(msg(1, big))
+        assert wait_for(seq_is(env, 1))
+        ws.send_text(dmsg(2, 1, {"spoke_n": 2}))
+        assert wait_for(seq_is(env, 2))
+        assert ping_then(ws) == [] and snap_of(env)["spoke_n"] == 2
+
+
+def test_hub_tombstone_removed_again_keeps_its_first_ver():
+    hub = Hub()
+    conn = hub.new_conn(object(), "f")
+    hub.register(1, conn)
+    hub.store_snapshot(conn, 1, {"phase": "p", "log": ["a"]})
+    hub.store_delta(conn, 2, {"phase": "p"}, [], ["log"])
+    hub.store_delta(conn, 3, {"phase": "p"}, [], ["log"])
+    assert conn.sections["log"] == (None, 2)
+    hub.store_snapshot(conn, 4, {"phase": "p"})
+    assert conn.sections["log"] == (None, 2)
+
+
+def test_delta_seq_must_be_base_plus_one_and_dv_a_real_int(env):
+    for bad in (dmsg(5, 1, {"log": ["X"]}), dmsg(0, 1, {"log": ["X"]}), dmsg(2, 1, {"log": ["X"]}, dv=1.0)):
+        with open_agent(env) as ws:
+            ws.send_text(msg(1))
+            assert wait_for(seq_is(env, 1))
+            ws.send_text(bad)
+            assert ping_then(ws) == [{"t": "resync"}] and snap_of(env)["log"] == ["M1"]

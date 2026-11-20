@@ -29,8 +29,8 @@ __all__ = [
     "PROTOCOL_VERSION", "SUPPORTED_VERSIONS", "HEARTBEAT", "STALE_AFTER", "MAX_MSG", "HELLO_TIMEOUT",
     "FAMILY_RECHECK", "MAX_LIFETIME", "WS_PATH", "CLOSE_REPLACED", "CLOSE_BAD_VERSION",
     "CLOSE_REVOKED", "CLOSE_TOO_BIG", "CLOSE_RESTART", "T_WELCOME", "T_HELLO", "T_PING", "T_PONG",
-    "T_BYE", "T_DELTA", "T_RESYNC", "FEAT_DELTA", "DELTA_VERSION", "sanitize_section", "apply_delta", "welcome_message", "T_SNAPSHOT", "SNAPSHOT_VERSION", "SUPPORTED_SNAPSHOT_VERSIONS",
-    "MAX_SNAPSHOT_TARGET", "SNAPSHOT_FIELDS", "HIDDEN_ROW_LABELS", "SnapshotError", "sanitize_snapshot",
+    "T_BYE", "T_DELTA", "T_RESYNC", "FEAT_DELTA", "DELTA_VERSION", "sanitize_section", "apply_delta", "welcome_message", "welcome_feat", "T_SNAPSHOT", "SNAPSHOT_VERSION", "SUPPORTED_SNAPSHOT_VERSIONS",
+    "MAX_SNAPSHOT_TARGET", "MAX_STATE_BYTES", "SNAPSHOT_FIELDS", "HIDDEN_ROW_LABELS", "SnapshotError", "sanitize_snapshot",
     "T_CMD", "T_RESULT", "CAP_CMD", "COMMAND_VERSION", "REMOTE_COMMANDS", "LOCAL_ONLY", "ENABLED_COMMANDS",
     "CMD_TIMEOUT", "cmd_timeout", "MAX_CMD_BYTES", "MAX_CMD_DATA", "MAX_RESULT_BYTES", "MAX_CAPS", "CMD_ID_RE",
     "RESULT_CODES", "LOAD_REASONS", "MAX_RESULT_MSG", "SIMBRIEF_RE", "FIELD_KEYS", "PLAN_RESET", "CLR_KEYS", "CLR_MAX",
@@ -66,6 +66,8 @@ T_CMD, T_RESULT = "cmd", "result"
 SNAPSHOT_VERSION = 1
 SUPPORTED_SNAPSHOT_VERSIONS = frozenset({1})
 MAX_SNAPSHOT_TARGET = 65536   # bytes: the program trims (waypoints, then monitor) above 96 KB, the tests keep the worst case here
+MAX_STATE_BYTES = MAX_MSG     # the server's one cap on the rebuilt state (sum of the section texts), same for a full snapshot and for a delta:
+#                               the program trims at 96 KB, a full message is at most MAX_MSG, so no state the program can send is refused
 MAX_DEPTH = 8
 KEY_RE = re.compile(r"^[a-z0-9_]{1,32}$")
 HIDDEN_ROW_LABELS = frozenset({"latitude", "longitude"})  # rows with these labels never leave the PC
@@ -83,6 +85,11 @@ def welcome_message(feat=()) -> dict:
     if feat:
         msg["feat"] = list(feat)
     return msg
+
+
+def welcome_feat(delta_enabled: bool) -> tuple:
+    """Features the server announces: FEAT_DELTA unless the kill switch (VC_DELTA=off) is on."""
+    return (FEAT_DELTA,) if delta_enabled else ()
 
 
 # ---------------------------------------------------------------- snapshot of the flight (allowlist)

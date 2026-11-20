@@ -117,6 +117,7 @@ class AppConfig:
     account_ip_minute: int = 60          # the same, per IP
     hash_queue_max: int = 8              # hashes waiting or running; above it: 503
     remote_commands: bool = True         # VC_REMOTE_COMMANDS=off: kill switch, the command route answers 503
+    delta: bool = True                   # VC_DELTA=off: kill switch, the welcome announces no "delta" feature (the PC sends full snapshots)
 
 
 def _int(env: Mapping[str, str], name: str, default: int) -> int:
@@ -192,4 +193,5 @@ def load_app_config(env: Mapping[str, str] = os.environ) -> AppConfig:
         account_ip_minute=_int(env, "RATE_ACCOUNT_IP_MINUTE", 60),
         hash_queue_max=_int(env, "HASH_QUEUE_MAX", 8),
         remote_commands=(env.get("VC_REMOTE_COMMANDS") or "").strip().lower() != "off",
+        delta=(env.get("VC_DELTA") or "").strip().lower() != "off",
     )

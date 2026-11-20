@@ -168,7 +168,7 @@ def test_welcome_message(env):
     with open_agent(env) as ws:
         pass
     with env.ws() as ws:
-        assert json.loads(ws.receive_text()) == {"t": "welcome", "v": 1, "heartbeat": 5, "max_msg": 262144}
+        assert json.loads(ws.receive_text()) == {"t": "welcome", "v": 1, "heartbeat": 5, "max_msg": 262144, "feat": ["delta"]}
 
 
 def test_unknown_message_types_are_ignored_but_keep_alive(env):
@@ -565,7 +565,7 @@ def test_real_uvicorn_welcome_oversize_and_status(live):
     from websockets.exceptions import ConnectionClosed
     e, url = live
     ws = _real_connect(url, {"Authorization": "Bearer " + e.access})
-    assert json.loads(ws.recv(5)) == wire.welcome_message()
+    assert json.loads(ws.recv(5)) == wire.welcome_message((wire.FEAT_DELTA,))
     ws.send(json.dumps(HELLO))
     assert wait_for(e.connected)
     ws.send(json.dumps({"t": "ping"}))

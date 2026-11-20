@@ -69,6 +69,7 @@ CMD_HEADERS = {"Vary": "Cookie", "Cache-Control": "no-store"}
 CMD_STATUS_ERRORS = {"offline": (409, "program_offline"), "unsupported": (409, "commands_unsupported"),
                      "disabled": (409, "commands_disabled"), "busy": (409, "busy"), "timeout": (504, "timeout")}
 
+RESYNC_TEXT = json.dumps({"t": wire.T_RESYNC})
 SEND_TIMEOUT = 5.0  # a peer that does not read must not hold a handler (or the loop) hostage
 
 
@@ -111,6 +112,28 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
         size = len(payload.encode("utf-8", "replace")) if payload is not None else len(msg.get("bytes") or b"")
         return size > wire.MAX_MSG
 
+    def delta_verdict(conn, data) -> Optional[str]:
+        """Applies a delta to the connection. None = applied; "resync" = the program must send a full snapshot (kill switch,
+        no full snapshot yet, gap or wrong base, too big); "invalid" = malformed envelope or a delta the allowlist rejects
+        (counts like an invalid snapshot). Never logs or keeps the content."""
+        def num(v):
+            return isinstance(v, int) and not isinstance(v, bool) and v >= 0
+        if not cfg.delta or conn.view is None:
+            return "resync"
+        dv, seq, base, d, rm = data.get("dv"), data.get("seq"), data.get("base"), data.get("d"), data.get("rm", [])
+        if (type(dv) is not int or dv != wire.DELTA_VERSION or not num(seq) or not num(base) or seq != base + 1
+                or not isinstance(d, dict) or not isinstance(rm, list)):
+            return "invalid"
+        if base != conn.seq:
+            return "resync"
+        try:
+            view = wire.apply_delta(conn.view, d, rm)
+        except Exception:  # noqa: BLE001  (SnapshotError, RecursionError...: never log the content)
+            return "invalid"
+        if not hub.store_delta(conn, seq, view, [k for k in d if k in view], [k for k in rm if k not in view]):
+            return "resync"
+        return None
+
     async def hello(ws: WebSocket) -> Optional[tuple]:
         """Waits for the hello; returns (caps, cv) or None (the socket is closed) on any problem."""
         msg = await recv(ws, cfg.agent_hello_timeout)
@@ -146,6 +169,7 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
             recent: deque = deque()
             snaps: deque = deque()      # (time, bytes) of the last snapshots, for the rate limits
             invalid = 0
+            desync = False              # a resync was sent: deltas are ignored until a full snapshot arrives
             while True:
                 now = mono()
                 if now - started >= cfg.agent_max_lifetime:
@@ -187,7 +211,7 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
                 elif data["t"] == wire.T_BYE:
                     await _close(ws, 1000)
                     return
-                elif data["t"] == wire.T_SNAPSHOT:
+                elif data["t"] in (wire.T_SNAPSHOT, wire.T_DELTA):
                     size = len(msg["text"].encode("utf-8", "replace"))
                     snaps.append((now, size))
                     while snaps and now - snaps[0][0] > SNAP_BYTES_WINDOW:
@@ -196,6 +220,21 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
                             or sum(b for _, b in snaps) > SNAP_MAX_BYTES):
                         await _close(ws, wire.CLOSE_TOO_BIG)
                         return
+                    if data["t"] == wire.T_DELTA:
+                        verdict = None if desync else delta_verdict(conn, data)
+                        if verdict is not None:
+                            desync = True
+                            if verdict == "invalid":
+                                invalid += 1
+                                if invalid >= SNAP_MAX_INVALID:
+                                    await _close(ws, 1008)
+                                    return
+                            # a resync is not a fault: the connection stays open and the program sends a full snapshot
+                            async with conn.send_lock():
+                                await asyncio.wait_for(ws.send_text(RESYNC_TEXT), SEND_TIMEOUT)
+                        elif not desync:
+                            invalid = 0
+                        continue
                     sv = data.get("sv")
                     if isinstance(sv, bool) or sv not in wire.SUPPORTED_SNAPSHOT_VERSIONS:
                         await _close(ws, wire.CLOSE_BAD_VERSION)
@@ -206,6 +245,8 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
                             view = wire.sanitize_snapshot(data.get("d"))
                         except Exception:  # noqa: BLE001  (SnapshotError, RecursionError...: never log the content)
                             view = None
+                    if view is not None and not hub.store_snapshot(conn, seq, view):
+                        view = None  # over the state cap: counts as invalid
                     if view is None:
                         invalid += 1
                         if invalid >= SNAP_MAX_INVALID:
@@ -213,7 +254,7 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
                             return
                     else:
                         invalid = 0
-                        hub.store_snapshot(conn, seq, view)
+                        desync = False
                 elif data["t"] == wire.T_RESULT:
                     # only the pending command of THIS connection (id equal); anything else is ignored
                     hub.resolve_result(conn, wire.sanitize_result(data) if len(msg["text"].encode("utf-8", "replace")) <= wire.MAX_RESULT_BYTES else None)
@@ -241,7 +282,7 @@ def build_agent_router(accounts: Accounts, devices: DeviceCodes, hub: Hub,
         user_id, family_id = verified
         await websocket.accept()
         try:
-            await asyncio.wait_for(websocket.send_text(json.dumps(wire.welcome_message())), SEND_TIMEOUT)
+            await asyncio.wait_for(websocket.send_text(json.dumps(wire.welcome_message(wire.welcome_feat(cfg.delta)))), SEND_TIMEOUT)
             hi = await hello(websocket)
             if hi is not None:
                 await run(websocket, user_id, family_id, *hi)
