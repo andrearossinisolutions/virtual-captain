@@ -168,8 +168,9 @@ def test_gsx_states():
     assert label(BY["gsx_board"], 5) == "IN PROGRESS (5)" and label(BY["gsx_board"], 7) == "n/d (7)" and label(BY["gsx_board"], 0) == "n/d (0)" and label(BY["gsx_board"], None) == "n/d"
     assert BY["gsx_refuel"].lvar == "FSDT_GSX_REFUELING_STATE" and BY["gsx_cater"].lvar == "FSDT_GSX_CATERING_STATE" and BY["gsx_board"].lvar == "FSDT_GSX_BOARDING_STATE"
     assert set(monitor.GSX_ACTIVE) <= set(monitor.GSX_STATES.values())
-    assert monitor.gsx_live_text("gsx_board", 1) == "boarding 1 available" and monitor.gsx_live_text("gsx_board", None) == "boarding n/d"
-    assert monitor.gsx_live_text("gsx_cater", 0) == "catering 0 n/d" and monitor.gsx_live_text("gsx_refuel", 5.0) == "refueling 5 in progress"
+    assert monitor.gsx_live_text("gsx_board", 1) == "Boarding AVAIL" and monitor.gsx_live_text("gsx_board", None) == "Boarding n/d"
+    assert monitor.gsx_live_text("gsx_cater", 0) == "Catering n/d (0)" and monitor.gsx_live_text("gsx_refuel", 5.0) == "Refuel IN PROGRESS"
+    assert monitor.gsx_live_text("gsx_refuel", 7) == "Refuel n/d (7)" and monitor.GSX_STATES[2] == "NOT AVAIL" and "1" not in monitor.gsx_live_text("gsx_board", 1)
     diag = [i for i in monitor.ITEMS if i.group == "GSX" and i.key.startswith("gsx_d_")]
     assert len(diag) == 13 and all(i.kind == "numeric" and i.lvar.startswith("FSDT_GSX_") for i in diag)
     assert {i.lvar for i in diag} >= {"FSDT_GSX_COUATL_STARTED", "FSDT_GSX_HEARTBEAT", "FSDT_GSX_STATE", "FSDT_GSX_PUSHBACK_STATUS"}

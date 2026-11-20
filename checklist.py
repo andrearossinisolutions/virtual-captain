@@ -164,9 +164,10 @@ def raw_values(check: dict | None, raw: dict) -> list:
 
 def live_values(check: dict | None, labels: dict, live_raw: dict | None = None) -> list:
     """Valori reali letti per un check: [[nome, etichetta|"n/d"], ...] (sola lettura, vuoto se la voce non ha variabile).
-    Check "gsx": il valore e' "<servizio> <grezzo> <stato>" (es. "boarding 1 available"), sempre con il grezzo (live_raw), anche senza --test-links."""
+    Check "gsx": una sola coppia ["GSX", "Refuel AVAIL \u00b7 Catering AVAIL"] (nome servizio + stato, senza grezzo: quello resta in --test-links e --probe);
+    live_raw serve solo a leggere lo stato (anche senza --test-links)."""
     if "gsx" in (check or {}):
-        return [[BY_KEY[k].name, mon.gsx_live_text(k, (live_raw or {}).get(k))] for k in check["gsx"]]
+        return [["GSX", " \u00b7 ".join(mon.gsx_live_text(k, (live_raw or {}).get(k)) for k in check["gsx"])]]
     if "qnh" in (check or {}) or "std" in (check or {}):
         a = qnh_actual(labels)
         return [["Baro", "STD" if a == "STD" else (f"{a:.0f}" if a is not None else mon.NA)]]

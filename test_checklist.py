@@ -1087,10 +1087,10 @@ def test_gsx_links():
     assert rows[bd]["status"] == "bad" and rows[bd]["type"] == "announce"
     # grezzo sempre accanto allo stato (live_raw, anche senza --test-links) e riga NOW sempre mostrata
     lv = {i["id"]: i for s in cl.evaluate_phase(ph, labels, live_raw={"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 1})["subphases"] for i in s["items"]}
-    assert "raw" not in lv[bd] and lv[bd]["show"] is True and lv[bd]["live"] == [["GSX boarding state", "boarding 1 available"]]
-    assert lv[fc]["live"] == [["GSX refueling state", "refueling 6 completed"], ["GSX catering state", "catering 5 in progress"]]
+    assert "raw" not in lv[bd] and lv[bd]["show"] is True and lv[bd]["live"] == [["GSX", "Boarding AVAIL"]]
+    assert lv[fc]["live"] == [["GSX", "Refuel COMPLETED \u00b7 Catering IN PROGRESS"]]
     nr = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({}))["subphases"] for i in s["items"]}
-    assert nr[bd]["live"] == [["GSX boarding state", "boarding n/d"]]
+    assert nr[bd]["live"] == [["GSX", "Boarding n/d"]]
     muto = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({}))["subphases"] for i in s["items"]}
     assert muto[fc]["status"] == "na"
     # check gsx ammesso solo su announce e solo con chiavi gsx; gli altri tipi restano senza link

@@ -23,22 +23,23 @@ AI_CLOUD_COVERS_AIR = ("BKN", "OVC")  # coperture che contano solo in volo (FEW/
 FLIGHT_GROUP = "Flight data"  # voci cinematiche: solo nella card Flight data (restano nella richiesta SimConnect)
 
 # Stati GSX (FSDT_GSX_*_STATE): mappa da confermare dal vivo (fonte non ufficiale: issue mrlm-net/simconnect #663, che cita il manuale GSX).
-# 1 available (callable, richiamabile), 2 non disponibile, 3 bypassed, 4 requested, 5 in progress, 6 completed. 0 = non letta (nessuno stato valido).
-GSX_STATES = {1: "AVAILABLE", 2: "NOT AVAILABLE", 3: "BYPASSED", 4: "REQUESTED", 5: "IN PROGRESS", 6: "COMPLETED"}
+# 1 avail (callable, richiamabile), 2 non disponibile, 3 bypassed, 4 requested, 5 in progress, 6 completed. 0 = non letta (nessuno stato valido).
+GSX_STATES = {1: "AVAIL", 2: "NOT AVAIL", 3: "BYPASSED", 4: "REQUESTED", 5: "IN PROGRESS", 6: "COMPLETED"}
 GSX_ACTIVE = ("IN PROGRESS", "COMPLETED")  # unico posto: stati GSX che valgono "servizio avviato" (in corso o completato) per i check {"gsx": [...]}
 GSX_DONE = ("COMPLETED",)  # unico posto: stati GSX che valgono "servizio concluso" (check {"gsx": [...], "set": "done"})
 GSX_SETS = {"active": GSX_ACTIVE, "done": GSX_DONE}  # nome del set nel check; default "active"
 GSX_GROUP = "GSX"
-GSX_SHORT = {"gsx_refuel": "refueling", "gsx_cater": "catering", "gsx_board": "boarding"}  # nome breve nella riga Actual/NOW
+GSX_SHORT = {"gsx_refuel": "Refuel", "gsx_cater": "Catering", "gsx_board": "Boarding"}  # nome breve nella riga Actual/NOW
 
 
 def gsx_live_text(key: str, raw) -> str:
-    """Testo "<servizio> <grezzo> <stato>" per la pagina (es. "boarding 1 available"); L-var non letta: "boarding n/d"; fuori mappa: "boarding 0 n/d"."""
+    """Testo "<Servizio> <STATO>" per la pagina, senza il grezzo (es. "Boarding AVAIL"); non letta: "Refuel n/d"; fuori mappa: "Refuel n/d (N)"."""
     v = to_number(raw)
     if v is None:
         return f"{GSX_SHORT[key]} {NA}"
     state = GSX_STATES.get(int(v)) if v == int(v) else None
-    return f"{GSX_SHORT[key]} {raw_text(v)} {state.lower() if state else NA}"
+    return f"{GSX_SHORT[key]} {state}" if state else f"{GSX_SHORT[key]} {NA} ({raw_text(v)})"
+
 
 MAPS = {
     "onoff": {0: "OFF", 1: "ON"},
