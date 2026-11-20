@@ -155,7 +155,27 @@ def test_restored_brain_is_silent_and_keeps_state():
     assert b2.update(s, 1.0)
 
 
+def test_route_procedures_and_plan():
+    import simbrief as sb
+    for r in ("LIMC/35R PEP2Q PEPAG DCT CANNE Z651 KELIP KELI3G LSZH/28", "PEP2Q PEPAG DCT CANNE Z651 KELIP KELI3G"):
+        assert sb.route_procedures(r) == ("PEP2Q", "PEPAG", "KELI3G")
+    assert sb.route_procedures("SRN1T DCT X") == ("SRN1T", None, None)
+    assert sb.route_procedures("DCT CANNE Z651") == (None, None, None)
+    assert sb.route_procedures("") == (None, None, None) and sb.route_procedures(None) == (None, None, None)
+    ofp = {"general": {"route": "LIMC/35R PEP2Q PEPAG DCT CANNE Z651 KELIP KELI3G LSZH/28",
+                       "sid_ident": "SRN1T", "sid_trans": "X", "star_ident": "OLD1A"}}
+    p = sb.extract_plan(ofp)
+    assert (p["sid"], p["sid_trans"], p["star"]) == ("PEP2Q", "PEPAG", "KELI3G")
+    p = sb.extract_plan({"general": {"route": "DCT CANNE Z651", "sid_ident": "SRN1T", "sid_trans": "PEPAG", "star_ident": "KELI3G"}})
+    assert (p["sid"], p["sid_trans"], p["star"]) == ("SRN1T", "PEPAG", "KELI3G")
+    p = sb.extract_plan({"general": {"route": "SRN1T DCT X", "sid_trans": "ZZZZZ"}})
+    assert (p["sid"], p["sid_trans"]) == ("SRN1T", None)
+    p = sb.extract_plan({"general": {}})
+    assert (p["sid"], p["sid_trans"], p["star"]) == (None, None, None)
+
+
 if __name__ == "__main__":
+    test_route_procedures_and_plan()
     test_readout_pair_shown_vs_spoken()
     test_say_logs_shown_text()
     test_parse_dep()

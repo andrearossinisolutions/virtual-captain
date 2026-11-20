@@ -1,6 +1,7 @@
 """Scarica l'ultimo piano SimBrief (API pubblica, nessuna chiave)."""
 import json
 import os
+import re
 import ssl
 import urllib.parse
 import urllib.request
@@ -105,6 +106,26 @@ def _metar(v):
     return v.strip() if isinstance(v, str) and v.strip() else None
 
 
+_PROC = re.compile(r"^[A-Z]{3,6}\d[A-Z]$")
+_FIX = re.compile(r"^[A-Z]{5}$")
+
+
+def route_procedures(route) -> tuple:
+    """(sid, transizione, star) ricavati dalla stringa di rotta; None dove la rotta non li mostra.
+    Ignora i token "ICAO/RWY" (LIMC/35R). La SID e' il primo token se ha forma di procedura (PEP2Q),
+    la transizione il secondo se e' un fix di 5 lettere (PEPAG, non DCT); la STAR e' l'ultimo token
+    con forma di procedura (KELI3G)."""
+    toks = [x for x in str(route or "").upper().split() if "/" not in x]
+    sid = trans = star = None
+    if toks and _PROC.match(toks[0]):
+        sid = toks[0]
+        if len(toks) > 1 and _FIX.match(toks[1]) and toks[1] != "DCT":
+            trans = toks[1]
+    if len(toks) > 1 and _PROC.match(toks[-1]):
+        star = toks[-1]
+    return sid, trans, star
+
+
 def extract_plan(ofp: dict) -> dict:
     """Piano di volo da mostrare. Campi assenti restano vuoti (parsing difensivo: formato non verificato)."""
     g = _g(ofp, "general", default={}) or {}
@@ -114,13 +135,16 @@ def extract_plan(ofp: dict) -> dict:
         fixes = [fixes]
     wpts = [{"ident": f.get("ident"), "via": f.get("via_airway"), "alt": _num(f.get("altitude_feet"))}
             for f in fixes if isinstance(f, dict) and f.get("ident")]
+    route = g.get("route") or _g(ofp, "atc", "route")
+    r_sid, r_trans, r_star = route_procedures(route)
     return {
         "flight": flight,
         "aircraft": _g(ofp, "aircraft", "icaocode"),
-        "route": g.get("route") or _g(ofp, "atc", "route"),
-        "sid": g.get("sid_ident") or None,
-        "sid_trans": g.get("sid_trans") or None,  # nome campo da verificare su un OFP reale
-        "star": g.get("star_ident") or None,
+        "route": route,
+        # sid_ident/sid_trans/star_ident del JSON non sono affidabili (20/11/2026): prima la rotta, il JSON e' il ripiego
+        "sid": r_sid or g.get("sid_ident") or None,
+        "sid_trans": (r_trans if r_sid else g.get("sid_trans")) or None,
+        "star": r_star or g.get("star_ident") or None,
         "cruise_alt": _num(g.get("initial_altitude")),
         "distance_nm": _num(g.get("air_distance") or g.get("route_distance")),
         "ete": _hhmm(_g(ofp, "times", "est_time_enroute")),
