@@ -164,6 +164,14 @@ class Hub:
         return {"seq": conn.seq, "epoch": conn.epoch, "age": age, "spoke_ago": spoke_ago, "text": conn.snapshot_text,
                 "cmd": "cmd" in conn.caps}
 
+    def stream_state(self, user_id: int) -> Optional[tuple]:
+        """For the SSE stream: (epoch, seq, sections) of the live program of `user_id`, None when absent or silent
+        or with no snapshot yet. `sections` is the live dict (key -> (text or None, ver)): read it without awaiting."""
+        conn = self._agents.get(user_id)
+        if conn is None or self.monotonic() - conn.last_seen >= self.stale_after or conn.snapshot_text is None:
+            return None
+        return conn.epoch, conn.seq, conn.sections
+
     def resolve_result(self, conn: AgentConn, res: Optional[dict]) -> None:
         """A sanitised result of the program: accepted only for THIS connection's pending command (id equal),
         unknown, repeated or late ones are ignored."""

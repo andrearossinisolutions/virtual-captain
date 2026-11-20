@@ -14,6 +14,7 @@ from typing import Callable, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from starlette.datastructures import MutableHeaders
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from server import security
@@ -60,6 +61,32 @@ WEB_FILES = {"/app.js": ("app.js", "text/javascript; charset=utf-8"), "/app.css"
 ROBOTS_TXT = "User-agent: *\nDisallow: /\n"
 
 
+NO_STORE_PREFIXES = ("/api/auth/", "/api/device/", "/api/agent/", "/api/flight/")
+
+
+class SecurityHeadersMiddleware:
+    """Pure ASGI (no BaseHTTPMiddleware: it would wrap the body of the long SSE streams): adds the security headers to
+    every HTTP response at `http.response.start`, and Cache-Control: no-store on the API paths."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        no_store = scope.get("path", "").startswith(NO_STORE_PREFIXES)
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(raw=message.setdefault("headers", []))
+                for name, value in SECURITY_HEADERS.items():
+                    headers[name] = value
+                if no_store:
+                    headers["Cache-Control"] = "no-store"
+            await send(message)
+        await self.app(scope, receive, send_with_headers)
+
+
 def read_revision(path: Path | None = None) -> str:
     try:
         rev = (path or REVISION_FILE).read_text(encoding="utf-8").strip()
@@ -103,10 +130,20 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
 
         async def close_program(user_id: int) -> None:  # password change, reset, deletion: no 10 s wait
             await hub.close_user(user_id, wire.CLOSE_REVOKED)
-        accounts.on_revoke = close_program
+        from server.api_stream import StreamRegistry, build_stream_router
+        streams = StreamRegistry()
+        app.state.streams = streams
+
+        async def close_program_and_streams(user_id: int) -> None:
+            streams.close_user(user_id)   # the browser streams too: no waiting for the 60 s re-check
+            await close_program(user_id)
+        accounts.on_revoke = close_program_and_streams
+        accounts.on_logout = streams.close_session
         app.include_router(build_router(accounts))
         app.include_router(build_device_router(accounts, devices, hub))
         app.include_router(build_agent_router(accounts, devices, hub))
+        if config.stream:
+            app.include_router(build_stream_router(accounts, hub, streams))
 
     if mounted:  # Host must be the public host (or the local health check of deploy.sh)
         host = urlparse(config.public_base_url).hostname
@@ -122,14 +159,7 @@ def create_app(config: Optional[AppConfig] = None, *, db=None, mailer=None,
         return JSONResponse({"error": "server_error"}, status_code=500,
                             headers={**SECURITY_HEADERS, "Cache-Control": "no-store"})
 
-    @app.middleware("http")
-    async def security_headers(request: Request, call_next):
-        response = await call_next(request)
-        for name, value in SECURITY_HEADERS.items():
-            response.headers[name] = value
-        if request.url.path.startswith(("/api/auth/", "/api/device/", "/api/agent/", "/api/flight/")):
-            response.headers["Cache-Control"] = "no-store"
-        return response
+    app.add_middleware(SecurityHeadersMiddleware)
 
     def add_file(path: str, name: str, media_type: str, directory: Path = PUBLIC_DIR) -> None:
         async def serve() -> FileResponse:

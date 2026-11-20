@@ -62,6 +62,8 @@ class Accounts:
         self.user_limiter = MemoryRateLimiter()  # signed-in writes/hashes, RAM only
         # async callable(user_id) set by app.py: closes the live program of the account right away
         self.on_revoke: Optional[Callable[[int], object]] = None
+        # sync callable(session_id) set by app.py: closes the SSE streams opened with that session (logout)
+        self.on_logout: Optional[Callable[[int], object]] = None
 
     async def _notify_revoked(self, user_id: int) -> None:
         if self.on_revoke is not None:
@@ -312,6 +314,11 @@ class Accounts:
     def logout(self, sess: dict) -> None:
         with self.db.tx() as c:
             c.execute("DELETE FROM sessions WHERE id=?", (sess["sid"],))
+        if self.on_logout is not None:
+            try:
+                self.on_logout(sess["sid"])
+            except Exception:  # noqa: BLE001  (the 60 s session re-check closes the stream anyway)
+                log.warning("closing the streams after a logout failed")
 
     # ---- authenticated changes ----
     async def _confirm(self, sess: dict, password) -> None:
