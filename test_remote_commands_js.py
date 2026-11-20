@@ -329,11 +329,13 @@ await new Promise(r => setTimeout(r, 20)); await t.settle();
 const during = t.run('fval("v1")');
 const dirtyCleared = t.run('JSON.stringify(inpDirty)');
 release(); await t.settle(); await new Promise(r => setTimeout(r, 20)); await t.settle();
-out.r = {during, dirtyCleared, after: t.run('fval("v1")'), pend: t.run("JSON.stringify(rPend)")};
+const kept = t.run('fval("v1")');                          // response arrived, snapshot still without the change: kept (no jump back)
+t.run("rPend.v1.t = -100000; syncInputs(last)");           // expired: the snapshot wins
+out.r = {during, dirtyCleared, kept, after: t.run('fval("v1")'), pend: t.run("JSON.stringify(rPend)")};
 """)
     r = out["r"]
-    assert r["during"] == "777" and r["dirtyCleared"] == "{}" and r["pend"] == "{}"
-    assert r["after"] != "777"  # the PC's snapshot (without the change) is the truth once the command ends
+    assert r["during"] == "777" and r["dirtyCleared"] == "{}" and r["kept"] == "777" and r["pend"] == "{}"
+    assert r["after"] != "777"  # the PC's snapshot (without the change) is the truth once the value expires
 
 
 @needs_node
@@ -460,3 +462,170 @@ await t.run("rfetch()");
 out.r = {kept, banner: t.els.banner.__store.textContent, hidden: t.els.rdata.__store.hidden};
 """)
     assert out["r"] == {"kept": True, "banner": "Update the program on the PC to edit the briefing remotely", "hidden": True}
+
+
+@needs_node
+def test_rebuild_is_deferred_while_an_inline_field_is_edited_and_the_pure_functions(tmp_path):
+    out = run_js(tmp_path, """
+const R = {};
+R.can = [t.run("canRebuild(false,false,null,0)"), t.run("canRebuild(true,false,null,0)"), t.run("canRebuild(true,true,null,0)"),
+         t.run("canRebuild(true,false,1000,1000+RB_IDLE-1)"), t.run("canRebuild(true,false,1000,1000+RB_IDLE)"), t.run("canRebuild(true,false,null,99999)")];
+R.pend = [t.run('pendDone("27012","27012",false,0)'), t.run('pendDone("27012","27/012",false,0)'), t.run('pendDone("27012","27012",true,0)'),
+          t.run('pendDone("27012","",false,10000)'), t.run('pendDone("27012","",true,99999)')];
+// isEditing: campo inline attivo (data-f / data-c), valori non ancora inviati
+R.edit = [t.run("isEditing()")];
+t.run('document.activeElement = {dataset: {f: "atis_wind"}}'); R.edit.push(t.run("isEditing()"));
+t.run('document.activeElement = {dataset: {c: "f"}}'); R.edit.push(t.run("isEditing()"));
+t.run('document.activeElement = {dataset: {k: "origin"}}'); R.edit.push(t.run("isEditing()"));
+t.run('document.activeElement = null; inpDirty = {v1: "15"}'); R.edit.push(t.run("isEditing()"));
+t.run('inpDirty = {}'); R.edit.push(t.run("isEditing()"));
+out.r = R;
+""")
+    r = out["r"]
+    assert r["can"] == [True, False, True, False, True, False]  # idle time since the LAST activity, not since the first deferral
+    assert r["pend"] == [True, False, False, True, False]  # snapshot has the value / expired, never while the field is active
+    assert r["edit"] == [False, True, True, False, True, False]
+
+
+@needs_node
+def test_checklist_body_is_not_rebuilt_while_editing_and_rebuilt_after(tmp_path):
+    out = run_js(tmp_path, """
+const R = {};
+const cl = (txt, ph) => ({cl_phase: ph || "p1", cl_phases: [{id: "p1", name: "P1"}, {id: "p2", name: "P2"}],
+  checklist: {phase: {name: "P1"}, bad: 0, subphases: [{name: "", items: [{text: txt, status: "ok", type: "check", kind: "ok", detail: ""}]}]}});
+t.run("last = " + JSON.stringify(Object.assign({}, cl("A"), {fields: {}})));
+t.run("checklist(last)"); R.k1 = t.run("clBodyKey");
+t.run('document.activeElement = {dataset: {f: "atis_wind"}}');
+t.run("last = " + JSON.stringify(Object.assign({}, cl("B"), {fields: {}})));
+t.run("checklist(last)"); R.kEdit = t.run("clBodyKey") === R.k1; R.pending = t.run("rbSince") !== null;
+t.run("flushRebuild()"); R.kStill = t.run("clBodyKey") === R.k1;          // still editing: nothing
+t.run('document.activeElement = null; flushRebuild()');                  // blur: rebuild with the latest state
+R.kAfter = t.run("clBodyKey") !== R.k1; R.clear = t.run("rbSince") === null;
+// phase change while editing: rebuilds anyway
+t.run('document.activeElement = {dataset: {f: "atis_wind"}}');
+t.run("last = " + JSON.stringify(Object.assign({}, cl("B", "p2"), {fields: {}}))); const k2 = t.run("clBodyKey");
+t.run("checklist(last)"); R.phase = t.run("clBodyKey") !== k2;
+out.r = R;
+""")
+    r = out["r"]
+    assert r["kEdit"] and r["pending"] and r["kStill"] and r["kAfter"] and r["clear"] and r["phase"]
+
+
+@needs_node
+def test_rpend_survives_the_response_until_the_snapshot_has_the_value(tmp_path):
+    out = run_js(tmp_path, PRELUDE + """
+const R = {};
+t.handlers["POST /api/flight/cmd/fields"] = () => [200, {ok: true}];
+t.handlers["GET /api/flight/state"] = () => [200, t.state(1)];
+t.run("last = {fields: {v1: '100'}}");
+await t.run('api("/api/fields", {v1: "150"})');
+t.run("inpDirty = {v1: '150'}; inpSend()");
+await t.settle();
+R.afterResp = t.run("fval('v1')");                    // snapshot still old: the sent value is kept (no jump back)
+t.run("last = {fields: {v1: '150'}}; syncInputs(last)"); R.afterSnap = [t.run("'v1' in rPend"), t.run("fval('v1')")];
+out.r = R;
+""")
+    r = out["r"]
+    assert r["afterResp"] == "150" and r["afterSnap"] == [False, "150"]
+
+
+@needs_node
+def test_rbact_postpones_the_forced_rebuild_while_the_user_keeps_typing(tmp_path):
+    out = run_js(tmp_path, """
+const R = {};
+const cl = (txt, bad) => ({cl_phase: "p1", cl_phases: [{id: "p1", name: "P1"}], fields: {},
+  checklist: {phase: {name: "P1"}, bad: bad || 0, subphases: [{name: "", items: [{text: txt, status: "ok", type: "check", kind: "ok", detail: ""}]}]}});
+t.run("last = " + JSON.stringify(cl("A"))); t.run("checklist(last)"); R.k1 = t.run("clBodyKey");
+t.run('document.activeElement = {dataset: {f: "atis_wind"}}');
+t.run("last = " + JSON.stringify(cl("B", 1))); t.run("checklist(last)");
+R.header = t.run("$('clsum').textContent");                 // body deferred: header stays coherent with the old body
+t.run("rbSince = Date.now() - 60000; rbAct = Date.now() - 1000");   // deferred long ago but typed 1 s ago
+t.run("checklist(last)"); R.keptWhileTyping = t.run("clBodyKey") === R.k1;
+t.run("rbAct = Date.now() - RB_IDLE - 1");                   // idle long enough
+t.run("checklist(last)"); R.rebuilt = t.run("clBodyKey") !== R.k1; R.header2 = t.run("$('clsum').textContent");
+out.r = R;
+""")
+    r = out["r"]
+    assert r["keptWhileTyping"] and r["rebuilt"]
+    assert r["header"] == "0 out of spec" and r["header2"] == "1 out of spec"
+
+
+@needs_node
+def test_rpend_prune_ttl_failure_and_normalised_value(tmp_path):
+    out = run_js(tmp_path, PRELUDE + """
+const R = {};
+t.run("last = {fields: {v1: '100'}}; rPend.v1 = {v: '150', t: Date.now()}; rPrune()"); R.fresh = t.run("'v1' in rPend");     // snapshot old, not expired: kept
+t.run("rPend.v1.t = Date.now() - PEND_TTL"); t.run("rPrune()"); R.ttl = t.run("'v1' in rPend");                              // expired: dropped
+t.run("rPend.v1 = {v: '150', t: Date.now()}; last.fields.v1 = '150'; document.activeElement = {dataset: {f: 'v1'}}; rPrune()"); R.active = t.run("'v1' in rPend");
+t.run("document.activeElement = null; rPrune()"); R.confirmed = t.run("'v1' in rPend");
+// the PC refuses the command: the value is released at once
+t.handlers["POST /api/flight/cmd/fields"] = () => [409, {error: "busy"}];
+t.run("last = {fields: {v1: '100'}}; inpDirty = {v1: '999'}; inpSend()"); R.during = t.run("fval('v1')");
+await t.settle(); R.afterFail = t.run("fval('v1')");
+// the PC normalises: the shown value follows the answer
+t.handlers["POST /api/flight/cmd/fields"] = () => [200, {ok: true}];
+t.handlers["GET /api/flight/state"] = () => [200, t.state(5, {fields: {v1: "150"}})];
+t.run("inpDirty = {v1: '15'}; inpSend()"); await t.settle(); R.normalised = t.run("fval('v1')");
+out.r = R;
+""")
+    r = out["r"]
+    assert [r["fresh"], r["ttl"], r["active"], r["confirmed"]] == [True, False, True, False]
+    assert r["during"] == "999" and r["afterFail"] == "100"
+    assert r["normalised"] == "150", r
+
+
+@needs_node
+def test_now_text_names_every_failed_light_and_keeps_semicolons(tmp_path):
+    out = run_js(tmp_path, """
+out.r = [t.run('nowText("Nav & logo: expected NAV / LOGO, actual OFF")'),
+         t.run('nowText("Landing L: expected OFF / RETRACT, actual ON; Beacon: expected OFF, actual ON; Nav & logo: expected NAV / LOGO, actual OFF")'),
+         t.run('nowText("expected 5, actual 3")'), t.run('nowText("")'), t.run('nowText("boh")'),
+         t.run('nowText("Radio: expected 118.0, actual 121.5;COM2; Beacon: expected OFF, actual ON")'),
+         t.run('nowText("Beacon: expected OFF, actual ON; stray note")')];
+""")
+    assert out["r"] == ["Nav & logo OFF", "Landing L ON \u00b7 Beacon ON \u00b7 Nav & logo OFF", "3", "", "",
+                        "Radio 121.5;COM2 \u00b7 Beacon ON", "Beacon ON; stray note"]
+
+
+WIND_SETUP = """
+t.run('var __ae = null; document.activeElement = null; var __i = {inputMode: "numeric", noEnd: false, isConnected: true, value: "270", events: [], failFocus: false,'
+      + 'blur() { this.events.push("blur:" + this.noEnd); if (document.activeElement === this) document.activeElement = null; },'
+      + 'focus() { this.events.push("focus"); if (!this.failFocus) document.activeElement = this; },'
+      + 'onblur() { if (!this.noEnd) this.events.push("end"); }, setSelectionRange() {}};'
+      + 'var __c = {dataset: {f: "atis_wind"}, querySelector: () => __i}; document.activeElement = __i;');
+"""
+
+
+@needs_node
+def test_wind_keyboard_toggle_refocuses_after_the_event_without_closing(tmp_path):
+    out = run_js(tmp_path, WIND_SETUP + """
+const R = {};
+R.mode0 = [t.run("!!windTxt.atis_wind"), t.run("__i.inputMode")];
+t.run("windKb(__c)");
+R.sync1 = [t.run("windTxt.atis_wind"), t.run("__i.inputMode"), t.run("__i.events.join()")];   // nothing happens synchronously inside the event
+await t.settle();
+R.mode1 = [t.run("__i.events.join()"), t.run("document.activeElement === __i"), t.run("__i.noEnd")];
+t.run("__i.events = []; windKb(__c)"); await t.settle();
+R.mode2 = [t.run("windTxt.atis_wind"), t.run("__i.inputMode"), t.run("document.activeElement === __i")];
+out.r = R;
+""")
+    r = out["r"]
+    assert r["mode0"] == [False, "numeric"]
+    assert r["sync1"] == [True, "text", ""]
+    assert r["mode1"] == ["blur:true,focus", True, False]   # the blur happens with noEnd set: the field is not closed
+    assert r["mode2"] == [False, "numeric", True]
+
+
+@needs_node
+def test_wind_keyboard_toggle_closes_the_field_cleanly_when_focus_is_lost(tmp_path):
+    out = run_js(tmp_path, WIND_SETUP + """
+t.run("__i.failFocus = true; windKb(__c)"); await t.settle();
+out.r = [t.run("__i.events.join()"), t.run("__i.noEnd")];
+""")
+    # blur (guarded), two focus attempts, then the clean close; never an orphan input
+    assert out["r"] == ["blur:true,focus,focus,end", False]
+
+
+def test_wind_field_is_numeric_by_default_with_a_keyboard_toggle():
+    assert 'i.inputMode=isA&&sf==="wind"?(windTxt[k]?"text":"numeric")' in JS
+    assert 'w.className="plus un kb"' in JS and "function windKb" in JS

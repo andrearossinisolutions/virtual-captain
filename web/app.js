@@ -100,12 +100,15 @@ function craftNode(it){if(craftEl)return craftEl;
   b.appendChild(rb);el.appendChild(b);craftEl=el;return el}
 function syncCraft(c,force){if(c&&!sqkEdit){sqkVal=c.t||"";sqkShow()}if(!craftEl||!c||(clrTimer&&!force))return;
   craftEl.querySelectorAll("[data-c]").forEach(i=>{const v=c[i.dataset.c]||"";if(i.value!==v&&(force||document.activeElement!==i))i.value=v})}
-let inpDirty={},inpTimer=null;const rPend={};  // rPend: valori inviati al programma e non ancora confermati dallo snapshot (solo pagina remota)
+let inpDirty={},inpTimer=null;const rPend={};  // rPend[k]={v,t}: valore inviato al programma e non ancora confermato dallo snapshot, con l'istante dell'invio (solo pagina remota)
 function inpSend(){clearTimeout(inpTimer);inpTimer=null;const o=inpDirty;inpDirty={};
-  if(REMOTE){const ks=Object.keys(o);if(!ks.length)return;Object.assign(rPend,o);  // remoto: la pagina non assume l'esito, lo snapshot e' la verita'
-    api("/api/fields",o).catch(()=>{}).then(()=>{ks.forEach(k=>{if(rPend[k]===o[k])delete rPend[k]});if(last)syncInputs(last)});return}
+  if(REMOTE){const ks=Object.keys(o);if(!ks.length)return;const t0=Date.now();ks.forEach(k=>rPend[k]={v:o[k],t:t0});  // remoto: la pagina non assume l'esito, lo snapshot e' la verita'
+    const sq=rseq,ep=repoch;api("/api/fields",o).then(s=>{if(s&&s.fields&&(rseq!==sq||repoch!==ep))ks.forEach(k=>{if(rPend[k]&&rPend[k].v===o[k]&&(s.fields[k]||"")!==o[k])rPend[k].v=s.fields[k]||""})},  // snapshot nuovo (seq avanzata) con valore diverso (normalizzato dal PC); risposta scaduta/invariata: non si assume nulla: si mostra quello, non il valore inviato
+      ()=>ks.forEach(k=>{if(rPend[k]&&rPend[k].v===o[k])delete rPend[k]})  // comando fallito: il valore inviato non vale piu', si torna a quello dello snapshot
+    ).then(()=>{if(last)syncInputs(last)});return}  // altrimenti rPend si svuota in rPrune (snapshot aggiornato o scaduto), non alla risposta: niente salto indietro del valore
   if(last)Object.assign(last.fields,o);if(Object.keys(o).length)api("/api/fields",o).then(s=>{lastRev=s.rev}).catch(()=>{})}
-function fval(k){return k in inpDirty?inpDirty[k]:k in rPend?rPend[k]:((last&&last.fields[k])||"")}
+function rPrune(){const a=document.activeElement,ak=a&&a.dataset&&a.dataset.f;for(const k of Object.keys(rPend))if(pendDone(rPend[k].v,last&&last.fields[k]||"",k in inpDirty||ak===k,Date.now()-rPend[k].t))delete rPend[k]}
+function fval(k){return k in inpDirty?inpDirty[k]:k in rPend?rPend[k].v:((last&&last.fields[k])||"")}
 function fShow(el){if(el.querySelector("input"))return;const v=fval(el.dataset.f);el.textContent="";el.className="fld"+(v?" set":" nv")+(el.dataset.w?" w":"")+(/^d?atis_rwy$/.test(el.dataset.f)&&last&&last.rwy_bad&&last.rwy_bad[el.dataset.f.replace("_rwy","")]?" rb":"");
   el.textContent=el.dataset.pf?el.dataset.pf+" "+(v||"---"):v||(el.dataset.r&&!el.dataset.pre?el.dataset.r:(el.dataset.pre?el.dataset.pre+" ":"")+"---")}
 // ATIS-PURE-BEGIN (regole pure: provate anche con node nei test)
@@ -127,8 +130,8 @@ function qnhInMode(k,v){return v.includes(".")||qu[k]==="In"}  // in digitazione
 function qnhFull(v){return /^\d{4}$/.test(v)||/^\d{2}\.\d{2}$/.test(v)}  // solo valori completi si convertono
 // ATIS-PURE-END
 function fStart(el,sel){if(RO()||el.querySelector("input"))return;const k=el.dataset.f,i=document.createElement("input");i.value=fval(k);i.dataset.f=k;
-  const sf=k.replace(/^d?atis_/,""),isA=sf!==k,txt=["runway","flap","taxiway"].includes(k)||isA&&["letter","rwy","wind"].includes(sf);i.inputMode=txt?"text":k==="zfwcg"||isA&&sf==="qnh"?"decimal":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
-  let done=false;const end=()=>{if(done)return;done=true;if(isA&&sf==="tl"&&/^\d{1,2}$/.test(i.value)){i.value=i.value.padStart(3,"0");inpDirty[k]=i.value}if(isA&&sf==="rwy"&&/\/$/.test(i.value)){i.value=i.value.replace(/\/+$/,"");inpDirty[k]=i.value}inpSend();i.remove();fShow(el)};
+  const sf=k.replace(/^d?atis_/,""),isA=sf!==k,txt=["runway","flap","taxiway"].includes(k)||isA&&["letter","rwy","wind"].includes(sf);i.inputMode=isA&&sf==="wind"?(windTxt[k]?"text":"numeric"):txt?"text":k==="zfwcg"||isA&&sf==="qnh"?"decimal":"numeric";i.setAttribute("autocapitalize",txt?"characters":"off");i.setAttribute("autocomplete","off");i.setAttribute("autocorrect","off");i.spellcheck=false;
+  let done=false;const end=()=>{if(done)return;done=true;if(isA&&sf==="tl"&&/^\d{1,2}$/.test(i.value)){i.value=i.value.padStart(3,"0");inpDirty[k]=i.value}if(isA&&sf==="rwy"&&/\/$/.test(i.value)){i.value=i.value.replace(/\/+$/,"");inpDirty[k]=i.value}inpSend();i.remove();fShow(el);schedFlush()};
   const nextF=()=>{const tc=el.closest(".tc");if(tc){const c=tc.nextElementSibling;return c&&c.querySelector(".fld")}let n=el.nextElementSibling;while(n&&!n.dataset.f)n=n.nextElementSibling;return n};  // tabella ATIS: il campo successivo e' nella cella accanto
   const adv=()=>{const n=nextF();end();if(n)fStart(n)};
   i.oninput=ev=>{if(k==="runway")i.value=i.value.toUpperCase();if(isA){const nv=atisClean(sf,i.value,/^(insertText|insertCompositionText)$/.test(ev&&ev.inputType||""),sf==="qnh"&&qnhInMode(k,i.value));if(nv!==i.value){i.value=nv;if(sf==="wind"){const n=nv.length;try{i.setSelectionRange(n,n)}catch(e){}}}}  /* riassegna (e cursore in fondo dopo il "/" rimesso) solo se il valore pulito differisce: niente salti a meta' stringa ne' interferenza con l'IME */if(k==="taxiway")i.value=i.value.toUpperCase().replace(/[^A-Z0-9]/g,"").slice(0,4);
@@ -136,7 +139,7 @@ function fStart(el,sel){if(RO()||el.querySelector("input"))return;const k=el.dat
     inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400);
     const full={v1:/^\d{3}$/,vr:/^\d{3}$/,v2:/^\d{3}$/,runway:/^\d{2}[LRC]$/,ta:/^\d{4}$/,thr_red_agl:/^\d{4}$/,accel_agl:/^\d{4}$/,flap:/^[1-3]$/}[k]||(isA?ATIS_FULL[sf]:null);  // ATIS: regole in ATIS_FULL (lettera, pista, vento, QNH); l'ultimo campo chiude (blur)
     if(full&&full.test(i.value))adv()};  // valore completo: passa al campo successivo, o chiude la modifica se è l'ultimo
-  i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();adv()}};i.onblur=end;
+  i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();adv()}};i.onblur=()=>{if(!i.noEnd)end()};
   el.textContent="";i.placeholder=el.dataset.l;el.append(i);i.focus({preventScroll:true});
   if(sel){try{i.setSelectionRange(sel[0],sel[1])}catch(e){}}else if(isA&&(sf==="rwy"||sf==="wind")){const n=i.value.length;i.setSelectionRange(n,n)}else i.select()}  // piste e vento: cursore in fondo (per aggiungere "/35R" o "G25")
 // risposta lunga (piu' di 40 caratteri o con "Eg."): sotto il titolo a tutta larghezza invece che nella colonna destra
@@ -147,6 +150,17 @@ const TL={letter:"INFO",rwy:"RWY",wind:"WIND",qnh:"QNH",tl:"TL"};
 function addRwy(c){let i=c.querySelector("input");if(!i){fStart(c);i=c.querySelector("input")}if(!i)return;const k=c.dataset.f,v=i.value;
   if(v&&!v.endsWith("/")&&v.length+4<=12){i.value=v+"/";inpDirty[k]=i.value;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400)}
   i.focus({preventScroll:true});const n=i.value.length;try{i.setSelectionRange(n,n)}catch(e){}}
+const windTxt={};  // vento ATIS: tastiera numerica di default, testuale (VRB/G/KT) col tasto accanto al campo
+// NON verificabile senza tablet (iOS Safari / Android Chrome): se la tastiera si riapre col nuovo inputmode. Si cambia inputMode e si rifocalizza DOPO l'evento (setTimeout 0, mai blur sincrono dentro pointerdown);
+// se il focus non torna sull'input il campo si chiude in modo pulito (end via onblur), mai un input orfano. Checklist di prova nel report di Efesto.
+let windSeq=0;
+function windKb(c){const k=c.dataset.f,i=c.querySelector("input");windTxt[k]=!windTxt[k];windBtns();
+  if(!i)return;i.inputMode=windTxt[k]?"text":"numeric";const my=++windSeq,v=i.value;
+  setTimeout(()=>{if(my!==windSeq||!i.isConnected)return;
+    const back=()=>{try{i.focus({preventScroll:true});const n=i.value.length;i.setSelectionRange(n,n)}catch(e){}return document.activeElement===i};
+    i.noEnd=true;try{i.blur()}catch(e){}let ok=back();if(!ok)ok=back();i.noEnd=false;  // blur+focus: iOS rilegge inputmode solo cosi'; noEnd evita la chiusura del campo
+    if(!ok&&i.isConnected&&i.onblur)i.onblur()},0)}  // focus fallito (anche al secondo tentativo): chiude il campo, il valore si invia come al blur normale
+function windBtns(){document.querySelectorAll("#clbody .kb").forEach(b=>{b.textContent=windTxt[b.dataset.f]?"123":"ABC"})}
 function toggleQnh(c){const k=c.dataset.f,i=c.querySelector("input"),v=(i?i.value:fval(k)).trim(),to=qUnit(k,v)==="In"?"hPa":"In";qu[k]=to;
   if(qnhFull(v)){const nv=qnhConvert(v);inpDirty[k]=nv;clearTimeout(inpTimer);inpTimer=setTimeout(inpSend,400);if(i)i.value=nv;else fShow(c)}
   qnhUnits();if(i){i.focus({preventScroll:true});const n=i.value.length;try{i.setSelectionRange(n,n)}catch(e){}}}
@@ -160,6 +174,8 @@ function tableNode(it){const el=document.createElement("div");el.className="a lg
       b.onpointerdown=ev=>{ev.preventDefault();addRwy(c)};b.onclick=ev=>ev.preventDefault();tr.appendChild(b)}  // pointerdown: il campo non perde il focus (niente chiusura e invio di dati sporchi)
     if(/_qnh$/.test(f.k)){const u=document.createElement("button");u.type="button";u.className="plus un";u.dataset.f=f.k;u.title="hPa / inHg";u.setAttribute("aria-label","QNH unit");u.textContent=qUnit(f.k,fval(f.k).trim());
       u.onpointerdown=ev=>{ev.preventDefault();toggleQnh(c)};u.onclick=ev=>ev.preventDefault();tr.appendChild(u)}  // "hPa"/"In": converte il valore e cambia unita' senza chiudere il campo
+    if(/_wind$/.test(f.k)){const w=document.createElement("button");w.type="button";w.className="plus un kb";w.dataset.f=f.k;w.title="Numeric / text keyboard";w.setAttribute("aria-label","Wind keyboard");w.textContent=windTxt[f.k]?"123":"ABC";
+      w.onpointerdown=ev=>{ev.preventDefault();windKb(c)};w.onclick=ev=>ev.preventDefault();tr.appendChild(w)}  // come +/hPa: pointerdown senza togliere il focus
     d.appendChild(lb);d.appendChild(tr);g.appendChild(d)}
   el.appendChild(g);return el}
 function inputsNode(it){const el=document.createElement("div");el.className="a inpr";const one=it.inputs.length===1;
@@ -184,9 +200,24 @@ function wxFill(s){document.querySelectorAll("#clbody .wh").forEach(e=>{const w=
   if(!w){e.textContent="METAR not available";return}
   const a=document.createElement("div");a.textContent=w.icao+" METAR"+(w.line?": "+w.line:"");e.appendChild(a);
   if(w.raw){const r=document.createElement("div");r.className="wr";r.textContent=w.raw;e.appendChild(r)}})}
-function syncInputs(s){wxFill(s);qnhUnits();document.querySelectorAll("#clbody .fld").forEach(fShow);document.querySelectorAll("#clbody .ah").forEach(e=>{const p=e.dataset.p,parts=atisLine(e.dataset.h.split(","),p),t=parts.length,wn=(s.atis_warn||{})[p]&&e.dataset.h.includes("qnh")?s.atis_warn[p]:"";e.textContent="";e.hidden=!t;
+function syncInputs(s){rPrune();wxFill(s);qnhUnits();document.querySelectorAll("#clbody .fld").forEach(fShow);document.querySelectorAll("#clbody .ah").forEach(e=>{const p=e.dataset.p,parts=atisLine(e.dataset.h.split(","),p),t=parts.length,wn=(s.atis_warn||{})[p]&&e.dataset.h.includes("qnh")?s.atis_warn[p]:"";e.textContent="";e.hidden=!t;
     if(t){e.append("ATIS: ");parts.forEach((x,n)=>{if(n)e.append(" \u00b7 ");const sp=document.createElement("span");sp.textContent=x;if(x.startsWith("RWY ")&&(s.rwy_bad||{})[p])sp.className="rb";e.appendChild(sp)})}  // pista diversa dal piano: RWY in rosso
     if(t&&wn){const a=document.createElement("span");a.className="aw";a.textContent="\u26a0 QNH differs: "+wn;e.appendChild(a)}})}  // ATIS/METAR oltre 3 hPa: avviso giallo, la voce non diventa rossa
+// REBUILD-PURE-BEGIN
+const RB_IDLE=18000,PEND_TTL=10000;  // RB_IDLE: ms di inattivita' (nessuna digitazione/focus) dopo cui il corpo stantio si ricostruisce comunque
+// ricostruire il corpo della checklist? Mai mentre un campo inline e' in modifica, salvo cambio di fase o inattivita' (ultimo input/focus/tasto `lastAct`) da almeno RB_IDLE ms
+function canRebuild(editing,phaseChanged,lastAct,now){return !editing||!!phaseChanged||(lastAct!=null&&now-lastAct>=RB_IDLE)}
+// valore inviato (rPend) da dimenticare? Solo se il campo non e' attivo/sporco e lo snapshot lo contiene, oppure e' scaduto
+function pendDone(sent,snap,active,age){return !active&&(snap===sent||age>=PEND_TTL)}
+// "NOW:" di una voce con mismatch: per ogni condizione fallita "nome valore" (nome dal detail "Nome: expected X, actual Y"); senza nome solo il valore; separate da " \u00b7 "
+function nowText(detail){let any=false;const out=String(detail||"").split(/;\s*(?=[^;]*expected )/).map(p=>{p=p.trim();const m=/^(?:(.*?):\s*)?expected .*?actual (.+)$/.exec(p);if(m){any=true;return(m[1]?m[1]+" ":"")+m[2].trim()}return p}).filter(Boolean);return any?out.join(" \u00b7 "):""}  // un ';' dentro un valore non spezza la condizione; frammenti non riconosciuti mostrati interi; nessuna condizione riconosciuta: "" (la pagina mostra il detail)
+// REBUILD-PURE-END
+let bodyPhase=null,rbSince=null,rbAct=null,rbQ=false;  // rbAct: ultima attivita' dell'utente sui campi; rbSince: primo rinvio del rebuild
+["input","keydown","focusin","pointerdown"].forEach(e=>document.addEventListener(e,()=>{rbAct=Date.now()},true));
+function isEditing(){const a=document.activeElement;return !!(a&&a.dataset&&(a.dataset.f||a.dataset.c))||Object.keys(inpDirty).length>0||!!clrTimer}
+function flushRebuild(){if(rbSince!==null&&last)checklist(last)}
+function schedFlush(){if(rbQ)return;rbQ=true;setTimeout(()=>{rbQ=false;flushRebuild()},0)}  // un solo flush per blur+chiusura del campo
+document.addEventListener("focusout",schedFlush);
 function clGo(body){api("/api/checklist-phase",body).then(apply).catch(()=>{})}
 function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!c)return;
   const idx=ph.findIndex(p=>p.id===cur),strip=$("clstrip"),key=ph.length+"|"+cur+"|"+RO();
@@ -195,9 +226,12 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(p.id===cur)setTimeout(()=>b.scrollIntoView({inline:"center",block:"nearest"}),0)}}
   $("clprev").onclick=()=>clGo({step:-1});$("clnext").onclick=()=>clGo({step:1});
   $("clprev").disabled=RO()||idx<=0;$("clnext").disabled=RO()||idx>=ph.length-1;
-  $("clname").textContent=c.phase.name;const sm=$("clsum");sm.textContent=c.bad+" out of spec";sm.className="clsum"+(c.bad?" bad":"");
+  $("clname").textContent=c.phase.name;
   const body=$("clbody"),bk=JSON.stringify([cur,c.phase.name,c.bad,c.subphases.map(sp=>[sp.name,sp.items.map(i=>[i.text,i.status,i.kind,i.detail,i.response,i.type,i.live,i.raw,i.show,i.latched,i.was_ok,i.expected,i.inputs,i.layout,i.atis_hint,i.datis_hint,i.wx_hint])]),showLive,s.test_links,RO()]);
-  if(bk!==clBodyKey){clBodyKey=bk;const y=window.scrollY,x=window.scrollX;
+  const dirtyBody=bk!==clBodyKey,doRb=dirtyBody&&canRebuild(isEditing(),bodyPhase!==null&&bodyPhase!==cur,Math.max(rbAct||0,rbSince||0)||null,Date.now());
+  if(doRb||!dirtyBody){const sm=$("clsum");sm.textContent=c.bad+" out of spec";sm.className="clsum"+(c.bad?" bad":"")}  // header coerente col corpo: con il corpo rimandato resta il conteggio vecchio
+  if(!dirtyBody)rbSince=null;else if(!doRb&&rbSince===null)rbSince=Date.now();  // campo inline in modifica: il corpo non si ricostruisce (rimandato, ritentato a ogni render, al blur e dopo RB_IDLE ms di inattivita')
+  if(doRb){clBodyKey=bk;bodyPhase=cur;rbSince=null;const y=window.scrollY,x=window.scrollX;
   const ae=document.activeElement,keep=craftEl&&ae&&craftEl.contains(ae)?[ae.dataset.c,ae.selectionStart,ae.selectionEnd]:null,keepF=ae&&ae.dataset&&ae.dataset.f?[ae.dataset.f,ae.selectionStart,ae.selectionEnd]:null;body.textContent="";
   const mk=(t,cls,txt)=>{const e=document.createElement(t);if(cls)e.className=cls;if(txt!==undefined)e.textContent=txt;return e};
   for(const sp of c.subphases){if(sp.name)body.appendChild(mk("h3","",sp.name));
@@ -216,8 +250,8 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if((it.show||it.kind==="wait")&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","NOW: "+it.live.map(l=>l[1]).join(", ")));
       if(it.kind==="wait")tx.appendChild(mk("div","now nv","Waiting: "+(it.gate||it.detail||"")));
       if(it.was_ok&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","was OK \u00b7 NOW: "+it.live.map(l=>l[1]).join(", ")));
-      if(it.kind==="mismatch"){const mm=[...it.detail.matchAll(/actual ([^;,]+)/g)].map(m=>m[1].trim());
-        tx.appendChild(mm.length?mk("div","now","NOW: "+mm.join(", ")):mk("div","d",it.detail))}
+      if(it.kind==="mismatch"){
+        const nt=nowText(it.detail);tx.appendChild(nt?mk("div","now","NOW: "+nt):mk("div","d",it.detail))}
       r.appendChild(tx);body.appendChild(r)}}
   if(keep){const i=craftEl.querySelector('[data-c="'+keep[0]+'"]');if(i){i.focus({preventScroll:true});try{i.setSelectionRange(keep[1],keep[2])}catch(e){}}}
   if(keepF){const c=body.querySelector('.fld[data-f="'+keepF[0]+'"]');if(c)fStart(c,[keepF[1],keepF[2]])}

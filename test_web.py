@@ -561,7 +561,7 @@ def test_inputs_markup():
     assert "adv()" in web.PAGE and r"runway:/^\d{2}[LRC]$/" in web.PAGE and r"ta:/^\d{4}$/" in web.PAGE and r"flap:/^[1-3]$/" in web.PAGE  # valore completo: avanza o chiude
     p = web.PAGE
     for m in ("function inputsNode", "function syncInputs", "function inpSend", "function fStart", "function fShow", "dataset.f", "/api/fields", "reset:ks",
-              "setTimeout(inpSend,400)", ".a.inpr .fld", "i.onblur=end", 'e.key==="Enter"', "i.remove();fShow(el)", 'b.title="Reset to plan"',
+              "setTimeout(inpSend,400)", ".a.inpr .fld", "i.onblur=()=>{if(!i.noEnd)end()}", 'e.key==="Enter"', "i.remove();fShow(el)", 'b.title="Reset to plan"',
               'placeholder="LIMC/17R"', "el.dataset.r", '"---"'):
         assert m in p, m
     # il campo e' il valore atteso a destra (nessun chip a sinistra, nessun duplicato)
