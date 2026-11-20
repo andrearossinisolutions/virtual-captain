@@ -1065,8 +1065,11 @@ def test_cabin_fuel_links():
 
 def test_gsx_links():
     cl = C.load()
-    fc, bd = "cockpit-preparation.start-fueling-catering", "cockpit-preparation.start-boarding-passengers"
-    assert cl.links[fc]["check"] == {"gsx": ["gsx_refuel", "gsx_cater"]} and cl.links[bd]["check"] == {"gsx": ["gsx_board"]}
+    fc, ct, bd = "cockpit-preparation.start-fueling", "cockpit-preparation.start-catering", "cockpit-preparation.start-boarding-passengers"
+    assert cl.links[fc]["check"] == {"gsx": ["gsx_refuel"]} and cl.links[ct]["check"] == {"gsx": ["gsx_cater"]} and cl.links[bd]["check"] == {"gsx": ["gsx_board"]}
+    assert not any("fueling-catering" in i["id"] for p in cl.phases for sp in p["subphases"] for i in sp["items"])
+    first = [i["id"] for i in cl.phase("cockpit-preparation")["subphases"][0]["items"]]
+    assert first == [fc, ct]  # prima voce della fase, poi i controlli successivi
     cr, cp = "cockpit-preparation.check-refueling-completed", "cockpit-preparation.start-boarding-passengers"
     assert cl.links[cr]["check"] == {"gsx": ["gsx_refuel"], "set": "done"} and cr not in cl.excluded
     ids = [i["id"] for p in cl.phases for sp in p["subphases"] for i in sp["items"]]
@@ -1079,16 +1082,20 @@ def test_gsx_links():
             assert False, chk
         except ValueError:
             pass
-    assert C.check_keys(cl.links[fc]["check"]) == ["gsx_refuel", "gsx_cater"]
+    assert C.check_keys(cl.links[fc]["check"]) == ["gsx_refuel"]
     ph = [p["id"] for p in cl.phases if any(i["id"] == fc for sp in p["subphases"] for i in sp["items"])][0]
     labels = mon.clean_labels({"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 4})
     rows = {i["id"]: i for s in cl.evaluate_phase(ph, labels, raw={"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 4})["subphases"] for i in s["items"]}
-    assert rows[fc]["status"] == "ok" and rows[fc]["raw"] == [["FSDT_GSX_REFUELING_STATE", "6"], ["FSDT_GSX_CATERING_STATE", "5"]]
+    assert rows[fc]["status"] == "ok" and rows[fc]["raw"] == [["FSDT_GSX_REFUELING_STATE", "6"]]
+    assert rows[ct]["status"] == "ok" and rows[ct]["raw"] == [["FSDT_GSX_CATERING_STATE", "5"]]
+    # servizi indipendenti: refuel ancora REQUESTED non blocca il catering gia' partito (e viceversa)
+    mix = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": 4, "gsx_cater": 5}))["subphases"] for i in s["items"]}
+    assert mix[fc]["status"] == "bad" and mix[ct]["status"] == "ok"
     assert rows[bd]["status"] == "bad" and rows[bd]["type"] == "announce"
     # grezzo sempre accanto allo stato (live_raw, anche senza --test-links) e riga NOW sempre mostrata
     lv = {i["id"]: i for s in cl.evaluate_phase(ph, labels, live_raw={"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 1})["subphases"] for i in s["items"]}
     assert "raw" not in lv[bd] and lv[bd]["show"] is True and lv[bd]["live"] == [["GSX", "Boarding AVAIL"]]
-    assert lv[fc]["live"] == [["GSX", "Refuel COMPLETED \u00b7 Catering IN PROGRESS"]]
+    assert lv[fc]["live"] == [["GSX", "Refuel COMPLETED"]] and lv[ct]["live"] == [["GSX", "Catering IN PROGRESS"]]
     nr = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({}))["subphases"] for i in s["items"]}
     assert nr[bd]["live"] == [["GSX", "Boarding n/d"]]
     muto = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({}))["subphases"] for i in s["items"]}

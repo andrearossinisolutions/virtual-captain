@@ -221,8 +221,14 @@
      "name": "",
      "items": [
       {
-       "id": "cockpit-preparation.start-fueling-catering",
-       "text": "Start Fueling & Catering",
+       "id": "cockpit-preparation.start-fueling",
+       "text": "Start Fueling",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      },
+      {
+       "id": "cockpit-preparation.start-catering",
+       "text": "Start Catering",
        "response": "ANNOUNCE",
        "type": "announce"
       }

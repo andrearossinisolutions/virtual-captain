@@ -1366,10 +1366,17 @@
   },
   "verified": true
  },
- "cockpit-preparation.start-fueling-catering": {
+ "cockpit-preparation.start-fueling": {
   "check": {
    "gsx": [
-    "gsx_refuel",
+    "gsx_refuel"
+   ]
+  },
+  "verified": true
+ },
+ "cockpit-preparation.start-catering": {
+  "check": {
+   "gsx": [
     "gsx_cater"
    ]
   },
