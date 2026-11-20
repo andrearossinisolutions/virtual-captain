@@ -335,6 +335,49 @@ Con il programma sul PC avviato (`python main.py`, di default collega al server)
 - Dopo `invalid_grant`, 4003 o 3 rifiuti 401 di fila su token appena rinnovati il programma NON chiede da solo un nuovo codice: resta in "relink_needed" e dice di riavviare o usare `--link`. Un nuovo codice automatico e' da valutare in un passo successivo.
 - Sul PC Windows i token stanno in `%LOCALAPPDATA%\VirtualCaptain\` (non roaming).
 
+## Stream SSE (U4, C6)
+
+Il browser riceve lo stato del volo da `GET /api/flight/stream` (Server-Sent Events). Nessun cambio a `deploy.sh` ne' al workflow. Senza la configurazione Apache sotto lo stream puo' arrivare a blocchi: il client allora ripiega da solo sul polling (nessun evento entro 5 s dall'apertura, oppure 3 errori), e riprova lo stream ogni 2 minuti. Il sito funziona comunque.
+
+### 1. Apache (sudo)
+
+Confronta `server/deploy/apache-ssl.conf.example` con il vhost vivo e aggiungi il blocco "SSE stream" (`<Location /api/flight/stream>` + `ProxyPass` dedicata con `flushpackets=on timeout=90 disablereuse=on`) **prima** del `ProxyPass /` generico (vale la prima corrispondenza).
+```
+$ sudo cp /etc/apache2/sites-available/virtual-captain-le-ssl.conf /etc/apache2/sites-available/virtual-captain-le-ssl.conf.bak
+$ sudo nano /etc/apache2/sites-available/virtual-captain-le-ssl.conf
+$ sudo apachectl configtest && sudo systemctl reload apache2
+```
+Controlla anche: `apachectl -M | grep -E 'mpm|deflate|http2'` e `MaxRequestWorkers` (almeno ~100: 40 stream occupano 40 connessioni). Con HTTP/2 attivo il limite e' per connessione, non per worker: va bene. `Timeout` di Apache (default 60) va lasciato: l'app chiude una scrittura bloccata dopo 25 s e ogni stream dura al massimo 15 min (poi il browser si riconnette con `Last-Event-ID`).
+**Ritorno indietro**: rimetti il `.bak` e `sudo systemctl reload apache2`.
+
+### 2. Verifica con curl
+
+Prendi il cookie di sessione dal browser (DevTools > Application > Cookies; non incollarlo in chat ne' lasciarlo nella history: usa un file `read -rs C` come per le password).
+```
+$ curl -N -s -D - -H "Cookie: $C" https://virtualcaptain.rossinisolutions.com/api/flight/stream
+```
+Atteso: `HTTP/2 200`, `content-type: text/event-stream`, `cache-control: no-store`, **primo byte subito** (padding di 2 KB + commento), poi un evento `meta` **ogni 5 s** e `: hb` ogni 15 s. Senza cookie: 401. Con `VC_STREAM=off`: 404.
+**Se arriva a blocchi** (niente per 20-30 s, poi tutto insieme): sospetto n.1 `mod_deflate` (verifica che l'header di risposta non abbia `content-encoding: gzip`; con `curl --compressed` neanche), poi buffering del proxy (`flushpackets`, ordine dei `ProxyPass`), poi un proxy davanti al VPS. Prova anche direttamente sul VPS: `curl -N -H "Cookie: $C" -H 'X-Forwarded-Proto: https' http://127.0.0.1:8100/api/flight/stream` (se qui e' fluido, il problema e' Apache).
+
+### 3. Variabili (in `/etc/virtual-captain/env`, poi `sudo systemctl restart virtual-captain`)
+
+| Variabile | Default | Effetto |
+|---|---|---|
+| `VC_STREAM` | (attivo) | `off`: lo stream risponde 404, il browser fa polling (kill switch) |
+| `VC_DELTA` | (attivo) | `off`: il welcome non annuncia i delta, il programma sul PC manda snapshot completi |
+| `STREAM_WRITE_TIMEOUT_SECONDS` | 25 | una scrittura bloccata cosi' a lungo chiude lo stream e libera lo slot |
+
+Gli altri valori (3 stream per utente, 10 per IP, 40 globali, meta ogni 5 s, heartbeat 15 s, durata massima 15 min, ricontrollo sessione 60 s) sono costanti in `server/config.py`, non da env. Il riavvio chiude gli stream aperti; i browser si riconnettono da soli.
+
+### 4. Checklist di prova (Shadow, due schede)
+
+1. Due schede su `/flight` con lo stesso account, programma collegato: entrambe in modalita' stream, dati che si aggiornano insieme; terza e quarta scheda (limite 3): la quarta passa al polling senza errori.
+2. `sudo systemctl restart virtual-captain`: le schede si riconnettono entro pochi secondi e riprendono i dati.
+3. Programma scollegato (chiudilo o stacca la rete del PC): le schede mostrano "programma non connesso" (evento `offline`/`meta`), poi riprendono al ricollegamento senza ricaricare.
+4. Sessione scaduta o logout da un'altra scheda: lo stream di quella sessione si chiude, la pagina torna al login; le altre sessioni dello stesso account restano; cambio password/reset: si chiudono tutte.
+5. `VC_STREAM=off` + restart: le schede passano al polling e funzionano; poi rimetti attivo. Idem `VC_DELTA=off`: il programma torna a snapshot completi.
+6. Lascia una scheda aperta 16+ minuti: alla chiusura pulita dei 15 min si riconnette senza perdere dati.
+
 ## Messa in sicurezza operativa (C4)
 
 Nessun cambio al codice dell'app: sono file di esempio da installare a mano sul VPS (sudo). Un push che tocca solo `server/deploy/**` non fa partire il deploy, quindi **non** installa nulla da solo. Ordine consigliato: Apache, backup, logrotate. Dopo ogni passo fai la verifica.

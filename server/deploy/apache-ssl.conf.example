@@ -32,6 +32,30 @@
     ProxyPass        /ws/ ws://127.0.0.1:8100/ws/
     ProxyPassReverse /ws/ ws://127.0.0.1:8100/ws/
 
+    # SSE stream (GET /api/flight/stream). Must come BEFORE the generic "ProxyPass /" (first match wins).
+    # - flushpackets=on: pass every chunk to the browser at once (no buffering in mod_proxy_http).
+    # - timeout=90: backend inactivity limit; the app sends a ": hb" comment every 15 s and a "meta" every 5 s.
+    # - disablereuse=on: one backend connection per stream, never put back in the pool.
+    # - mod_deflate is the first suspect for partial buffering: no-gzip + drop Accept-Encoding for this path.
+    #   (text/event-stream is not in the default DEFLATE list, but a custom AddOutputFilterByType could add it.)
+    # - No cache: the app already answers Cache-Control: no-store; Apache adds nothing.
+    # - X-Accel-Buffering is an nginx header, irrelevant for Apache (the app may send it, harmless).
+    # - Concurrency caps live in the app (3 per user, 10 per IP, 40 global; 429 beyond them and the
+    #   client polls). Apache needs MaxRequestWorkers well above 40 + normal traffic (mpm_event: check
+    #   with "apachectl -V | grep -i mpm" and "apachectl -M | grep mpm"); 40 streams hold 40 workers' slots.
+    # - Apache "Timeout" (default 60 s on Ubuntu) bounds a stalled write to the client; the app ends a
+    #   blocked write after 25 s (STREAM_WRITE_TIMEOUT_SECONDS) and a stream lives at most 15 min, then
+    #   the client reconnects with Last-Event-ID: no Timeout change is needed. Do NOT lower it under 30 s.
+    # - LimitRequestBody does not matter here (GET without body).
+    <Location /api/flight/stream>
+        SetEnv no-gzip 1
+        SetEnv dont-vary 1
+        RequestHeader unset Accept-Encoding
+        Header always set Cache-Control "no-store"
+    </Location>
+    ProxyPass        /api/flight/stream http://127.0.0.1:8100/api/flight/stream flushpackets=on timeout=90 disablereuse=on
+    ProxyPassReverse /api/flight/stream http://127.0.0.1:8100/api/flight/stream
+
     # certbot renewals are answered by Apache, not by the app
     ProxyPass /.well-known !
 
