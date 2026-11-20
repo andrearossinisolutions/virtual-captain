@@ -77,7 +77,7 @@ global.__t = { els, log, handlers, resp, run, tick, settle, state, stateH, set c
 (async () => {
   const out = { errors: [] };
   try {
-    run(fs.readFileSync(jsPath, "utf8").replace(/\nif\(REMOTE\)rpoll\(\);else poll\(\);\s*$/, "\n"));  // senza avviare il polling: le prove lo guidano
+    run(fs.readFileSync(jsPath, "utf8").replace(/\nif\(REMOTE\)rstart\(\);else poll\(\);\s*$/, "\n"));  // senza avviare il polling: le prove lo guidano
     const f = new Function("t", "out", "return (async () => {" + scenario + "})()");
     await f(global.__t, out);
   } catch (e) { out.errors.push(String(e && e.stack || e)); }

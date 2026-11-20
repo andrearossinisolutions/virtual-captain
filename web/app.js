@@ -244,7 +244,7 @@ function apply(s){const prev=last;last=s;
   render()}
 async function poll(){try{const s=await api("/api/state");
   if(lastRev===-1){build(s);fill(s);lastRev=s.rev}else if(s.rev!==lastRev){fill(s);lastRev=s.rev}apply(s)}catch(e){const a=$("sim");a.textContent="Connection lost…";a.className="pill bad"}setTimeout(poll,1500)}
-let rseq=null,repoch=null,rlast=null;
+let rseq=null,repoch=null,rlast=null,rmode="poll";  // rmode: "sse" (stream attivo) o "poll" (polling di riserva, e prima dell'avvio)
 function norm(s){const d={fields:{},plan:{},flight:[],monitor:[],pills:{},pill_defs:[],log:[],cl_phases:[],clearance:{},rwy_bad:{},atis_warn:{},wx_dep:null,wx_dest:null,info:"",test_links:false,checklist:null,spoke_n:0,labels:[],modes:[],cl_modes:[],simbrief:"",rev:0,dll_missing:false};
   for(const k in d)if(s[k]===undefined)s[k]=d[k];return s}
 function rRO(){document.querySelectorAll("#cfg input:not(#deploc),#cfg select,#go,#end,#end2,#simretry").forEach(e=>e.disabled=RO());if(RO())$("load").disabled=true;else if($("info").textContent!=="Loading…")$("load").disabled=false}  // sola lettura: controlli del briefing spenti
@@ -262,15 +262,61 @@ function remoteApply(d){
   rRO();rdata(true);rbanner(d.age!=null&&d.age>20?"No update for "+Math.round(d.age)+" s":RO()?"Remote control is off on the PC":"");apply(rlast)}
 async function rPrefill(){try{await rToken();const v=rSb;  // ID SimBrief dell'account (da /api/auth/me, gia' letto per il token CSRF) nel campo vuoto: mai inviato da solo
   if(/^[A-Za-z0-9 ._-]{1,40}$/.test(v)){rPre=v;if(!$("simbrief").value&&!rDirty.has("simbrief"))$("simbrief").value=rPre}}catch(e){}}
-async function rpoll(){const w=await rfetch();if(w!==null)setTimeout(rpoll,w)}
+async function rpoll(){if(rmode!=="poll"){rPolling=false;return}const w=await rfetch();if(w!==null&&rmode==="poll")setTimeout(rpoll,w);else rPolling=false}
+let rPolling=false;function rpollStart(){if(rPolling)return;rPolling=true;rpoll()}
 async function rfetch(){let wait=3000;  // una lettura dello stato: ritorna l'attesa prima della prossima (null: pagina lasciata)
   try{const r=await fetch("/api/flight/state"+(rseq!==null&&repoch!==null?"?seq="+rseq+"&epoch="+repoch:""),{credentials:"same-origin",cache:"no-store"});
     if(r.status===401){location.replace("/login");return null}
     if(r.status===429)wait=Math.max(1,+r.headers.get("Retry-After")||5)*1000;
     else if(!r.ok)throw new Error(r.status);
-    else{const d=await r.json();remoteApply(d);wait=d.connected?1000:3000}}
+    else{const d=await r.json();if(rmode!=="poll")return wait;rraw=null;sLast=null;remoteApply(d);wait=d.connected?1000:3000}}  // risposta di polling arrivata dopo il passaggio allo stream: scartata
   catch(e){rbanner("Connection lost\u2026")}
   return wait}
+// ---- stream SSE (solo REMOTE): GET /api/flight/stream. EventSource senza ricreazione automatica sugli errori HTTP (503/429/404 = CLOSED):
+// lo si ricrea a mano con backoff e ?last=<ultimo id>. Se non funziona, polling di riserva (rpoll) e nuovo tentativo ogni 2 minuti.
+// I delta si fondono sul raw dello snapshot (rraw), mai sull'oggetto normalizzato da norm(); remoteApply riceve oggetti sintetici come dal polling.
+const SURL="/api/flight/stream",BACKOFF=[1000,2000,5000,10000,30000],FIRST_MS=5000,SILENCE_MS=35000,RETRY_SSE_MS=120000,MAX_ERR=3;
+let rraw=null,sEs=null,sLast=null,sErr=0,sTrial=false,sLost=false,sFirst=null,sWd=null,sRe=null,sTickT=null,sRetry=null,rMeta={connected:true,age:0,spoke_ago:null,cmd:undefined,at:0};const rWait=[];
+function sClose(){clearTimeout(sFirst);clearTimeout(sWd);clearTimeout(sRe);sFirst=sWd=sRe=null;if(sEs){sEs.onerror=null;sEs.close();sEs=null}}
+function sNow(){const dt=(Date.now()-rMeta.at)/1000,up=v=>v==null?null:v+dt;return{connected:true,unchanged:true,cmd:rMeta.cmd,age:up(rMeta.age),spoke_ago:up(rMeta.spoke_ago)}}  // age e spoke_ago estrapolate tra un meta e l'altro
+function sTick(){if(sTickT)return;const f=()=>{sTickT=setTimeout(f,1000);if(rmode==="sse"&&!sLost&&rMeta.connected&&rlast)remoteApply(sNow())};sTickT=setTimeout(f,1000)}
+function sOpen(){sClose();
+  if(typeof EventSource==="undefined"){toPoll();return}
+  let es;try{es=new EventSource(SURL+(rraw&&sLast?"?last="+sLast:""))}catch(e){sFail();return}  // senza raw non si riprende: serve lo snapshot completo
+  sEs=es;es.onerror=()=>sError(es);
+  for(const n of ["snapshot","delta","meta","offline"])es.addEventListener(n,ev=>sEvent(es,n,ev));
+  sFirst=setTimeout(()=>{if(es===sEs)toPoll()},FIRST_MS);sTick()}  // nessun evento entro 5 s (proxy che trattiene i byte): polling
+function toPoll(){sClose();sLost=false;rmode="poll";rraw=null;sLast=null;sErr=0;sTrial=false;clearTimeout(sRetry);sRetry=null;
+  if(typeof EventSource!=="undefined")sRetry=setTimeout(()=>{if(rmode==="poll"){sTrial=true;sOpen()}},RETRY_SSE_MS);rpollStart()}
+function sFail(quiet){sClose();sErr++;if(!quiet){sLost=true;rbanner("Connection lost…")}
+  if(sTrial||sErr>=MAX_ERR){toPoll();return}
+  sRe=setTimeout(sOpen,BACKOFF[Math.min(sErr-1,BACKOFF.length-1)]*(0.8+0.4*Math.random()))}  // 1, 2, 5, 10, 30 s con jitter
+function sDoubt(){rraw=null;sLast=null;sFail(true)}  // seq inatteso o dati dubbi: si riapre senza ?last (snapshot completo)
+async function sProbe(){try{const c=new AbortController();const r=await fetch(SURL,{credentials:"same-origin",cache:"no-store",signal:c.signal});c.abort();return r.status}catch(e){return 0}}  // EventSource non espone lo stato HTTP: lo si legge con una richiesta subito interrotta
+async function sFailProbe(){sClose();const st=await sProbe();if(sEs)return;
+  if(st===401){location.replace("/login");return}
+  if(st===429||st===404||sTrial){toPoll();return}
+  sFail()}
+function sError(es){if(es!==sEs)return;
+  if(es.readyState===2){sFailProbe();return}  // CLOSED: errore HTTP, il browser non riprova
+  if(++sErr>=MAX_ERR||sTrial)toPoll()}  // CONNECTING: riprova il browser (con Last-Event-ID)
+function sOff(){rraw=null;rMeta.connected=false;remoteApply({connected:false});rFlush()}
+function sPush(e,q){const n=sNow();rMeta={connected:true,age:0,spoke_ago:n.spoke_ago,cmd:rMeta.cmd,at:Date.now()};
+  remoteApply({connected:true,snapshot:Object.assign({},rraw),seq:q,epoch:e,cmd:n.cmd,age:0,spoke_ago:n.spoke_ago});rFlush()}
+function sEvent(es,n,ev){if(es!==sEs)return;
+  clearTimeout(sFirst);sFirst=null;clearTimeout(sRetry);sRetry=null;if(rmode!=="sse"){rmode="sse";sTrial=false}
+  sErr=0;sLost=false;clearTimeout(sWd);sWd=setTimeout(()=>{if(es===sEs){sLost=true;rbanner("Connection lost…");sFail(true)}},SILENCE_MS);  // silenzio totale per 35 s (heartbeat ": hb" compresi: il browser non li espone, vale il "meta" ogni 5 s)
+  let j;try{j=JSON.parse(ev.data)}catch(x){sDoubt();return}
+  if(!j||typeof j!=="object"||Array.isArray(j)){sDoubt();return}
+  const m=/^(\d+)\.(\d+)$/.exec(ev.lastEventId||""),e=m?+m[1]:null,q=m?+m[2]:null;
+  if(n==="snapshot"){if(!m){sDoubt();return}rraw=j;sLast=ev.lastEventId;rseq=repoch=null;sPush(e,q)}  // snapshot: sostituzione completa (anche con epoch diverso)
+  else if(n==="delta"){if(!m||!rraw||e!==repoch||q<=rseq||!j.d||typeof j.d!=="object"||Array.isArray(j.d)||!Array.isArray(j.rm)){sDoubt();return}
+    const nr=Object.assign({},rraw);for(const k in j.d)if(k!=="__proto__")nr[k]=j.d[k];for(const k of j.rm)delete nr[k];rraw=nr;sLast=ev.lastEventId;sPush(e,q)}
+  else if(n==="meta"){rMeta={connected:j.connected!==false,age:typeof j.age==="number"?j.age:null,spoke_ago:typeof j.spoke_ago==="number"?j.spoke_ago:null,cmd:j.cmd,at:Date.now()};
+    if(rMeta.connected)remoteApply(sNow());else sOff()}
+  else if(n==="offline")sOff()}
+function rFlush(){for(let i=rWait.length-1;i>=0;i--){const w=rWait[i];if(rseq!==w.s||repoch!==w.e){rWait.splice(i,1);clearTimeout(w.t);w.r(rlast||last)}}}
+function rstart(){if(typeof EventSource==="undefined"){rpollStart();return}rmode="sse";sOpen()}
 // ---- comandi della pagina remota: POST /api/flight/cmd/<nome> via server; un comando alla volta; poi si ATTENDE il prossimo
 // snapshot e lo si restituisce: i chiamanti di api() non cambiano e la pagina non assume l'esito (lo stato vero e' quello del PC)
 const CMD_PATHS={"/api/fields":"fields","/api/load-plan":"load-plan","/api/phase":"phase","/api/checklist-phase":"checklist-phase","/api/clearance":"clearance","/api/sim-retry":"sim-retry"};
@@ -305,7 +351,10 @@ async function rCheck(name,r){if(r.ok)return;
   if(r.status===503)throw rFail(CMD_ERR.commands_off);
   if(r.status===504)throw rFail("The PC did not answer; the page shows the PC's real state.");
   throw rFail("Request failed.")}
-async function rAwait(seq0,ep0){const end=Date.now()+SNAP_WAIT_MS;
+function rAwait(seq0,ep0){if(rmode!=="sse")return rAwaitPoll(seq0,ep0);  // stream: si risolve al prossimo cambio di seq (tetto 5 s)
+  return new Promise(res=>{if(rseq!==seq0||repoch!==ep0){res(rlast||last);return}
+    const w={s:seq0,e:ep0,r:res,t:null};w.t=setTimeout(()=>{const i=rWait.indexOf(w);if(i>=0)rWait.splice(i,1);res(rlast||last)},SNAP_WAIT_MS);rWait.push(w)})}
+async function rAwaitPoll(seq0,ep0){const end=Date.now()+SNAP_WAIT_MS;
   for(;;){await rfetch();if(rseq!==seq0||repoch!==ep0||Date.now()>=end)break;await rSleep(300)}
   return rlast||last}
 async function rSend(name,body){
@@ -337,4 +386,4 @@ if(window.ResizeObserver)new ResizeObserver(()=>document.documentElement.style.s
 
 $("edit").onclick=()=>{view="config";if(last)fill(last);render()};  // fill: Departure puo' essere cambiato dal T/O runway della checklist
 const _apply=apply;apply=function(s){phase=s.phase;_apply(s)};
-if(REMOTE)rpoll();else poll();
+if(REMOTE)rstart();else poll();
