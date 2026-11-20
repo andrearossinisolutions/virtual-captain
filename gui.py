@@ -14,6 +14,7 @@ import webbrowser
 from tkinter import messagebox, ttk
 
 import status
+from simbrief import SIMBRIEF_HOME
 
 REFRESH_MS = 200
 MAX_LOG_LINES = 500
@@ -60,18 +61,22 @@ def create_root() -> tk.Tk:
 
 
 class _Row:
-    def __init__(self, parent, row: int, item: status.StatusItem, wrap: int = 480) -> None:
+    def __init__(self, parent, row: int, item: status.StatusItem, wrap: int = 480, button=None) -> None:
         self.key = item.key
         self.canvas = tk.Canvas(parent, width=DOT + 2, height=DOT + 2, highlightthickness=0)
         self.dot = self.canvas.create_oval(2, 2, DOT, DOT, fill=COLORS[status.PENDING], outline="")
         self.label = ttk.Label(parent, text=item.label)
         self.detail = ttk.Label(parent, text="", foreground="#555555", wraplength=wrap, justify="left")
         self.when = ttk.Label(parent, text="", foreground="#888888")
-        # columns: 0 dot, 1 label, 2 detail (stretches), 3 time (right)
+        # columns: 0 dot, 1 label, 2 detail (stretches), 3 time (right), 4 optional action button
         self.canvas.grid(row=row, column=0, padx=(8, 4), pady=2, sticky="w")
         self.label.grid(row=row, column=1, sticky="w", padx=(0, 12))
         self.detail.grid(row=row, column=2, sticky="w")
         self.when.grid(row=row, column=3, sticky="e", padx=(8, 8))
+        self.button = None
+        if button is not None:  # (text, command): action on the row, column 4
+            self.button = ttk.Button(parent, text=button[0], command=button[1])
+            self.button.grid(row=row, column=4, sticky="e", padx=(0, 8), pady=1)
         self.sig = None
 
     def update(self, item: status.StatusItem) -> None:
@@ -126,7 +131,6 @@ class Window:
         ttk.Button(top, text="Reconnect", command=self.reconnect).pack(side="left")
         self.log_button = ttk.Button(top, text="Show log", command=self.toggle_log)
         self.log_button.pack(side="left", padx=6)
-        ttk.Button(top, text="Open page", command=self.open_page).pack(side="left")
         self.adv = ttk.Menubutton(top, text="Advanced")
         self.adv.pack(side="left", padx=6)
         self._build_advanced()
@@ -190,6 +194,15 @@ class Window:
         url = self._call("page_url", "")
         if url:
             webbrowser.open(url)
+
+    def row_buttons(self) -> dict:
+        """Action buttons placed on a status row: key -> (text, command)."""
+        return {"page": ("Open page", self.open_page), "plan": ("SimBrief", self.open_simbrief)}
+
+    def open_simbrief(self) -> None:
+        """Briefing of the loaded plan, else the SimBrief home. The URL is computed at click time (the plan can change)."""
+        url = self._call("simbrief_url", "") or SIMBRIEF_HOME
+        webbrowser.open(url)
 
     def fetch_dll(self) -> None:
         text = ("Download SimConnect.dll from PyPI?\n\n" + (self._call("dll_describe", "") or ""))
@@ -315,7 +328,7 @@ class Window:
             total = self.body.winfo_width()
             if total <= 1 or not self.rows:
                 return
-            used = sum(self.body.grid_bbox(c, 0)[2] for c in (0, 1, 3))
+            used = sum(self.body.grid_bbox(c, 0)[2] for c in (0, 1, 3, 4))
             wrap = max(self.min_wrap, total - used - 16)
         except Exception:  # noqa: BLE001
             return
@@ -382,9 +395,9 @@ class Window:
             if item.group != group:
                 group = item.group
                 ttk.Label(self.body, text=group, font=("TkDefaultFont", 10, "bold")).grid(
-                    row=row, column=0, columnspan=4, sticky="w", padx=8, pady=(12 if row else 4, 0))
+                    row=row, column=0, columnspan=5, sticky="w", padx=8, pady=(12 if row else 4, 0))
                 row += 1
-            self.rows[item.key] = _Row(self.body, row, item, self.detail_wrap)
+            self.rows[item.key] = _Row(self.body, row, item, self.detail_wrap, self.row_buttons().get(item.key))
             row += 1
 
     def _drain_log(self) -> None:

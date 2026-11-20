@@ -126,6 +126,23 @@ def route_procedures(route) -> tuple:
     return sid, trans, star
 
 
+SIMBRIEF_HOME = "https://dispatch.simbrief.com/home"
+SIMBRIEF_BRIEFING = "https://dispatch.simbrief.com/briefing/%s"
+_OFP_ID = re.compile(r"[0-9]{1,20}")
+
+
+def _ofp_id(v):
+    """OFP id (params.request_id of the JSON) as a digit string, else None."""
+    s = str(v) if isinstance(v, (str, int)) and not isinstance(v, bool) else ""
+    return s if _OFP_ID.fullmatch(s) else None
+
+
+def briefing_url(plan) -> str:
+    """Page to open from the window: the briefing of the loaded plan, the SimBrief home without plan or with an invalid id."""
+    oid = _ofp_id((plan or {}).get("ofp_id") if isinstance(plan, dict) else None)
+    return SIMBRIEF_BRIEFING % oid if oid else SIMBRIEF_HOME
+
+
 def extract_plan(ofp: dict) -> dict:
     """Piano di volo da mostrare. Campi assenti restano vuoti (parsing difensivo: formato non verificato)."""
     g = _g(ofp, "general", default={}) or {}
@@ -139,6 +156,7 @@ def extract_plan(ofp: dict) -> dict:
     r_sid, r_trans, r_star = route_procedures(route)
     return {
         "flight": flight,
+        "ofp_id": _ofp_id(_g(ofp, "params", "request_id")),
         "aircraft": _g(ofp, "aircraft", "icaocode"),
         "route": route,
         # sid_ident/sid_trans/star_ident del JSON non sono affidabili (20/11/2026): prima la rotta, il JSON e' il ripiego

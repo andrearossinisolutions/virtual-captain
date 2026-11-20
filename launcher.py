@@ -245,9 +245,10 @@ def run_window(argv, relaunched: bool) -> int:
             return
         state["app"] = app
         import dll_fetch
+        from simbrief import briefing_url
         actions.update({
             "shutdown": app.shutdown, "reconnect": app.reconnect, "fetch_dll": app.fetch_dll,
-            "page_url": lambda: app.url, "login_info": lambda: app.login_info,
+            "page_url": lambda: app.url, "simbrief_url": lambda: briefing_url(app.st.plan), "login_info": lambda: app.login_info,
             "dll_missing": lambda: bool(app.st.dll_missing and not app.sim),
             "dll_describe": dll_fetch.describe, "sim_on": lambda: app.sim,
             "test_links_on": lambda: app.st.cl_trust_links, "set_test_links": app.set_test_links,

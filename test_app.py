@@ -290,6 +290,46 @@ def test_start_reports_busy_port_in_english():
             s.close()
 
 
+def test_simbrief_url():
+    import simbrief as sb
+    assert sb.briefing_url({"ofp_id": "194176147"}) == "https://dispatch.simbrief.com/briefing/194176147"
+    for bad in (None, {}, {"ofp_id": None}, {"ofp_id": ""}, {"ofp_id": "12a"}, {"ofp_id": "1/../x"}, {"ofp_id": "1" * 21},
+                {"ofp_id": True}, {"ofp_id": "12\n"}, "x"):
+        assert sb.briefing_url(bad) == "https://dispatch.simbrief.com/home", bad
+    assert sb.extract_plan({"params": {"request_id": "194176147"}})["ofp_id"] == "194176147"
+    assert sb.extract_plan({"params": {"request_id": 194176147}})["ofp_id"] == "194176147"
+    assert sb.extract_plan({"params": {"request_id": "abc"}})["ofp_id"] is None
+    assert sb.extract_plan({})["ofp_id"] is None
+
+
+def test_window_has_row_buttons_when_tk_available():
+    try:
+        import tkinter as tk
+        import gui
+        root = tk.Tk()
+    except Exception:  # noqa: BLE001  (no tkinter or no display)
+        print("skip window test")
+        return
+    try:
+        opened = []
+        gui.webbrowser.open = opened.append
+        plan = {}
+        reg = S.make_registry()
+        win = gui.build_window(root, reg, queue.Queue(), {"page_url": lambda: "http://127.0.0.1:1/",
+                                                           "simbrief_url": lambda: __import__("simbrief").briefing_url(plan)})
+        root.update_idletasks()
+        assert win.rows["page"].button is not None and win.rows["plan"].button is not None
+        assert win.rows["flight"].button is None
+        assert win.rows["plan"].button.cget("text") == "SimBrief"
+        win.rows["plan"].button.invoke()
+        plan["ofp_id"] = "42"
+        win.rows["plan"].button.invoke()
+        win.rows["page"].button.invoke()
+        assert opened == ["https://dispatch.simbrief.com/home", "https://dispatch.simbrief.com/briefing/42", "http://127.0.0.1:1/"]
+    finally:
+        root.destroy()
+
+
 def run_all():
     names = [n for n, f in globals().items() if n.startswith("test_") and callable(f)]
     for n in names:
