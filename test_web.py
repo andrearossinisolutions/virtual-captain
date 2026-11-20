@@ -624,6 +624,15 @@ def test_test_links_markup():
     assert "s.test_links" in web.PAGE and ".cli.wl" in web.PAGE
 
 
+def test_announce_no_now_markup():
+    p = web.PAGE
+    # announce senza test links: niente NOW / was OK / mismatch; con test links restano; le altre voci invariate
+    assert 'const noNow=it.type==="announce"&&!s.test_links;' in p
+    assert 'if(!noNow&&(it.show||it.kind==="wait")&&it.live&&it.live.length)tx.appendChild(nowNode(mk,"NOW: "' in p
+    assert 'if(!noNow&&it.was_ok&&it.live&&it.live.length)' in p and 'if(!noNow&&it.kind==="mismatch"&&!it.show){' in p
+    assert 'if(it.kind==="wait")tx.appendChild(nowNode(mk,"Waiting: "' in p  # Waiting: non toccato
+
+
 def test_optional_markup():
     p = web.PAGE
     assert ".cli.st-opt{border-left-color:var(--opt)}" in p and ".cli.st-opt .ic{color:var(--opt)}" in p and "--opt:#5bc0eb" in p
@@ -821,6 +830,7 @@ if __name__ == "__main__":
     test_squawk_pill_roundtrip()
     test_layout_markers()
     test_test_links_markup()
+    test_announce_no_now_markup()
     test_optional_markup()
     test_spoke_counters()
     test_sim_finish_keeps_flying()
