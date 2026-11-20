@@ -768,6 +768,15 @@
   },
   "verified": true
  },
+ "fmgs-performance-glareshield.atc-transponder": {
+  "check": {
+   "show": [
+    "xpdr_operation",
+    "xpdr_atc"
+   ]
+  },
+  "verified": true
+ },
  "fmgs-performance-glareshield.squawk-code": {
   "check": {
    "key": "squawk",

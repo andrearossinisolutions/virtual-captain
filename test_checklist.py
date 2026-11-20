@@ -1063,6 +1063,24 @@ def test_cabin_fuel_links():
 
 
 
+def test_atc_transponder_manual_item_shows_raw_until_the_map_is_known():
+    """ATC su AUTO: voce manuale (solo grezzi di S_XPDR_OPERATION / S_XPDR_ATC, mai rosso/verde) finche' Andrea non da' i valori reali di STBY/AUTO/ON.
+    Quando ci sono: aggiungere la mappa in monitor.py (MAPS + kind per xpdr_atc) e sostituire il link "show" con {"key": "xpdr_atc", "eq": "AUTO"}."""
+    cl = C.load()
+    iid, sq = "fmgs-performance-glareshield.atc-transponder", "fmgs-performance-glareshield.squawk-code"
+    assert cl.links[iid]["check"] == {"show": ["xpdr_operation", "xpdr_atc"]} and iid not in cl.excluded
+    ids = [i["id"] for p in cl.phases for sp in p["subphases"] for i in sp["items"]]
+    assert ids.index(iid) + 1 == ids.index(sq) and ids.count(iid) == 1
+    it = next(i for p in cl.phases for sp in p["subphases"] for i in sp["items"] if i["id"] == iid)
+    assert (it["text"], it["response"], it["type"]) == ("ATC Transponder", "AUTO", "action")
+    assert cl.links["before-start.atc-transponder"]["check"] == {"key": "squawk", "eq_ref": "clr.t"}  # quella dello squawk resta
+    for simp in (False, True):
+        r = cl.evaluate_phase("fmgs-performance-glareshield", mon.clean_labels({"xpdr_operation": 3, "xpdr_atc": 2}), simplified=simp, raw={"xpdr_operation": 3, "xpdr_atc": 2})
+        row = {i["id"]: i for s in r["subphases"] for i in s["items"]}[iid]
+        assert row["status"] == "none" and row["show"] is True and row["raw"] == [["S_XPDR_OPERATION", "3"], ["S_XPDR_ATC", "2"]]
+    assert "XPDR ATC (raw)" in [n for g, rows in mon.build({"xpdr_atc": 2}) for n, *_ in rows]  # visibile anche nel pannello Transponder
+
+
 def test_gsx_links():
     cl = C.load()
     fc, ct, bd = "cockpit-preparation.start-fueling", "cockpit-preparation.start-catering", "cockpit-preparation.start-boarding-passengers"
@@ -1115,6 +1133,7 @@ if __name__ == "__main__":
     test_tcas_links()
     test_cabin_fuel_links()
     test_gsx_links()
+    test_atc_transponder_manual_item_shows_raw_until_the_map_is_known()
     test_ai_links()
     test_snapshot_ai_with_metar()
     print("ok tcas/cabin")

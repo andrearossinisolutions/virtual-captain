@@ -664,6 +664,12 @@
        "type": "action"
       },
       {
+       "id": "fmgs-performance-glareshield.atc-transponder",
+       "text": "ATC Transponder",
+       "response": "AUTO",
+       "type": "action"
+      },
+      {
        "id": "fmgs-performance-glareshield.squawk-code",
        "text": "Squawk Code",
        "response": "AS CLR",
