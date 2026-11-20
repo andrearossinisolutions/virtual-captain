@@ -7,6 +7,10 @@ The program connects to `wss://<base>/ws/agent` with `Authorization: Bearer <acc
   program -> server   {"t":"ping"}  every HEARTBEAT seconds;  server -> program {"t":"pong"}
   program -> server   {"t":"snapshot","sv":1,"seq":N,"d":{...}}  (only after the hello; see sanitize_snapshot)
   either side         {"t":"bye"}
+Deltas (step U4, only when the welcome announces `"feat":["delta"]`; an old server never does, an old program ignores it):
+  program -> server   {"t":"delta","dv":1,"seq":N,"base":N-1,"d":{<changed sections>},"rm":[<removed sections>]}
+  server -> program   {"t":"resync"}  (base mismatch or a rejected delta: the program sends a full snapshot at once)
+  A section is a top-level key of the snapshot; `apply_delta` rebuilds the state with the same allowlist as the full one.
 Remote commands (step U3): the hello may add `"caps":["cmd"]` and `"cv":1`;
   server -> program   {"t":"cmd","id":<32 hex>,"name":<ENABLED_COMMANDS>,"d":{...}}  (only if the program has the cap)
   program -> server   {"t":"result","id":...,"ok":true} or {"t":"result","id":...,"ok":false,"code":<RESULT_CODES>,
@@ -25,7 +29,7 @@ __all__ = [
     "PROTOCOL_VERSION", "SUPPORTED_VERSIONS", "HEARTBEAT", "STALE_AFTER", "MAX_MSG", "HELLO_TIMEOUT",
     "FAMILY_RECHECK", "MAX_LIFETIME", "WS_PATH", "CLOSE_REPLACED", "CLOSE_BAD_VERSION",
     "CLOSE_REVOKED", "CLOSE_TOO_BIG", "CLOSE_RESTART", "T_WELCOME", "T_HELLO", "T_PING", "T_PONG",
-    "T_BYE", "welcome_message", "T_SNAPSHOT", "SNAPSHOT_VERSION", "SUPPORTED_SNAPSHOT_VERSIONS",
+    "T_BYE", "T_DELTA", "T_RESYNC", "FEAT_DELTA", "DELTA_VERSION", "sanitize_section", "apply_delta", "welcome_message", "T_SNAPSHOT", "SNAPSHOT_VERSION", "SUPPORTED_SNAPSHOT_VERSIONS",
     "MAX_SNAPSHOT_TARGET", "SNAPSHOT_FIELDS", "HIDDEN_ROW_LABELS", "SnapshotError", "sanitize_snapshot",
     "T_CMD", "T_RESULT", "CAP_CMD", "COMMAND_VERSION", "REMOTE_COMMANDS", "LOCAL_ONLY", "ENABLED_COMMANDS",
     "CMD_TIMEOUT", "cmd_timeout", "MAX_CMD_BYTES", "MAX_CMD_DATA", "MAX_RESULT_BYTES", "MAX_CAPS", "CMD_ID_RE",
@@ -54,6 +58,9 @@ CLOSE_RESTART = 4005      # reserved: uvicorn closes with 1012 on a restart; the
 
 T_WELCOME, T_HELLO, T_PING, T_PONG, T_BYE = "welcome", "hello", "ping", "pong", "bye"
 T_SNAPSHOT = "snapshot"
+T_DELTA, T_RESYNC = "delta", "resync"
+FEAT_DELTA = "delta"     # feature announced by the server in the welcome ("feat"): the program may send deltas
+DELTA_VERSION = 1        # "dv" of a delta message
 T_CMD, T_RESULT = "cmd", "result"
 
 SNAPSHOT_VERSION = 1
@@ -69,8 +76,13 @@ POSITION_RE = re.compile(r"(\d{1,2})\.\d{4}\u00b0 [NS]  (\d{1,3})\.\d{4}\u00b0 [
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
 
-def welcome_message() -> dict:
-    return {"t": T_WELCOME, "v": PROTOCOL_VERSION, "heartbeat": HEARTBEAT, "max_msg": MAX_MSG}
+def welcome_message(feat=()) -> dict:
+    """The welcome; `feat` (features the server accepts, e.g. FEAT_DELTA) is added only when not empty, so a server
+    with nothing to announce sends exactly the same message as before."""
+    msg = {"t": T_WELCOME, "v": PROTOCOL_VERSION, "heartbeat": HEARTBEAT, "max_msg": MAX_MSG}
+    if feat:
+        msg["feat"] = list(feat)
+    return msg
 
 
 # ---------------------------------------------------------------- snapshot of the flight (allowlist)
@@ -210,6 +222,29 @@ def _hidden(label) -> bool:
     return isinstance(label, str) and label.strip().lower() in HIDDEN_ROW_LABELS
 
 
+def sanitize_section(key, value, phase) -> object:
+    """One top-level section of the snapshot rebuilt from the allowlist (same rules as in `sanitize_snapshot`).
+    `flight` depends on the phase (the Position row never leaves the PC in the briefing), hence the argument."""
+    schema = SNAPSHOT_FIELDS.get(key) if isinstance(key, str) else None
+    if schema is None:
+        raise SnapshotError("unknown section")
+    if key == "monitor":
+        return _monitor(value)
+    if key == "flight":
+        if not isinstance(value, list):
+            raise SnapshotError("flight: bad list")
+        return _walk(_flight_rows(value, phase), schema, key, 0)
+    return _walk(value, schema, key, 0)
+
+
+def _check_totals(out: dict) -> None:
+    if "phase" not in out:
+        raise SnapshotError("phase missing")
+    cl = out.get("checklist")
+    if cl is not None and sum(len(sp["items"]) for sp in cl.get("subphases", [])) > MAX_CHECKLIST_ITEMS:
+        raise SnapshotError("checklist: too many items")
+
+
 def sanitize_snapshot(data) -> dict:
     """Rebuilds a snapshot from the allowlist: unknown top-level keys and unknown keys inside known sections
     are dropped; a wrong type or a limit exceeded raises SnapshotError. Position, Latitude and Longitude rows
@@ -217,23 +252,34 @@ def sanitize_snapshot(data) -> dict:
     if not isinstance(data, dict):
         raise SnapshotError("snapshot is not an object")
     out = {}
-    for key, schema in SNAPSHOT_FIELDS.items():
-        if key not in data:
-            continue
-        if key == "monitor":
-            out[key] = _monitor(data[key])
-        elif key == "flight":
-            raw = data[key]
-            if not isinstance(raw, list):
-                raise SnapshotError("flight: bad list")
-            out[key] = _walk(_flight_rows(raw, data.get("phase")), schema, key, 0)
-        else:
-            out[key] = _walk(data[key], schema, key, 0)
-    if "phase" not in out:
-        raise SnapshotError("phase missing")
-    cl = out.get("checklist")
-    if cl is not None and sum(len(sp["items"]) for sp in cl.get("subphases", [])) > MAX_CHECKLIST_ITEMS:
-        raise SnapshotError("checklist: too many items")
+    for key in SNAPSHOT_FIELDS:
+        if key in data:
+            out[key] = sanitize_section(key, data[key], data.get("phase"))
+    _check_totals(out)
+    return out
+
+
+def apply_delta(base_sections, d, rm) -> dict:
+    """New state = `base_sections` (already sanitized, never modified) with the sections of `d` replaced (each one
+    sanitized exactly as in the full snapshot) and the ones in `rm` removed. Unknown keys of `d` are dropped like in
+    a full snapshot. Errors (SnapshotError): `phase` removed or both changed and removed, a flight section left
+    unchanged by a delta that changes the phase (it must be resent, or removed, in the same delta: its content
+    depends on the phase), a limit exceeded. The caller answers an error with a resync, it never guesses."""
+    if not isinstance(base_sections, dict) or not isinstance(d, dict) or not isinstance(rm, list):
+        raise SnapshotError("delta: bad shape")
+    if len(rm) > len(SNAPSHOT_FIELDS) or any(not isinstance(k, str) for k in rm):
+        raise SnapshotError("delta: bad removals")
+    removed = {k for k in rm if k in SNAPSHOT_FIELDS}
+    if "phase" in removed or removed & d.keys():
+        raise SnapshotError("delta: bad removals")
+    phase = sanitize_section("phase", d["phase"], None) if "phase" in d else base_sections.get("phase")
+    out = {k: v for k, v in base_sections.items() if k not in removed}
+    for key in SNAPSHOT_FIELDS:
+        if key in d:
+            out[key] = sanitize_section(key, d[key], phase)
+    if phase != base_sections.get("phase") and "flight" in base_sections and "flight" not in d and "flight" not in removed:
+        raise SnapshotError("flight: must follow the phase")
+    _check_totals(out)
     return out
 
 

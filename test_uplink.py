@@ -953,3 +953,193 @@ def test_websockets_adapter_against_a_loopback_server():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# ---------------------------------------------------------------- delta (U4)
+
+WELCOME_DELTA = json.dumps({"t": "welcome", "v": 1, "heartbeat": 5, "max_msg": 262144, "feat": ["delta"]})
+
+
+def _view(i, **extra):
+    return dict({"phase": "flying", "log": ["a"], "n": i}, **extra)
+
+
+def _rig_source(tmp_path, source, script, factory=None):
+    rig = Rig(tmp_path, FakeHttp({}), tokens=good_tokens(), snapshot_source=source)
+    ws = FakeWs(rig.clock, script)
+    rig.ws_factory = factory or ws
+    rig.run()
+    return rig, ws
+
+
+def _types(ws):
+    return [m["t"] for m in ws.sent if m["t"] in ("snapshot", "delta")]
+
+
+def test_old_server_without_feat_gets_only_full_snapshots(tmp_path):
+    n = {"i": 0}
+
+    def src():
+        n["i"] += 1
+        return _view(n["i"])
+    rig, ws = _rig_source(tmp_path, src, [WELCOME] + [None] * 30 + [ConnClosed(4001)])
+    assert set(_types(ws)) == {"snapshot"} and len(_types(ws)) >= 5
+
+
+@pytest.mark.parametrize("feat", [None, [], ["other"], "delta", {"delta": 1}, [1, None], ["x"] * 20, [["delta"]]])
+def test_unknown_malformed_or_missing_feat_means_full_snapshots_and_does_not_break(tmp_path, feat):
+    welcome = {"t": "welcome", "v": 1, "heartbeat": 5, "max_msg": 262144, "extra": {"a": 1}}
+    if feat is not None:
+        welcome["feat"] = feat
+    n = {"i": 0}
+
+    def src():
+        n["i"] += 1
+        return _view(n["i"])
+    rig, ws = _rig_source(tmp_path, src, [json.dumps(welcome)] + [None] * 15 + [ConnClosed(4001)])
+    assert ws.sent[0]["t"] == "hello" and set(_types(ws)) == {"snapshot"}
+
+
+def test_new_server_gets_a_full_first_then_deltas_with_base(tmp_path):
+    n = {"i": 0}
+
+    def src():
+        n["i"] += 1
+        return _view(n["i"], keep="same")
+    rig, ws = _rig_source(tmp_path, src, [WELCOME_DELTA] + [None] * 20 + [ConnClosed(4001)])
+    msgs = [m for m in ws.sent if m["t"] in ("snapshot", "delta")]
+    assert msgs[0]["t"] == "snapshot" and msgs[0]["seq"] == 1 and msgs[0]["d"]["keep"] == "same"
+    assert all(m["t"] == "delta" for m in msgs[1:]) and len(msgs) >= 3
+    for prev, m in zip(msgs, msgs[1:]):
+        assert m["seq"] == prev["seq"] + 1 and m["base"] == prev["seq"] and m["dv"] == 1
+        assert set(m["d"]) == {"n"} and m["rm"] == []   # only the changed section travels
+    assert list(msgs[1]) == ["t", "dv", "seq", "base", "d", "rm"]
+
+
+def test_delta_carries_tombstones_and_unchanged_view_sends_nothing(tmp_path):
+    views = iter([_view(1, gone="x"), _view(1, gone="x"), _view(1)] + [_view(1)] * 100)
+    rig, ws = _rig_source(tmp_path, lambda: next(views), [WELCOME_DELTA] + [None] * 20 + [ConnClosed(4001)])
+    msgs = [m for m in ws.sent if m["t"] in ("snapshot", "delta")]
+    assert [m["t"] for m in msgs] == ["snapshot", "delta"] and msgs[1]["d"] == {} and msgs[1]["rm"] == ["gone"]
+
+
+def test_phase_change_resends_flight(tmp_path):
+    views = iter([{"phase": "flying", "flight": [["Pitch", "1"]]}] + [{"phase": "briefing", "flight": [["Pitch", "1"]]}] * 100)
+    rig, ws = _rig_source(tmp_path, lambda: next(views), [WELCOME_DELTA] + [None] * 10 + [ConnClosed(4001)])
+    delta = [m for m in ws.sent if m["t"] == "delta"][0]
+    assert set(delta["d"]) == {"phase", "flight"}
+
+
+def test_resync_makes_the_next_message_a_full_snapshot_at_once(tmp_path):
+    n = {"i": 0}
+
+    def src():
+        n["i"] += 1
+        return _view(n["i"])
+    script = [WELCOME_DELTA] + [None] * 12 + [json.dumps({"t": "resync"})] + [None] * 3 + [ConnClosed(4001)]
+    rig, ws = _rig_source(tmp_path, src, script)
+    ts = _types(ws)
+    k = ts.index("delta")
+    assert ts[0] == "snapshot" and "snapshot" in ts[k:]    # a full after the deltas
+    full = [i for i, t in enumerate(ts) if t == "snapshot"][1]
+    seqs = [m["seq"] for m in ws.sent if m["t"] in ("snapshot", "delta")]
+    assert seqs == list(range(1, len(seqs) + 1))            # seq keeps counting, no gap
+
+
+def test_resync_resends_the_full_even_if_nothing_changed(tmp_path):
+    script = [WELCOME_DELTA] + [None] * 8 + [json.dumps({"t": "resync"})] + [None] * 8 + [ConnClosed(4001)]
+    rig, ws = _rig_source(tmp_path, lambda: {"phase": "flying"}, script)
+    assert _types(ws) == ["snapshot", "snapshot"]
+
+
+def test_resync_works_even_without_commands_and_with_delta_off(tmp_path):
+    script = [WELCOME] + [None] * 8 + [json.dumps({"t": "resync"})] + [None] * 8 + [ConnClosed(4001)]
+    rig, ws = _rig_source(tmp_path, lambda: {"phase": "flying"}, script)
+    assert _types(ws) == ["snapshot", "snapshot"]
+
+
+def test_unknown_server_messages_are_ignored(tmp_path):
+    junk = [json.dumps({"t": "mystery", "x": 1}), "not json", json.dumps([1]), json.dumps({"t": "delta"}), json.dumps({"t": "resync", "x": "y" * 5000})]
+    rig, ws = _rig_source(tmp_path, lambda: {"phase": "flying"}, [WELCOME_DELTA, None] + junk + [None] * 5 + [ConnClosed(4001)])
+    assert _types(ws) == ["snapshot"] and rig.say_text().count("errore") == 0   # the oversized "resync" is dropped too
+
+
+def test_keyframe_every_60_sends(tmp_path):
+    clock = Clock()
+    n = {"i": 0}
+
+    def src():
+        n["i"] += 1
+        return _view(n["i"])
+    sender = uplink._SnapshotSender(src, lambda m: None, deltas=True, mono=clock)
+    kinds = []
+    for _ in range(130):
+        clock.advance(0.5)   # < 60 s between full ones: the count rules
+        kinds.append(json.loads(sender.next_message())["t"])
+    full_at = [i for i, k in enumerate(kinds) if k == "snapshot"]
+    assert full_at == [0, 61, 122] and kinds.count("delta") == 127
+
+
+def test_keyframe_every_60_seconds(tmp_path):
+    clock = Clock()
+    n = {"i": 0}
+
+    def src():
+        n["i"] += 1
+        return _view(n["i"])
+    sender = uplink._SnapshotSender(src, lambda m: None, deltas=True, mono=clock)
+    kinds = []
+    for _ in range(7):
+        kinds.append(json.loads(sender.next_message())["t"])
+        clock.advance(20)
+    assert kinds == ["snapshot", "delta", "delta", "snapshot", "delta", "delta", "snapshot"]
+
+
+def test_reconnection_starts_from_a_full_snapshot_with_seq_1(tmp_path):
+    n = {"i": 0}
+
+    def src():
+        n["i"] += 1
+        return _view(n["i"])
+    rig = Rig(tmp_path, FakeHttp({}), tokens=good_tokens(), snapshot_source=src, wait_limit=3)
+    wss = []
+
+    def factory(k):
+        ws = FakeWs(rig.clock, [WELCOME_DELTA] + [None] * 8 + [ConnClosed(1006) if k < 2 else ConnClosed(4001)])
+        wss.append(ws)
+        return ws
+    rig.ws_factory = factory
+    rig.run()
+    assert len(wss) == 2
+    for w in wss:
+        ms = [m for m in w.sent if m["t"] in ("snapshot", "delta")]
+        assert ms[0]["t"] == "snapshot" and ms[0]["seq"] == 1 and ms[1]["t"] == "delta" and ms[1]["base"] == 1
+
+
+def test_a_server_that_stops_announcing_delta_on_reconnect_gets_full_snapshots(tmp_path):
+    rig = Rig(tmp_path, FakeHttp({}), tokens=good_tokens(), snapshot_source=lambda: _view(int(rig.clock.now)), wait_limit=3)
+    wss = []
+
+    def factory(k):
+        ws = FakeWs(rig.clock, [WELCOME_DELTA if k == 1 else WELCOME] + [None] * 10 + [ConnClosed(1006) if k < 2 else ConnClosed(4001)])
+        wss.append(ws)
+        return ws
+    rig.ws_factory = factory
+    rig.run()
+    assert "delta" in _types(wss[0]) and set(_types(wss[1])) == {"snapshot"}
+
+
+def test_delta_equals_full_when_rebuilt_by_the_server_side_function(tmp_path):
+    from server import wire
+    import snapshot as S
+    seq = [{"phase": "flying", "log": ["a"], "flight": [["Pitch", "1"]]},
+           {"phase": "flying", "log": ["a", "b"], "flight": [["Pitch", "1"]]},
+           {"phase": "briefing", "flight": [["Pitch", "1"]]},
+           {"phase": "briefing", "flight": [["Pitch", "2"]], "spoke_n": 3}]
+    it = iter(seq + [seq[-1]] * 50)
+    rig, ws = _rig_source(tmp_path, lambda: next(it), [WELCOME_DELTA] + [None] * 25 + [ConnClosed(4001)])
+    msgs = [m for m in ws.sent if m["t"] in ("snapshot", "delta")]
+    state = msgs[0]["d"]
+    for m in msgs[1:]:
+        state = wire.apply_delta(state, m["d"], m["rm"])
+    assert state == wire.sanitize_snapshot(seq[-1])

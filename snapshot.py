@@ -7,6 +7,7 @@ nell'allowlist.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 
 from server import wire
@@ -27,3 +28,20 @@ def remote_view(snap: dict) -> dict:
     if len(dumps(view).encode("utf-8")) > SOFT_LIMIT and view.get("monitor"):
         view["monitor"] = []
     return view
+
+
+def section_hashes(view: dict) -> dict:
+    """Hash of each top-level section (the unit of the diff)."""
+    return {k: hashlib.sha1(dumps(v).encode("utf-8")).digest() for k, v in view.items()}
+
+
+def diff_sections(old_hashes: dict, view: dict) -> tuple:
+    """(changed sections, removed keys, new hashes) of `view` against the hashes of the last state sent.
+    Removals are tombstones (`rm`). When the phase changes `flight` always travels with it (its content depends on
+    the phase: see wire.apply_delta)."""
+    new = section_hashes(view)
+    changed = {k: view[k] for k, h in new.items() if old_hashes.get(k) != h}
+    if "phase" in changed and "flight" in view:
+        changed["flight"] = view["flight"]
+    removed = sorted(k for k in old_hashes if k not in new)
+    return changed, removed, new

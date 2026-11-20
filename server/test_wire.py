@@ -220,3 +220,147 @@ def test_wire_imports_only_the_standard_library():
     code = "import sys; import server.wire; bad=[m for m in ('fastapi','uvicorn','websockets','starlette') if m in sys.modules]; print(bad)"
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True).stdout.strip()
     assert out == "[]"
+
+
+# ---------------------------------------------------------------- deltas (U4)
+
+import random
+
+import snapshot
+
+
+def _mutate(rng, d: dict) -> dict:
+    d = copy.deepcopy(d)
+    for _ in range(rng.randint(1, 4)):
+        c = rng.randrange(9)
+        if c == 0:
+            d["phase"] = rng.choice(["flying", "briefing", "flying"])
+        elif c == 1:
+            d["flight"] = [r for r in ([["Position", POS]] if rng.random() < 0.6 else []) +
+                           [["Ground speed", f"{rng.randint(100, 300)} kt"], ["Latitude", LAT]]]
+        elif c == 2:
+            d.pop(rng.choice(["wx_dest", "log", "plan", "clearance", "flight", "pills", "monitor", "spoke_n"]), None)
+        elif c == 3:
+            d["fields"] = dict(d.get("fields", {}), v1=str(rng.randint(100, 160)))
+        elif c == 4:
+            d["log"] = [f"12:{rng.randint(10, 59)}  line {i}" for i in range(rng.randint(0, 30))]
+        elif c == 5:
+            d["wx_dest"] = rng.choice([None, {"icao": "EDDF", "line": f"Wind {rng.randint(0, 359)}/12", "raw": "x"}])
+        elif c == 6:
+            d["spoke_n"] = rng.randint(0, 50)
+        elif c == 7:
+            d["plan"] = {"flight": "DLH1", "waypoints": [{"ident": f"W{i}", "alt": i} for i in range(rng.randint(0, 40))]}
+        else:
+            d["pills"] = {"gs": f"{rng.randint(100, 300)} kt"}
+    return d
+
+
+def test_full_and_full_plus_delta_give_the_same_state_on_random_sequences():
+    rng = random.Random(20261120)
+    raw = base()
+    state = wire.sanitize_snapshot(raw)
+    hashes = snapshot.section_hashes(state)
+    sizes = []
+    for step in range(300):
+        raw = _mutate(rng, raw)
+        if "phase" not in raw:
+            raw["phase"] = "flying"
+        full = wire.sanitize_snapshot(raw)
+        # PC side: the delta is made from the sanitized view; server side: the same allowlist is applied again
+        d, rm, hashes = snapshot.diff_sections(hashes, full)
+        state = wire.apply_delta(state, json.loads(json.dumps(d)), rm)
+        assert state == full, step
+        sizes.append(len(json.dumps(d)))
+    assert max(sizes) < len(json.dumps(full)) * 3 and min(sizes) <= 2
+
+
+def test_delta_sections_are_sanitized_like_the_full_snapshot():
+    state = wire.sanitize_snapshot(base())
+    raw = copy.deepcopy(base())
+    raw["log"] = ["x\x00y"]
+    raw["plan"] = dict(raw["plan"], bogus=1)
+    out = wire.apply_delta(state, {"log": raw["log"], "plan": raw["plan"], "evil": {"a": 1}, "sim_error": "boom"}, [])
+    assert out["log"] == ["x y"] and "bogus" not in out["plan"] and "evil" not in out and "sim_error" not in out
+    for bad in ({"fields": {"a": 5}}, {"log": ["x" * 301]}, {"plan": {"waypoints": [{}] * 301}}, {"flight": "no"}, {"monitor": [1]}):
+        with pytest.raises(wire.SnapshotError):
+            wire.apply_delta(state, bad, [])
+    assert state == wire.sanitize_snapshot(base())  # the base is never modified
+
+
+def test_delta_keeps_the_allowlist_for_position_and_coordinates():
+    state = wire.sanitize_snapshot(with_flight([["Pitch", "1"]]))
+    out = wire.apply_delta(state, {"flight": [["Position", POS], ["Latitude", LAT], ["Pitch", "2"]]}, [])
+    assert out["flight"] == [["Position", POS], ["Pitch", "2"]]
+    out = wire.apply_delta(state, {"flight": [["Position", "1.5 N 2.5 E"], ["Pitch", "2"]]}, [])
+    assert out["flight"] == [["Pitch", "2"]]
+    out = wire.apply_delta(state, {"monitor": [["g", [["Latitude", LAT], ["Position", POS], ["GS", "1", "", "1"]]]]}, [])
+    assert out["monitor"] == [["g", [["GS", "1", "", "1"]]]]
+    assert LAT not in json.dumps(out) and LON not in json.dumps(out)
+
+
+def test_flight_follows_the_phase():
+    state = wire.sanitize_snapshot(with_flight([["Position", POS], ["Pitch", "1"]]))
+    assert state["flight"][0][0] == "Position"
+    # the phase goes to the briefing: flight must travel with it, and the Position row is dropped
+    with pytest.raises(wire.SnapshotError):
+        wire.apply_delta(state, {"phase": "briefing"}, [])
+    out = wire.apply_delta(state, {"phase": "briefing", "flight": [["Position", POS], ["Pitch", "1"]]}, [])
+    assert out["phase"] == "briefing" and out["flight"] == [["Pitch", "1"]]
+    assert wire.apply_delta(state, {"phase": "briefing"}, ["flight"]) == {k: v for k, v in dict(state, phase="briefing").items() if k != "flight"}
+    # without a flight section in the base, a phase change alone is fine
+    nf = {k: v for k, v in state.items() if k != "flight"}
+    assert wire.apply_delta(nf, {"phase": "briefing"}, [])["phase"] == "briefing"
+    # same phase: flight may stay untouched
+    assert wire.apply_delta(state, {"spoke_n": 9}, [])["flight"] == state["flight"]
+    # the sender always includes flight when the phase changes
+    h = snapshot.section_hashes(state)
+    nxt = dict(state, phase="briefing")
+    d, rm, _ = snapshot.diff_sections(h, nxt)
+    assert set(d) == {"phase", "flight"} and rm == []
+
+
+def test_tombstones_remove_sections_and_phase_cannot_be_removed():
+    state = wire.sanitize_snapshot(base())
+    out = wire.apply_delta(state, {}, ["wx_dest", "log", "not_a_section"])
+    assert "wx_dest" not in out and "log" not in out and out["plan"] == state["plan"]
+    for rm in (["phase"], [5], "log"):
+        with pytest.raises(wire.SnapshotError):
+            wire.apply_delta(state, {}, rm)
+    with pytest.raises(wire.SnapshotError):
+        wire.apply_delta(state, {"log": []}, ["log"])  # changed and removed together: ambiguous
+    d, rm, _ = snapshot.diff_sections(snapshot.section_hashes(state), {k: v for k, v in state.items() if k not in ("log", "wx_dest")})
+    assert d == {} and rm == ["log", "wx_dest"]
+
+
+def test_delta_limits_are_the_same_as_the_full_ones():
+    state = wire.sanitize_snapshot(base())
+    items = [{"id": f"a.{i}", "text": "t"} for i in range(60)]
+    cl = {"bad": 0, "phase": {"id": "a", "name": "A"}, "subphases": [{"id": "x", "name": "", "items": items}, {"id": "y", "name": "", "items": items}]}
+    with pytest.raises(wire.SnapshotError):
+        wire.sanitize_snapshot(dict(base(), checklist=cl))
+    with pytest.raises(wire.SnapshotError):
+        wire.apply_delta(state, {"checklist": cl}, [])
+    with pytest.raises(wire.SnapshotError):
+        wire.apply_delta({}, {"log": []}, [])  # phase missing
+    with pytest.raises(wire.SnapshotError):
+        wire.apply_delta(state, [], [])
+
+
+def test_worst_case_snapshot_and_its_delta_stay_under_the_target():
+    raw = base()
+    raw["plan"] = dict(raw["plan"], waypoints=[{"ident": f"W{i}", "via": "UL613", "alt": 30000} for i in range(300)])
+    raw["log"] = ["x" * 300] * 30
+    raw["monitor"] = [[f"g{i}", [["r" * 40, "v" * 100, "u", "w"] for _ in range(6)]] for i in range(24)]
+    full = wire.sanitize_snapshot(raw)
+    assert len(snapshot.dumps(full).encode()) <= wire.MAX_SNAPSHOT_TARGET
+    d, rm, _ = snapshot.diff_sections({}, full)
+    assert wire.apply_delta({"phase": "x"}, d, rm) == full and len(snapshot.dumps(d)) <= len(snapshot.dumps(full))
+
+
+def test_welcome_announces_features_only_when_enabled():
+    assert wire.welcome_message() == {"t": "welcome", "v": 1, "heartbeat": wire.HEARTBEAT, "max_msg": wire.MAX_MSG}
+    assert "feat" not in wire.welcome_message(())
+    assert wire.welcome_message((wire.FEAT_DELTA,))["feat"] == ["delta"]
+    assert (wire.T_DELTA, wire.T_RESYNC, wire.FEAT_DELTA, wire.DELTA_VERSION) == ("delta", "resync", "delta", 1)
+    import protocol
+    assert protocol.T_DELTA == "delta" and protocol.apply_delta is wire.apply_delta

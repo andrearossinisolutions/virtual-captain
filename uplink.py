@@ -36,6 +36,8 @@ REFRESH_MARGIN = 120.0      # secondi: sotto questa soglia l'access token si rin
 STABLE_AFTER = 30.0         # secondi di collegamento stabile dopo i quali il backoff riparte da 1 s
 MAX_LOGIN_RESTARTS = 3      # nuovi codici dopo la scadenza del primo
 RECV_TICK = 0.2
+KEYFRAME_EVERY = 60         # invii (delta) tra due snapshot completi (keyframe)
+KEYFRAME_SECONDS = 60.0     # secondi massimi tra due snapshot completi
 SNAPSHOT_EVERY = 1.0        # secondi minimi tra due letture dello snapshot (max 1 Hz, si invia solo se cambia)
 SEND_TIMEOUT = 5.0         # secondi massimi per un invio sul WebSocket
 MAX_FRESH_REJECTS = 3       # 401 consecutivi su token appena rinnovati: serve un nuovo collegamento
@@ -519,6 +521,7 @@ class Uplink:
                 return "bad", None
             beat = data.get("heartbeat")
             beat = float(beat) if isinstance(beat, (int, float)) and not isinstance(beat, bool) and 1 <= beat <= 30 else float(protocol.HEARTBEAT)
+            deltas = _announces_delta(data)
             hello = {"t": protocol.T_HELLO, "v": protocol.PROTOCOL_VERSION,
                      "app": f"virtual-captain/{APP_VERSION}", "platform": sys.platform}
             if self.command_target is not None:
@@ -532,7 +535,7 @@ class Uplink:
             self._set(CONNECTED, "collegato al server")
             now = self.mono()
             next_ping, last_rx = now + beat, now
-            snap = _SnapshotSender(self.snapshot_source, self._tell)  # per connessione: seq da 1, il primo invio e' subito dopo l'hello
+            snap = _SnapshotSender(self.snapshot_source, self._tell, deltas=deltas, mono=self.mono)  # per connessione: seq da 1, il primo invio e' subito dopo l'hello
             next_snap = now
             while True:
                 if self.stopping():
@@ -544,8 +547,10 @@ class Uplink:
                 msg = ws.recv(RECV_TICK)
                 if msg is not None:
                     last_rx = self.mono()
-                    if worker is not None and msg:
-                        self._on_message(worker, msg)
+                    if msg:
+                        if self._on_message(worker, msg) == protocol.T_RESYNC:
+                            snap.request_full()   # il server ha perso il filo dei delta: completo subito
+                            next_snap = self.mono()
                 now = self.mono()
                 if worker is not None:
                     for res in worker.drain():
@@ -579,20 +584,41 @@ class Uplink:
             ws.close()
 
     @staticmethod
-    def _on_message(worker, msg: str) -> None:
-        """Messaggio del server: solo `cmd` (al resto basta il keep-alive). Mai il contenuto in console."""
+    def _on_message(worker, msg: str) -> Optional[str]:
+        """Messaggio del server: `cmd` (se c'e' il worker) e `resync` (ritorna il tipo); il resto e' ignorato (basta
+        il keep-alive). Mai il contenuto in console."""
         if len(msg.encode("utf-8", "replace")) > protocol.MAX_CMD_BYTES:
-            return
+            return None
         data = _parse(msg)
-        if data.get("t") == protocol.T_CMD:
+        kind = data.get("t")
+        if kind == protocol.T_CMD and worker is not None:
             worker.submit(data.get("id"), data.get("name"), data.get("d"))
+        elif kind == protocol.T_RESYNC:
+            return protocol.T_RESYNC
+        return None
+
+
+def _announces_delta(welcome: dict) -> bool:
+    """Il welcome annuncia i delta solo con `"feat"` lista breve di testi che contiene "delta"; il resto (assente,
+    malformato, voci sconosciute) e' ignorato: un server vecchio riceve solo snapshot completi."""
+    feat = welcome.get("feat")
+    return (isinstance(feat, list) and len(feat) <= protocol.MAX_CAPS
+            and any(isinstance(f, str) and f == protocol.FEAT_DELTA for f in feat))
 
 
 class _SnapshotSender:
-    """Prende lo snapshot dalla sorgente e produce il messaggio solo se e' cambiato dall'ultimo inviato."""
+    """Prende lo snapshot dalla sorgente e produce il messaggio solo se e' cambiato dall'ultimo inviato.
+    Con `deltas` (annunciati dal server) invia solo le sezioni cambiate rispetto all'ultimo stato inviato, con un
+    completo (keyframe) al primo invio, ogni KEYFRAME_EVERY invii o KEYFRAME_SECONDS secondi, e dopo `request_full`."""
 
-    def __init__(self, source, tell):
+    def __init__(self, source, tell, deltas: bool = False, mono: Callable[[], float] = time.monotonic):
         self.source, self.tell, self.seq, self.last_hash, self.failing = source, tell, 0, None, False
+        self.deltas, self.mono = deltas, mono
+        self.hashes: dict = {}
+        self.since_full, self.full_at, self.need_full = 0, 0.0, True
+
+    def request_full(self) -> None:
+        self.need_full = True
 
     def next_message(self) -> Optional[str]:
         if self.source is None:
@@ -609,11 +635,24 @@ class _SnapshotSender:
             return None
         self.failing = False
         digest = hashlib.sha1(body.encode("utf-8")).digest()
-        if digest == self.last_hash:
+        if digest == self.last_hash and not self.need_full:
             return None
+        now = self.mono()
+        full = (not self.deltas or self.need_full or self.since_full >= KEYFRAME_EVERY
+                or now - self.full_at >= KEYFRAME_SECONDS)
         self.last_hash = digest
+        if full:
+            self.need_full, self.since_full, self.full_at = False, 0, now
+            if self.deltas:
+                self.hashes = snapshot.section_hashes(view)
+            self.seq += 1
+            return '{"t":"%s","sv":%d,"seq":%d,"d":%s}' % (protocol.T_SNAPSHOT, protocol.SNAPSHOT_VERSION, self.seq, body)
+        changed, removed, self.hashes = snapshot.diff_sections(self.hashes, view)
+        self.since_full += 1
         self.seq += 1
-        return '{"t":"%s","sv":%d,"seq":%d,"d":%s}' % (protocol.T_SNAPSHOT, protocol.SNAPSHOT_VERSION, self.seq, body)
+        return '{"t":"%s","dv":%d,"seq":%d,"base":%d,"d":%s,"rm":%s}' % (
+            protocol.T_DELTA, protocol.DELTA_VERSION, self.seq, self.seq - 1, snapshot.dumps(changed),
+            json.dumps(removed, separators=(",", ":")))
 
 
 def _parse(text) -> dict:
