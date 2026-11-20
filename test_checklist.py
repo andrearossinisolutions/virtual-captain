@@ -1072,7 +1072,7 @@ def test_tcas_links():
     by = {i.key: i for i in mon.ITEMS}
     assert by["tcas"].lvar == "S_XPDR_MODE" and by["tcas"].group == "Transponder"
     assert mon.label(by["tcas"], 2) == "TA/RA (2)" and mon.clean_label(by["tcas"], 1) == "TA"
-    assert mon.label(by["xpdr_operation"], 3) == "3" and by["xpdr_atc"].lvar == "S_XPDR_ATC"
+    assert mon.label(by["xpdr_operation"], 1) == "AUTO" and mon.label(by["xpdr_operation"], 3) == "n/d (3)" and by["xpdr_atc"].lvar == "S_XPDR_ATC"
 
 
 def test_cabin_fuel_links():
@@ -1089,22 +1089,24 @@ def test_cabin_fuel_links():
 
 
 
-def test_atc_transponder_manual_item_shows_raw_until_the_map_is_known():
-    """ATC su AUTO: voce manuale (solo grezzi di S_XPDR_OPERATION / S_XPDR_ATC, mai rosso/verde) finche' Andrea non da' i valori reali di STBY/AUTO/ON.
-    Quando ci sono: aggiungere la mappa in monitor.py (MAPS + kind per xpdr_atc) e sostituire il link "show" con {"key": "xpdr_atc", "eq": "AUTO"}."""
+def test_atc_transponder_checks_xpdr_operation():
+    """ATC su AUTO: controlla S_XPDR_OPERATION (0 STBY, 1 AUTO, 2 ON, Andrea 20/11); xpdr_atc resta solo come grezzo nel pannello."""
     cl = C.load()
     iid, sq = "fmgs-performance-glareshield.atc-transponder", "fmgs-performance-glareshield.squawk-code"
-    assert cl.links[iid]["check"] == {"show": ["xpdr_operation", "xpdr_atc"]} and iid not in cl.excluded
+    assert cl.links[iid]["check"] == {"key": "xpdr_operation", "eq": "AUTO"} and iid not in cl.excluded
     ids = [i["id"] for p in cl.phases for sp in p["subphases"] for i in sp["items"]]
     assert ids.index(iid) + 1 == ids.index(sq) and ids.count(iid) == 1
     it = next(i for p in cl.phases for sp in p["subphases"] for i in sp["items"] if i["id"] == iid)
     assert (it["text"], it["response"], it["type"]) == ("ATC Transponder", "AUTO", "action")
-    assert cl.links["before-start.atc-transponder"]["check"] == {"key": "squawk", "eq_ref": "clr.t"}  # quella dello squawk resta
+    assert cl.links["before-start.atc-transponder"]["check"] == {"key": "squawk", "eq_ref": "clr.t"}
     for simp in (False, True):
-        r = cl.evaluate_phase("fmgs-performance-glareshield", mon.clean_labels({"xpdr_operation": 3, "xpdr_atc": 2}), simplified=simp, raw={"xpdr_operation": 3, "xpdr_atc": 2})
-        row = {i["id"]: i for s in r["subphases"] for i in s["items"]}[iid]
-        assert row["status"] == "none" and row["show"] is True and row["raw"] == [["S_XPDR_OPERATION", "3"], ["S_XPDR_ATC", "2"]]
-    assert "XPDR ATC (raw)" in [n for g, rows in mon.build({"xpdr_atc": 2}) for n, *_ in rows]  # visibile anche nel pannello Transponder
+        for v, st in ((0, "bad"), (1, "ok"), (2, "bad"), (None, "na")):
+            mv = {} if v is None else {"xpdr_operation": v}
+            r = cl.evaluate_phase("fmgs-performance-glareshield", mon.clean_labels(mv), simplified=simp, raw=mv)
+            row = {i["id"]: i for s in r["subphases"] for i in s["items"]}[iid]
+            print(simp, v, row["status"]) if False else None
+            assert row["status"] == st, (simp, v, row["status"])
+    assert "XPDR ATC (raw)" in [n for g, rows in mon.build({"xpdr_atc": 2}) for n, *_ in rows]
 
 
 def test_gsx_links():
@@ -1169,7 +1171,7 @@ if __name__ == "__main__":
     test_tcas_links()
     test_cabin_fuel_links()
     test_gsx_links()
-    test_atc_transponder_manual_item_shows_raw_until_the_map_is_known()
+    test_atc_transponder_checks_xpdr_operation()
     test_ai_links()
     test_snapshot_ai_with_metar()
     print("ok tcas/cabin")

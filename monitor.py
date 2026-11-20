@@ -56,6 +56,7 @@ MAPS = {
     "signs": {0: "OFF", 1: "AUTO", 2: "ON"},  # provvisoria: da verificare dal vivo col grezzo
     "emerlt": {0: "OFF", 1: "ARM", 2: "ON"},  # provvisoria: da verificare dal vivo col grezzo
     "tcas": {0: "STBY", 1: "TA", 2: "TA/RA"},  # provvisoria (ipotesi): da verificare dal vivo col grezzo
+    "xpdrop": {0: "STBY", 1: "AUTO", 2: "ON"},  # S_XPDR_OPERATION, verificata dal vivo 20/11 (Andrea)
     "detent": {-1: "BETWEEN", 0: "REVERSE", 1: "REVERSE IDLE", 2: "IDLE", 3: "CLIMB", 4: "FLX", 5: "TOGA"},  # virtuale, dalle LVar INPUT/GATE (thrust.py)
     "autobrake": {0: "OFF", 1: "LO", 2: "MED", 3: "MAX"},  # virtuale, dalle tre lampade (autobrake_state)
     "gsx": GSX_STATES,
@@ -121,7 +122,7 @@ ITEMS: list[Item] = [
     Item("wx_mode", "Weather radar", "WX Mode", "numeric", {"Prep": "as required"}, None, "S_WR_MODE"),
     Item("squawk", "Transponder", "Squawk code", "numeric", {"Before start": "as cleared"}, None, "N_FREQ_XPDR_SELECTED"),  # verificata dal vivo 13/11
     Item("tcas", "Transponder", "TCAS mode selector", "tcas", {"Before T/O": "TA or TA/RA", "After landing": "STBY"}, None, "S_XPDR_MODE"),  # valori 0/1/2 ipotizzati
-    Item("xpdr_operation", "Transponder", "XPDR operation (raw)", "numeric", {}, None, "S_XPDR_OPERATION"),  # solo grezzo, per capire la mappa
+    Item("xpdr_operation", "Transponder", "XPDR operation", "xpdrop", {"Before start": "AUTO"}, None, "S_XPDR_OPERATION"),  # 0 STBY, 1 AUTO, 2 ON (Andrea 20/11)
     Item("xpdr_atc", "Transponder", "XPDR ATC (raw)", "numeric", {}, None, "S_XPDR_ATC"),  # solo grezzo, per capire la mappa
     # GSX (mappa da confermare, vedi GSX_STATES): voce senza colore se la L-var non risponde o il valore e' fuori mappa
     Item("gsx_refuel", "GSX", "GSX refueling state", "gsx", {}, None, "FSDT_GSX_REFUELING_STATE"),

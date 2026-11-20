@@ -770,10 +770,8 @@
  },
  "fmgs-performance-glareshield.atc-transponder": {
   "check": {
-   "show": [
-    "xpdr_operation",
-    "xpdr_atc"
-   ]
+   "key": "xpdr_operation",
+   "eq": "AUTO"
   },
   "verified": true
  },
