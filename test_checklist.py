@@ -1110,7 +1110,7 @@ def test_atc_transponder_manual_item_shows_raw_until_the_map_is_known():
 def test_gsx_links():
     cl = C.load()
     fc, ct, bd = "cockpit-preparation.start-fueling", "cockpit-preparation.start-catering", "cockpit-preparation.start-boarding-passengers"
-    assert cl.links[fc]["check"] == {"gsx": ["gsx_refuel"], "set": "done"} and cl.links[ct]["check"] == {"gsx": ["gsx_cater"], "set": "done"} and cl.links[bd]["check"] == {"gsx": ["gsx_board"], "set": "done"}  # verdi solo a servizio completato (20/11)
+    assert cl.links[fc]["check"] == {"gsx": ["gsx_refuel"]} and cl.links[ct]["check"] == {"gsx": ["gsx_cater"]} and cl.links[bd]["check"] == {"gsx": ["gsx_board"]}  # voci "start": verdi da IN PROGRESS (GSX_ACTIVE)
     assert not any("fueling-catering" in i["id"] for p in cl.phases for sp in p["subphases"] for i in sp["items"])
     first = [i["id"] for i in cl.phase("cockpit-preparation")["subphases"][0]["items"]]
     assert first == [fc, ct]  # prima voce della fase, poi i controlli successivi
@@ -1131,14 +1131,17 @@ def test_gsx_links():
     labels = mon.clean_labels({"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 4})
     rows = {i["id"]: i for s in cl.evaluate_phase(ph, labels, raw={"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 4})["subphases"] for i in s["items"]}
     assert rows[fc]["status"] == "ok" and rows[fc]["raw"] == [["FSDT_GSX_REFUELING_STATE", "6"]]
-    assert rows[ct]["status"] == "bad" and rows[ct]["raw"] == [["FSDT_GSX_CATERING_STATE", "5"]]
-    # servizi indipendenti: refuel ancora REQUESTED (rosso) non blocca il catering gia' completato (verde); IN PROGRESS e' rosso (verde solo a COMPLETED)
-    mix = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": 4, "gsx_cater": 6}))["subphases"] for i in s["items"]}
+    assert rows[ct]["status"] == "ok" and rows[ct]["raw"] == [["FSDT_GSX_CATERING_STATE", "5"]]
+    # servizi indipendenti: refuel ancora REQUESTED (rosso) non blocca il catering gia' IN PROGRESS (verde)
+    mix = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": 4, "gsx_cater": 5}))["subphases"] for i in s["items"]}
     assert mix[fc]["status"] == "bad" and mix[ct]["status"] == "ok"
-    for st in (1, 2, 3, 4, 5):
+    for st, want in ((1, "bad"), (2, "bad"), (3, "bad"), (4, "bad"), (5, "ok"), (6, "ok")):  # voce start: verde da IN PROGRESS
         r = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": st}))["subphases"] for i in s["items"]}
-        assert r[fc]["status"] == "bad", st
-    assert {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": 6}))["subphases"] for i in s["items"]}[fc]["status"] == "ok"
+        assert r[fc]["status"] == want, st
+    # voce di completamento: rossa fino a COMPLETED
+    for st, want in ((4, "bad"), (5, "bad"), (6, "ok")):
+        r = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": st}))["subphases"] for i in s["items"]}
+        assert r[cr]["status"] == want, st
     assert rows[bd]["status"] == "bad" and rows[bd]["type"] == "announce"
     # grezzo sempre accanto allo stato (live_raw, anche senza --test-links) e riga NOW sempre mostrata
     lv = {i["id"]: i for s in cl.evaluate_phase(ph, labels, live_raw={"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 1})["subphases"] for i in s["items"]}

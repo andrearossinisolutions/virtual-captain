@@ -180,10 +180,10 @@ def test_sample_gap_does_not_freeze():
     assert F1 in st.latch.ids()
 
 
-def test_gsx_service_latch_green_after_return_to_avail():
+def test_gsx_completion_latch_green_after_return_to_avail():
     from checklist_eval import evaluate
     import monitor as mon
-    chk = {"gsx": ["gsx_refuel"], "set": "done"}
+    chk = {"gsx": ["gsx_refuel"], "set": "done"}  # voce di completamento (es. refueling completed)
     la, t = Latch(), 0.0
     for st in ("AVAIL", "REQUESTED", "IN PROGRESS"):  # non completato: rosso, niente latch
         r = evaluate(chk, {"gsx_refuel": st})
@@ -195,3 +195,10 @@ def test_gsx_service_latch_green_after_return_to_avail():
     assert "fc" in la
     assert evaluate(chk, {"gsx_refuel": "AVAIL"})["status"] == "bad" and "fc" in la  # ritorno ad AVAIL: il latch tiene il verde
     assert evaluate(chk, {"gsx_refuel": None})["status"] == "na"  # None: neutro
+
+
+def test_gsx_start_item_green_from_in_progress():
+    from checklist_eval import evaluate
+    chk = {"gsx": ["gsx_refuel"]}  # voce "start": verde da IN PROGRESS
+    for st, want in (("AVAIL", "bad"), ("REQUESTED", "bad"), ("IN PROGRESS", "ok"), ("COMPLETED", "ok")):
+        assert evaluate(chk, {"gsx_refuel": st})["status"] == want, st
