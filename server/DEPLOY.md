@@ -91,7 +91,7 @@ Il DNS deve gia' puntare all'IP del VPS (<IP_VPS>; controlla con `dig +short vir
 
 ## H. Apache SSL definitivo
 
-certbot ha creato `/etc/apache2/sites-available/virtual-captain-le-ssl.conf`. Confrontalo con `server/deploy/apache-ssl.conf.example` e porta dentro: redirect di `www`, HSTS `max-age=86400` (poi lo alziamo), `ProxyPass` di `/` e `/ws/` verso `127.0.0.1:8100`, mantenendo le righe `SSLCertificate*` generate da certbot. Moduli: `sudo a2enmod proxy proxy_http proxy_wstunnel rewrite headers ssl`.
+certbot ha creato `/etc/apache2/sites-available/virtual-captain-le-ssl.conf`. Confrontalo con `server/deploy/apache-ssl.conf.example` e porta dentro: redirect di `www`, HSTS `max-age=31536000` (senza includeSubDomains né preload), `ProxyPass` di `/` e `/ws/` verso `127.0.0.1:8100`, mantenendo le righe `SSLCertificate*` generate da certbot. Moduli: `sudo a2enmod proxy proxy_http proxy_wstunnel rewrite headers ssl`.
 ```
 $ sudo apachectl configtest && sudo systemctl reload apache2
 ```
@@ -196,7 +196,7 @@ Nessun token viaggia in query string: i link nelle mail usano il frammento (`/ve
 
 ### Dimensione delle richieste
 
-L'app legge il corpo a blocchi con tetto di 8 KB (413 oltre; Content-Length non fidato). **Da applicare da Andrea** nel vhost SSL, dentro il blocco che fa il proxy: `LimitRequestBody 16384`, cosi' Apache scarta i corpi enormi prima dell'app.
+L'app legge il corpo a blocchi con tetto di 8 KB (413 oltre; Content-Length non fidato). **Da applicare da Andrea** nel vhost SSL, dentro il blocco che fa il proxy: `LimitRequestBody 16384`, cosi' Apache scarta i corpi enormi prima dell'app (gia' presente in `apache-ssl.conf.example`; vedi la sezione "Messa in sicurezza operativa (C4)").
 
 ### Compromessi noti (decisioni consapevoli)
 
@@ -334,3 +334,97 @@ Con il programma sul PC avviato (`python main.py`, di default collega al server)
 - Le chiusure e gli invii lato server hanno un tempo massimo (5 s; 2 s per chiudere la vecchia connessione sostituita): un socket che non risponde non blocca le altre.
 - Dopo `invalid_grant`, 4003 o 3 rifiuti 401 di fila su token appena rinnovati il programma NON chiede da solo un nuovo codice: resta in "relink_needed" e dice di riavviare o usare `--link`. Un nuovo codice automatico e' da valutare in un passo successivo.
 - Sul PC Windows i token stanno in `%LOCALAPPDATA%\VirtualCaptain\` (non roaming).
+
+## Messa in sicurezza operativa (C4)
+
+Nessun cambio al codice dell'app: sono file di esempio da installare a mano sul VPS (sudo). Un push che tocca solo `server/deploy/**` non fa partire il deploy, quindi **non** installa nulla da solo. Ordine consigliato: Apache, backup, logrotate. Dopo ogni passo fai la verifica.
+
+### 1. Apache: header, limite del body, X-Forwarded-For
+
+Il file `server/deploy/apache-ssl.conf.example` ora contiene: `LimitRequestBody 16384`, HSTS `max-age=31536000` (**senza** includeSubDomains e preload: li aggiungi tu quando confermi che l'HTTPS va bene ovunque) e `RequestHeader unset X-Forwarded-For` prima del proxy. L'unset elimina l'XFF mandato dal client; `mod_proxy` poi aggiunge l'IP reale come unico valore, e l'app (che usa l'ultimo valore, solo da 127.0.0.1) continua a vedere l'IP vero. `LimitRequestBody` vale solo per i corpi HTTP: il WebSocket `/ws/` non e' toccato (l'upgrade non ha corpo, i frame sono limitati da `--ws-max-size`). Il sito non ha upload.
+
+```
+$ sudo cp /etc/apache2/sites-available/virtual-captain-le-ssl.conf /etc/apache2/sites-available/virtual-captain-le-ssl.conf.bak
+$ sudo nano /etc/apache2/sites-available/virtual-captain-le-ssl.conf   # aggiungi le tre direttive (o confronta con l'esempio), tieni le righe SSLCertificate*
+$ sudo apachectl configtest && sudo systemctl reload apache2
+```
+**Verifica** (dal Mac, dominio reale):
+```
+$ curl -s -D - -o /dev/null https://virtualcaptain.rossinisolutions.com/ | grep -i strict-transport      # max-age=31536000, nessun includeSubDomains
+$ head -c 20000 /dev/zero | tr '\0' 'a' > /tmp/big.txt
+$ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' --data-binary @/tmp/big.txt https://virtualcaptain.rossinisolutions.com/api/auth/login   # 413 (Apache)
+$ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{"email":"x@example.com","password":"x"}' https://virtualcaptain.rossinisolutions.com/api/auth/login   # risposta dell'app (400/401/429), non 413
+```
+Per l'XFF, prova diretta: aggiungi **temporaneamente** nel vhost SSL, sopra `CustomLog`, `LogFormat "%h XFF=[%{X-Forwarded-For}i]" xfftest` e cambia l'ultimo argomento di `CustomLog ... combined` in `xfftest` (o aggiungi una seconda riga `CustomLog ${APACHE_LOG_DIR}/virtual-captain/xfftest.log xfftest`); `configtest` e reload. Poi dal Mac: `curl -s -o /dev/null -H 'X-Forwarded-For: 1.2.3.4' https://virtualcaptain.rossinisolutions.com/healthz`. Nota: `%{X-Forwarded-For}i` mostra l'header **come arriva ad Apache**, prima dell'unset, quindi vedrai `1.2.3.4`; la prova che l'unset funziona e' la seconda: ripeti piu' volte `POST /api/auth/login` con XFF diversi (`1.2.3.4`, `5.6.7.8`, ...) e verifica che scatti comunque il 429 dello stesso bucket (se l'XFF finto passasse, ogni valore avrebbe un bucket nuovo e non scatterebbe mai). **Poi ripristina** il vhost dal `.bak` o togli le righe di prova e ricarica.
+Prova anche che il WebSocket e il login web funzionino ancora (apri `/waiting` o `/flight` da loggato).
+**Ritorno indietro**: `sudo cp ...le-ssl.conf.bak ...le-ssl.conf && sudo systemctl reload apache2`.
+
+### 2. Backup giornaliero del database
+
+Serve `sqlite3` sul VPS (`sudo apt install sqlite3`). Lo script fa `sqlite3 .backup` (copia consistente a servizio acceso) in `/var/www/virtual-captain/shared/backup/`, verifica l'`integrity_check` della copia, la salva con permessi 600 (cartella 700) e tiene le ultime 7. Exit code: 0 ok, 1 configurazione/DB mancante, 2 backup fallito, 3 copia corrotta. Nei log solo nomi file. I backup contengono dati degli account (hash di password e token): restano sul VPS, non copiarli in chat ne' in repo.
+
+```
+$ sudo apt install sqlite3        # se manca
+$ sudo install -o root -g root -m 755 server/deploy/backup-db.sh /var/www/virtual-captain/scripts/backup-db.sh
+$ sudo cp server/deploy/virtual-captain-backup.service /etc/systemd/system/virtual-captain-backup.service
+$ sudo cp server/deploy/virtual-captain-backup.timer /etc/systemd/system/virtual-captain-backup.timer
+$ sudo nano /etc/systemd/system/virtual-captain-backup.service   # sostituisci User/Group arossini con il tuo utente VPS (come virtual-captain.service)
+$ sudo systemctl daemon-reload
+$ sudo systemctl enable --now virtual-captain-backup.timer
+$ sudo systemctl start virtual-captain-backup.service            # prima copia subito
+```
+Se hai cambiato `DB_PATH` nell'env, aggiungi nel `.service` `Environment=DB_PATH=<stesso percorso>` (il backup non carica `/etc/virtual-captain/env`: non gli servono segreti).
+**Verifica**:
+```
+$ systemctl status virtual-captain-backup.service --no-pager     # exited, status=0
+$ journalctl -u virtual-captain-backup -e --no-pager             # "created virtual-captain-...db"
+$ systemctl list-timers virtual-captain-backup.timer
+$ ls -l /var/www/virtual-captain/shared/backup/                  # -rw------- , max 7 file
+```
+**Ritorno indietro**: `sudo systemctl disable --now virtual-captain-backup.timer && sudo rm /etc/systemd/system/virtual-captain-backup.{service,timer} /var/www/virtual-captain/scripts/backup-db.sh && sudo systemctl daemon-reload` (le copie restano finche' non le cancelli).
+
+**Note**: con un `DB_PATH` diverso dal default servono anche `ReadWritePaths=<cartella del DB>` nel `.service` e la cartella scrivibile dall'utente del servizio (SQLite crea i file `-wal`/`-shm` accanto al DB). Con un `BACKUP_DIR` personalizzato lo script lo crea con umask 077 (modo 700) e anche li' serve `ReadWritePaths`. Le copie `.partial-*` rimaste da un'esecuzione interrotta vengono cancellate dopo 1 giorno.
+**Controllo periodico** (ogni tanto, o dopo un riavvio del VPS): `systemctl --failed` (non deve elencare `virtual-captain-backup`) e `systemctl list-timers virtual-captain-backup.timer` (NEXT e LAST sensati). Niente `OnFailure=`: richiederebbe un'altra unit (e un canale di notifica) che per ora non c'e'; basta il controllo a mano.
+
+**Ripristino di prova** (da fare una volta, senza toccare il DB vivo):
+```
+$ LAST=$(ls -1 /var/www/virtual-captain/shared/backup/virtual-captain-*.db | sort | tail -1)
+$ sqlite3 "$LAST" 'PRAGMA integrity_check;'                      # ok
+$ sqlite3 "$LAST" '.tables'                                      # le tabelle attese (users, ...)
+$ sqlite3 "$LAST" 'SELECT count(*) FROM users;'                  # numero plausibile
+```
+**Ripristino vero** (solo se il DB e' perso/corrotto):
+```
+$ LAST=$(ls -1 /var/www/virtual-captain/shared/backup/virtual-captain-*.db | sort | tail -1)
+$ sudo systemctl stop virtual-captain
+$ mv /var/www/virtual-captain/shared/virtual-captain.db /var/www/virtual-captain/shared/virtual-captain.db.broken
+$ rm -f /var/www/virtual-captain/shared/virtual-captain.db-wal /var/www/virtual-captain/shared/virtual-captain.db-shm
+$ cp "$LAST" /var/www/virtual-captain/shared/virtual-captain.db && chmod 600 /var/www/virtual-captain/shared/virtual-captain.db
+$ sudo systemctl start virtual-captain && curl -s https://virtualcaptain.rossinisolutions.com/healthz
+```
+Si perdono le scritture dopo l'ultima copia (al piu' 24 ore).
+
+### 3. Log del sito in una sottocartella + logrotate a 14 giorni
+
+Il file stock `/etc/logrotate.d/apache2` ruota `/var/log/apache2/*.log` (con la sua retention, non la nostra): se i log del sito restassero li', i due blocchi si contenderebbero gli stessi file e i 14 giorni non sarebbero garantiti. Per questo il vhost scrive in `/var/log/apache2/virtual-captain/` (il pattern `*.log` non scende nelle sottocartelle) e il nostro file ruota solo quella.
+
+```
+$ sudo install -d -o root -g adm -m 750 /var/log/apache2/virtual-captain
+$ sudo cp /etc/apache2/sites-available/virtual-captain-le-ssl.conf{,.bak2}
+$ sudo cp /etc/apache2/sites-available/virtual-captain.conf{,.bak2}                       # vhost porta 80, se ancora presente
+$ sudo nano /etc/apache2/sites-available/virtual-captain-le-ssl.conf                      # ErrorLog/CustomLog -> .../virtual-captain/error.log e access.log (idem il file della porta 80)
+$ sudo apachectl configtest && sudo systemctl reload apache2
+$ sudo install -o root -g root -m 644 server/deploy/logrotate-virtual-captain /etc/logrotate.d/virtual-captain
+$ sudo logrotate -d /etc/logrotate.d/virtual-captain                                      # prova a secco
+```
+I vecchi `/var/log/apache2/virtual-captain-*.log` restano dove sono: continuano a essere ruotati dal file stock finche' non li cancelli (`sudo rm` quando non ti servono; Apache non li riscrive piu').
+**Verifica**: `ls -l /var/log/apache2/virtual-captain/` mostra `error.log` e `access.log` che crescono; `logrotate -d` elenca solo i due file della sottocartella, senza "duplicate log entry"; `grep -rn virtual-captain /etc/logrotate.d/` mostra solo il nostro file. La rotazione reale e' giornaliera (timer di sistema); per forzarla una volta: `sudo logrotate -f /etc/logrotate.d/virtual-captain`.
+**Ritorno indietro**: rimetti i `.bak2` dei vhost, `sudo apachectl configtest && sudo systemctl reload apache2`, `sudo rm /etc/logrotate.d/virtual-captain`.
+
+### Variabili d'ambiente
+
+`server/env.example` elenca ora tutti i nomi letti da `config.py` (verificati uno a uno), compresi `RATE_ACCOUNT_USER_MINUTE` (default 10), `RATE_ACCOUNT_IP_MINUTE` (60), `HASH_QUEUE_MAX` (8) e `VC_REMOTE_COMMANDS` (`off` = interruttore della rotta dei comandi, risponde 503). Tutte facoltative.
+
+### Rollback complessivo di C4
+
+Apache: ripristina il `.bak` e ricarica. Backup: disabilita timer come sopra. Logrotate: rimuovi il file. Nessuna di queste cose tocca l'app o il DB vivo.

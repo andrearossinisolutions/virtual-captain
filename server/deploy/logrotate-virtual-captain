@@ -1,0 +1,17 @@
+# Install as /etc/logrotate.d/virtual-captain (root:root 644).
+# The site logs live in /var/log/apache2/virtual-captain/ (see apache-ssl.conf.example): the
+# stock /etc/logrotate.d/apache2 only matches /var/log/apache2/*.log, so it does not touch
+# them and there is no duplicate entry. Access logs carry IPs: 14 days, no more.
+/var/log/apache2/virtual-captain/*.log {
+    daily
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    create 640 root adm
+    sharedscripts
+    postrotate
+        systemctl reload apache2 > /dev/null 2>&1 || true
+    endscript
+}

@@ -1,0 +1,18 @@
+# Replace User/Group (arossini) with your VPS user (same as virtual-captain.service).
+[Unit]
+Description=Virtual Captain database backup
+
+[Service]
+Type=oneshot
+User=arossini
+Group=arossini
+ExecStart=/var/www/virtual-captain/scripts/backup-db.sh
+# No EnvironmentFile on purpose: the backup needs no secrets. If you changed DB_PATH
+# in /etc/virtual-captain/env, add: Environment=DB_PATH=<same path>, AND add the DB folder
+# to ReadWritePaths (it must be writable by this user: SQLite WAL/-shm files live there).
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/virtual-captain/shared

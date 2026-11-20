@@ -11,11 +11,22 @@
     RewriteCond %{HTTP_HOST} ^www\. [NC]
     RewriteRule ^ https://virtualcaptain.rossinisolutions.com%{REQUEST_URI} [R=301,L]
 
-    # HSTS short for now (1 day); raise it once everything is verified
-    Header always set Strict-Transport-Security "max-age=86400"
+    # HSTS: 1 year, WITHOUT includeSubDomains and WITHOUT preload on purpose.
+    # Andrea raises it (or adds them) only after confirming that HTTPS works everywhere.
+    Header always set Strict-Transport-Security "max-age=31536000"
+
+    # Request bodies: the app already caps them at 8 KB (413); Apache drops bigger ones first.
+    # Applies to HTTP request bodies only (JSON API, forms). It does not touch WebSocket frames
+    # (the /ws/ upgrade has no body; frame size is capped by uvicorn --ws-max-size).
+    # The site has no file uploads: if one is ever added, raise this value for that path only.
+    LimitRequestBody 16384
 
     ProxyPreserveHost On
     RequestHeader set X-Forwarded-Proto "https"
+    # Drop any X-Forwarded-For sent by the client. mod_proxy then adds the real client IP
+    # as the only value; app.py trusts the LAST value of X-Forwarded-For, so the real IP
+    # keeps working and a forged header can no longer reach the app.
+    RequestHeader unset X-Forwarded-For
 
     # WebSocket (prepared for the next steps; the app has no /ws/ yet)
     ProxyPass        /ws/ ws://127.0.0.1:8100/ws/
@@ -27,8 +38,11 @@
     ProxyPass        / http://127.0.0.1:8100/
     ProxyPassReverse / http://127.0.0.1:8100/
 
-    ErrorLog ${APACHE_LOG_DIR}/virtual-captain-error.log
-    CustomLog ${APACHE_LOG_DIR}/virtual-captain-access.log combined
+    # Own subfolder: the stock logrotate (/etc/logrotate.d/apache2, pattern *.log) does not
+    # descend into it, so only deploy/logrotate-virtual-captain (14 days) rotates these.
+    # Create it first: sudo install -d -o root -g adm -m 750 /var/log/apache2/virtual-captain
+    ErrorLog ${APACHE_LOG_DIR}/virtual-captain/error.log
+    CustomLog ${APACHE_LOG_DIR}/virtual-captain/access.log combined
 
     # certbot lines (keep the ones it generated)
     SSLCertificateFile /etc/letsencrypt/live/virtualcaptain.rossinisolutions.com/fullchain.pem
