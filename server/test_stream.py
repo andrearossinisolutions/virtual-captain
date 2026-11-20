@@ -431,6 +431,36 @@ def test_no_leak_after_100_open_close(make_env):
     run(go())
 
 
+def test_blocked_write_ends_the_stream_and_frees_slot_and_subscription(make_env):
+    e = mk(make_env, stream_write_timeout=0.3)
+    ck = cookie_of(e.web)
+    program(e, uid_of(e, ck))
+    hub, reg = e.app.state.hub, e.app.state.streams
+
+    async def go():
+        sent = []
+
+        async def run_blocked():
+            s = Sse(e.app, ck)
+
+            async def receive():
+                await asyncio.Event().wait()   # the client stays connected but stops reading
+
+            async def send(msg):
+                sent.append(msg["type"])
+                if msg["type"] == "http.response.body":
+                    await asyncio.Event().wait()   # the socket buffer is full: this write never completes
+            await e.app(s.scope, receive, send)
+        task = asyncio.ensure_future(run_blocked())
+        await asyncio.sleep(0.1)
+        assert len(reg.streams) == 1 and len(hub._subs) == 1
+        await asyncio.wait_for(task, 3)             # ends by itself, no error reaches the server
+        assert not reg.streams and not hub._subs and "http.response.start" in sent
+        await asyncio.sleep(0.05)
+        assert asyncio.all_tasks() == {asyncio.current_task()}
+    run(go())
+
+
 # ---------- end of the stream ----------
 
 def test_revocations_close_the_streams(make_env):

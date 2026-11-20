@@ -320,3 +320,20 @@ def test_static_rules_of_the_stream_client():
 def test_app_js_syntax_with_node_check():
     res = subprocess.run([NODE, "--check", str(JS_PATH)], capture_output=True, text=True, timeout=30)
     assert res.returncode == 0, res.stderr
+
+
+@needs_node
+def test_two_consecutive_silences_without_new_data_fall_back_to_polling_but_data_in_between_resets(tmp_path):
+    r = run(tmp_path, """
+await t.run("rstart()"); const es = last(); es.emit("snapshot", snap(), "7.1"); es.emit("meta", meta());
+await t.sched.advance(35100); await t.sched.advance(1500);       // first silence: reopen
+const s2 = last(); s2.emit("meta", meta());                      // only a meta (partial buffering): not new data
+const m1 = t.run("rmode"); await t.sched.advance(35100);         // second silence: polling
+const a = {m1, mode: t.run("rmode"), n: t.ES.all.length};
+await t.run("rstart()"); const s3 = last(); s3.emit("snapshot", snap(), "7.1");
+await t.sched.advance(35100); await t.sched.advance(1500);
+const s4 = last(); s4.emit("delta", {d: {info: "Y"}, rm: []}, "7.2");     // data in between: the count restarts
+await t.sched.advance(35100); await t.sched.advance(1500);
+out.r = {a, mode2: t.run("rmode"), n: t.ES.all.length};
+""")
+    assert r["a"]["m1"] == "sse" and r["a"]["mode"] == "poll" and r["mode2"] == "sse"

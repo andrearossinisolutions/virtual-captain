@@ -274,9 +274,9 @@ async function rfetch(){let wait=3000;  // una lettura dello stato: ritorna l'at
   return wait}
 // ---- stream SSE (solo REMOTE): GET /api/flight/stream. EventSource senza ricreazione automatica sugli errori HTTP (503/429/404 = CLOSED):
 // lo si ricrea a mano con backoff e ?last=<ultimo id>. Se non funziona, polling di riserva (rpoll) e nuovo tentativo ogni 2 minuti.
-// I delta si fondono sul raw dello snapshot (rraw), mai sull'oggetto normalizzato da norm(); remoteApply riceve oggetti sintetici come dal polling.
-const SURL="/api/flight/stream",BACKOFF=[1000,2000,5000,10000,30000],FIRST_MS=5000,SILENCE_MS=35000,RETRY_SSE_MS=120000,MAX_ERR=3;
-let rraw=null,sEs=null,sLast=null,sErr=0,sTrial=false,sLost=false,sFirst=null,sWd=null,sRe=null,sTickT=null,sRetry=null,rMeta={connected:true,age:0,spoke_ago:null,cmd:undefined,at:0};const rWait=[];
+// 1, 2 s di backoff: al terzo errore (o al secondo silenzio di 35 s senza dati nuovi) si va in polling. I delta si fondono sul raw dello snapshot (rraw), mai sull'oggetto normalizzato da norm(); remoteApply riceve oggetti sintetici come dal polling.
+const SURL="/api/flight/stream",BACKOFF=[1000,2000],MAX_SIL=2,FIRST_MS=5000,SILENCE_MS=35000,RETRY_SSE_MS=120000,MAX_ERR=3;
+let rraw=null,sEs=null,sLast=null,sErr=0,sTrial=false,sLost=false,sSil=0,sFirst=null,sWd=null,sRe=null,sTickT=null,sRetry=null,rMeta={connected:true,age:0,spoke_ago:null,cmd:undefined,at:0};const rWait=[];
 function sClose(){clearTimeout(sFirst);clearTimeout(sWd);clearTimeout(sRe);sFirst=sWd=sRe=null;if(sEs){sEs.onerror=null;sEs.close();sEs=null}}
 function sNow(){const dt=(Date.now()-rMeta.at)/1000,up=v=>v==null?null:v+dt;return{connected:true,unchanged:true,cmd:rMeta.cmd,age:up(rMeta.age),spoke_ago:up(rMeta.spoke_ago)}}  // age e spoke_ago estrapolate tra un meta e l'altro
 function sTick(){if(sTickT)return;const f=()=>{sTickT=setTimeout(f,1000);if(rmode==="sse"&&!sLost&&rMeta.connected&&rlast)remoteApply(sNow())};sTickT=setTimeout(f,1000)}
@@ -286,7 +286,7 @@ function sOpen(){sClose();
   sEs=es;es.onerror=()=>sError(es);
   for(const n of ["snapshot","delta","meta","offline"])es.addEventListener(n,ev=>sEvent(es,n,ev));
   sFirst=setTimeout(()=>{if(es===sEs)toPoll()},FIRST_MS);sTick()}  // nessun evento entro 5 s (proxy che trattiene i byte): polling
-function toPoll(){sClose();sLost=false;rmode="poll";rraw=null;sLast=null;sErr=0;sTrial=false;clearTimeout(sRetry);sRetry=null;
+function toPoll(){sClose();sLost=false;sSil=0;rmode="poll";rraw=null;sLast=null;sErr=0;sTrial=false;clearTimeout(sRetry);sRetry=null;
   if(typeof EventSource!=="undefined")sRetry=setTimeout(()=>{if(rmode==="poll"){sTrial=true;sOpen()}},RETRY_SSE_MS);rpollStart()}
 function sFail(quiet){sClose();sErr++;if(!quiet){sLost=true;rbanner("Connection lost…")}
   if(sTrial||sErr>=MAX_ERR){toPoll();return}
@@ -305,10 +305,11 @@ function sPush(e,q){const n=sNow();rMeta={connected:true,age:0,spoke_ago:n.spoke
   remoteApply({connected:true,snapshot:Object.assign({},rraw),seq:q,epoch:e,cmd:n.cmd,age:0,spoke_ago:n.spoke_ago});rFlush()}
 function sEvent(es,n,ev){if(es!==sEs)return;
   clearTimeout(sFirst);sFirst=null;clearTimeout(sRetry);sRetry=null;if(rmode!=="sse"){rmode="sse";sTrial=false}
-  sErr=0;sLost=false;clearTimeout(sWd);sWd=setTimeout(()=>{if(es===sEs){sLost=true;rbanner("Connection lost…");sFail(true)}},SILENCE_MS);  // silenzio totale per 35 s (heartbeat ": hb" compresi: il browser non li espone, vale il "meta" ogni 5 s)
+  sErr=0;sLost=false;clearTimeout(sWd);sWd=setTimeout(()=>{if(es!==sEs)return;sLost=true;rbanner("Connection lost…");if(++sSil>=MAX_SIL)toPoll();else sFail(true)},SILENCE_MS);  // silenzio totale per 35 s (heartbeat ": hb" compresi: il browser non li espone, vale il "meta" ogni 5 s)
   let j;try{j=JSON.parse(ev.data)}catch(x){sDoubt();return}
   if(!j||typeof j!=="object"||Array.isArray(j)){sDoubt();return}
   const m=/^(\d+)\.(\d+)$/.exec(ev.lastEventId||""),e=m?+m[1]:null,q=m?+m[2]:null;
+  if(n==="snapshot"||n==="delta")sSil=0;  // dati veri: i silenzi consecutivi (proxy che trattiene i byte a meta') ripartono
   if(n==="snapshot"){if(!m){sDoubt();return}rraw=j;sLast=ev.lastEventId;rseq=repoch=null;sPush(e,q)}  // snapshot: sostituzione completa (anche con epoch diverso)
   else if(n==="delta"){if(!m||!rraw||e!==repoch||q<=rseq||!j.d||typeof j.d!=="object"||Array.isArray(j.d)||!Array.isArray(j.rm)){sDoubt();return}
     const nr=Object.assign({},rraw);for(const k in j.d)if(k!=="__proto__")nr[k]=j.d[k];for(const k of j.rm)delete nr[k];rraw=nr;sLast=ev.lastEventId;sPush(e,q)}

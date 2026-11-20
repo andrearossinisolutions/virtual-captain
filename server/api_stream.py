@@ -3,7 +3,7 @@
 Same auth as the polling route (session cookie only; the hub key is the session's user id, no id in the URL).
 Events: `snapshot` (the whole state, id "<epoch>.<seq>"), `delta` ({"d": changed sections, "rm": removed keys}: only the
 sections newer than the last seq sent to THAT subscriber, so a slow client is coalesced and no history is kept),
-`meta` ({connected, age, spoke_ago, cmd}), `offline`; a ": hb" comment keeps the line alive. Resume with
+`meta` ({connected, age, spoke_ago, cmd}), `offline`; a ": hb" comment every `stream_heartbeat` seconds keeps the line alive for proxies (the browser never sees it). Resume with
 `Last-Event-ID` (or `?last=`): same epoch and a seq not in the future -> only the newer sections, else a full snapshot.
 Caps per account / per IP / global, a maximum duration, the session re-checked in the thread pool, closed at once on
 revocation. Nothing from a flight is ever logged. Kill switch: VC_STREAM=off (the route does not exist: 404)."""
@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from server.accounts import AccountError, Accounts
-from server.api_auth import COOKIE, _fail, client_ip_from, current_session
+from server.api_auth import COOKIE, _fail, client_ip_from, current_session, origin_check
 from server.hub import Hub
 from server.ratelimit import MemoryRateLimiter
 
@@ -62,13 +62,25 @@ class StreamRegistry:
 
 class StreamResponse(StreamingResponse):
     """Frees the subscription and the counters however the response ends (also when it is cancelled or never iterated)."""
-    def __init__(self, content, release, **kw):
+    def __init__(self, content, release, write_timeout: float = 25.0, **kw):
         super().__init__(content, **kw)
         self._release = release
+        self._write_timeout = write_timeout
 
     async def __call__(self, scope, receive, send):
+        timed_out = []
+
+        async def guarded_send(msg):        # a client that stops reading must not hold the slot for ever
+            try:
+                await asyncio.wait_for(send(msg), self._write_timeout)
+            except asyncio.TimeoutError:
+                timed_out.append(True)
+                raise
         try:
-            await super().__call__(scope, receive, send)
+            await super().__call__(scope, receive, guarded_send)
+        except BaseException:
+            if not timed_out:
+                raise                       # the response simply ends on a write timeout
         finally:
             self._release()
 
@@ -172,7 +184,6 @@ def build_stream_router(accounts: Accounts, hub: Hub, registry: StreamRegistry) 
     async def flight_stream(request: Request):
         try:
             sess = current_session(accounts, request, False)
-            from server.api_auth import origin_check
             origin_check(base, request)   # a GET has no CSRF token: only Sec-Fetch-Site / Origin when present
         except AccountError as e:
             return _fail(e.status, e.code, e.retry_after)
@@ -191,7 +202,7 @@ def build_stream_router(accounts: Accounts, hub: Hub, registry: StreamRegistry) 
             hub.unsubscribe(uid, stream.ev)
         try:
             return StreamResponse(event_stream(stream, hub, accounts, cfg, request.cookies.get(COOKIE), resume),
-                                  release, media_type="text/event-stream", headers=HEADERS)
+                                  release, cfg.stream_write_timeout, media_type="text/event-stream", headers=HEADERS)
         except BaseException:
             release()
             raise

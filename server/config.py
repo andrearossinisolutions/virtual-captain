@@ -122,7 +122,8 @@ class AppConfig:
     stream_per_ip: int = 10
     stream_max: int = 40                 # globally
     stream_meta_interval: float = 5.0    # "meta" event, also sent at every change of connected/cmd
-    stream_heartbeat: float = 15.0       # ": hb" comment when nothing else was sent
+    stream_heartbeat: float = 15.0       # ": hb" comment at this interval, whatever else was sent (the browser cannot see it: proxies can)
+    stream_write_timeout: float = 25.0   # a single write to the client blocked longer than this ends the stream (frees the slot)
     stream_max_duration: float = 900.0   # clean close after 15 minutes: the client reconnects with Last-Event-ID
     stream_recheck: float = 60.0         # the session is looked up again (thread pool)
     stream_open_user_minute: int = 120   # openings per account / per IP per minute (RAM)
@@ -203,6 +204,7 @@ def load_app_config(env: Mapping[str, str] = os.environ) -> AppConfig:
         account_ip_minute=_int(env, "RATE_ACCOUNT_IP_MINUTE", 60),
         hash_queue_max=_int(env, "HASH_QUEUE_MAX", 8),
         remote_commands=(env.get("VC_REMOTE_COMMANDS") or "").strip().lower() != "off",
+        stream_write_timeout=float(_int(env, "STREAM_WRITE_TIMEOUT_SECONDS", 25)),
         stream=(env.get("VC_STREAM") or "").strip().lower() != "off",
         delta=(env.get("VC_DELTA") or "").strip().lower() != "off",
     )
