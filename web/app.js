@@ -210,7 +210,16 @@ function canRebuild(editing,phaseChanged,lastAct,now){return !editing||!!phaseCh
 // valore inviato (rPend) da dimenticare? Solo se il campo non e' attivo/sporco e lo snapshot lo contiene, oppure e' scaduto
 function pendDone(sent,snap,active,age){return !active&&(snap===sent||age>=PEND_TTL)}
 // "NOW:" di una voce con mismatch: per ogni condizione fallita "nome valore" (nome dal detail "Nome: expected X, actual Y"); senza nome solo il valore; separate da " \u00b7 "
-function nowText(detail){let any=false;const out=String(detail||"").split(/;\s*(?=[^;]*expected )/).map(p=>{p=p.trim();const m=/^(?:(.*?):\s*)?expected .*?actual (.+)$/.exec(p);if(m){any=true;return(m[1]?m[1]+" ":"")+m[2].trim()}return p}).filter(Boolean);return any?out.join(" \u00b7 "):""}  // un ';' dentro un valore non spezza la condizione; frammenti non riconosciuti mostrati interi; nessuna condizione riconosciuta: "" (la pagina mostra il detail)
+const NOW_GROUP_MIN=4,NOW_LONG_CHARS=40,NOW_LONG_PARTS=3;
+function nowGroup(conds){if(conds.length<NOW_GROUP_MIN)return conds.map(c=>c[0]?c[0]+" "+c[1]:c[1]);  // molte condizioni: stesso nome base (senza indice finale: L1, C2, R...) e stesso valore => "Fuel pump OFF (6)"
+  const base=n=>n.replace(/\s+(?:[A-Z]{0,2}\d+|[LRC])$/,""),g=new Map();
+  for(const [n,v] of conds){const k=base(n)+"\u0000"+v;if(!g.has(k))g.set(k,[base(n),v,0,n]);g.get(k)[2]++}
+  return [...g.values()].map(([b,v,c,n])=>c>1?(b?b+" ":"")+v+" ("+c+")":(n?n+" ":"")+v)}
+function nowLong(t){t=String(t||"");return t.length>NOW_LONG_CHARS||t.split(" \u00b7 ").length>NOW_LONG_PARTS}  // riga NOW lunga: classe "lg", su una riga propria a tutta larghezza (il titolo non si schiaccia mai)
+function nowNode(mk,txt,nv){return mk("div","now"+(nv?" nv":"")+(nowLong(txt)?" lg":""),txt)}
+function nowText(detail){let any=false;const parts=String(detail||"").split(/;\s*(?=[^;]*expected )/).map(p=>p.trim()).filter(Boolean).map(p=>{const m=/^(?:(.*?):\s*)?expected .*?actual (.+)$/.exec(p);if(m){any=true;return [m[1]||"",m[2].trim(),true]}return [p,"",false]});
+  if(!any)return "";const cs=parts.filter(x=>x[2]);if(cs.length>=NOW_GROUP_MIN)return nowGroup(cs.map(x=>[x[0],x[1]])).concat(parts.filter(x=>!x[2]).map(x=>x[0])).join(" \u00b7 ");
+  return parts.map(x=>x[2]?(x[0]?x[0]+" ":"")+x[1]:x[0]).join(" \u00b7 ")}  // un ';' dentro un valore non spezza la condizione; frammenti non riconosciuti mostrati interi; nessuna condizione riconosciuta: "" (la pagina mostra il detail); con 4+ condizioni uguali per nome base e valore si raggruppano
 // REBUILD-PURE-END
 let bodyPhase=null,rbSince=null,rbAct=null,rbQ=false;  // rbAct: ultima attivita' dell'utente sui campi; rbSince: primo rinvio del rebuild
 ["input","keydown","focusin","pointerdown"].forEach(e=>document.addEventListener(e,()=>{rbAct=Date.now()},true));
@@ -247,11 +256,11 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(it.wx_hint){const h=mk("div","a lg set wh");h.dataset.w=it.wx_hint;tx.appendChild(h)}
       if(showLive&&it.live&&it.live.length)tx.appendChild(mk("div","lv","Actual: "+it.live.map(l=>(it.live.length>1?l[0]+" ":"")+l[1]).join(" \u00b7 ")));
       if(s.test_links&&it.raw&&it.raw.length)tx.appendChild(mk("div","rw",it.raw.map(l=>l[0]+"="+l[1]).join(" \u00b7 ")));
-      if((it.show||it.kind==="wait")&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","NOW: "+it.live.map(l=>l[1]).join(", ")));
-      if(it.kind==="wait")tx.appendChild(mk("div","now nv","Waiting: "+(it.gate||it.detail||"")));
-      if(it.was_ok&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","was OK \u00b7 NOW: "+it.live.map(l=>l[1]).join(", ")));
+      if((it.show||it.kind==="wait")&&it.live&&it.live.length)tx.appendChild(nowNode(mk,"NOW: "+it.live.map(l=>l[1]).join(", "),true));
+      if(it.kind==="wait")tx.appendChild(nowNode(mk,"Waiting: "+(it.gate||it.detail||""),true));
+      if(it.was_ok&&it.live&&it.live.length)tx.appendChild(nowNode(mk,"was OK \u00b7 NOW: "+it.live.map(l=>l[1]).join(", "),true));
       if(it.kind==="mismatch"&&!it.show){
-        const nt=nowText(it.detail);tx.appendChild(nt?mk("div","now","NOW: "+nt):mk("div","d",it.detail))}
+        const nt=nowText(it.detail);tx.appendChild(nt?nowNode(mk,"NOW: "+nt,false):mk("div","d",it.detail))}
       r.appendChild(tx);body.appendChild(r)}}
   if(keep){const i=craftEl.querySelector('[data-c="'+keep[0]+'"]');if(i){i.focus({preventScroll:true});try{i.setSelectionRange(keep[1],keep[2])}catch(e){}}}
   if(keepF){const c=body.querySelector('.fld[data-f="'+keepF[0]+'"]');if(c)fStart(c,[keepF[1],keepF[2]])}

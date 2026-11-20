@@ -587,6 +587,30 @@ out.r = [t.run('nowText("Nav & logo: expected NAV / LOGO, actual OFF")'),
                         "Radio 121.5;COM2 \u00b7 Beacon ON", "Beacon ON; stray note"]
 
 
+@needs_node
+def test_now_text_groups_many_equal_conditions_and_long_rows_get_the_lg_class(tmp_path):
+    out = run_js(tmp_path, """
+const pumps = ["L1", "L2", "C1", "C2", "R1", "R2"].map(x => "Fuel pump " + x + ": expected ON, actual OFF").join("; ");
+const els = [];
+const mk = (tag, cls, txt) => { const e = {tag, className: cls, textContent: txt}; els.push(e); return e; };
+t.run("0");
+out.r = [t.run('nowText(' + JSON.stringify(pumps) + ')'),
+         t.run('nowText("Beacon: expected OFF, actual ON; Fuel pump L1: expected ON, actual OFF; Fuel pump L2: expected ON, actual OFF; Strobe: expected AUTO, actual ON")'),
+         t.run('nowText("Landing L: expected OFF, actual ON; Beacon: expected OFF, actual ON; Nav & logo: expected NAV, actual OFF")'),
+         t.run('nowLong("NOW: Beacon ON")'), t.run('nowLong("NOW: " + "x".repeat(41))'), t.run('nowLong("a \\u00b7 b \\u00b7 c \\u00b7 d")')];
+globalThis.__mk = mk;
+out.cls = [t.run('nowNode')(mk, "NOW: Beacon ON", false).className, t.run('nowNode')(mk, "NOW: " + "y".repeat(60), true).className];
+""")
+    assert out["r"][0] == "Fuel pump OFF (6)"
+    assert out["r"][1] == "Beacon ON \u00b7 Fuel pump OFF (2) \u00b7 Strobe ON"
+    assert out["r"][2] == "Landing L ON \u00b7 Beacon ON \u00b7 Nav & logo OFF"  # sotto 4 condizioni: invariato
+    assert out["r"][3:] == [False, True, True]
+    assert out["cls"] == ["now", "now nv lg"]
+    css = (ROOT / "web" / "app.css").read_text(encoding="utf-8")
+    assert ".cl .cli .now.lg{grid-column:2/4;max-width:none;text-align:left}" in css and "white-space:nowrap}\n.cl .cli .exp" not in css
+    assert "minmax(9em,1fr)" in css
+
+
 WIND_SETUP = """
 t.run('var __ae = null; document.activeElement = null; var __i = {inputMode: "numeric", noEnd: false, isConnected: true, value: "270", events: [], failFocus: false,'
       + 'blur() { this.events.push("blur:" + this.noEnd); if (document.activeElement === this) document.activeElement = null; },'

@@ -277,7 +277,7 @@ def test_new_links_show_optional():
         row = {i["id"]: i for s in r["subphases"] for i in s["items"]}["before-start.atc-transponder"]
         assert row["live"] == [["Squawk code", txt]] and row["status"] == "none"  # atteso vuoto: solo NOW
     page = __import__("web").PAGE
-    assert '"now nv","NOW: "' in page and ".now.nv{color:var(--mut)}" in page and "i.raw,i.show" in page
+    assert 'nowNode(mk,"NOW: "' in page and ".now.nv{color:var(--mut)}" in page and "i.raw,i.show" in page
     for ph in ("ils-approach", "non-precision-approach"):
         assert cl.links[ph + ".flaps-full"]["optional"] is True and cl.links[ph + ".flaps-full"]["verified"] is True
         for raw, st in ((4, "ok"), (3, "opt")):
