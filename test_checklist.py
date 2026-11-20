@@ -1034,6 +1034,25 @@ def test_gates_approach_ladder():
     assert r["ils-approach.landing-gear"]["status"] == "wait" and r["ils-approach.flaps-3"]["status"] == "wait"
 
 
+def test_catering_completed_item():
+    cl = C.load()
+    cc, cb = "fmgs-performance-glareshield.check-catering-completed", "fmgs-performance-glareshield.check-boarding-completed"
+    ids = [i["id"] for p in cl.phases for sp in p["subphases"] for i in sp["items"]]
+    assert ids.index(cc) + 1 == ids.index(cb) and cc not in cl.excluded
+    it = next(i for p in cl.phases for sp in p["subphases"] for i in sp["items"] if i["id"] == cc)
+    assert it["type"] == "announce" and it["response"] == "ANNOUNCE" and it["text"] == "Check Catering Completed"
+    assert cl.links[cc]["check"] == {"gsx": ["gsx_cater"], "set": "done"} and cl.links[cc]["verified"] is True
+    ph = "fmgs-performance-glareshield"
+    for k, iid in (("gsx_cater", cc), ("gsx_board", cb)):
+        for st, want in ((1, "bad"), (2, "bad"), (3, "bad"), (4, "wait"), (5, "wait"), (6, "ok")):
+            ev = cl.evaluate_phase(ph, mon.clean_labels({k: st}))
+            r = {i["id"]: i for s in ev["subphases"] for i in s["items"]}
+            assert r[iid]["status"] == want, (k, st)
+            assert ev["bad"] == sum(i["status"] == "bad" for s in ev["subphases"] for i in s["items"])
+        r = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({}))["subphases"] for i in s["items"]}
+        assert r[iid]["status"] == "na"
+
+
 if __name__ == "__main__":
     test_gates_file_validation_and_inventory()
     test_gates_in_state_takeoff_and_climb()
@@ -1171,10 +1190,13 @@ def test_gsx_links():
         assert r[fc]["status"] == want, st
         assert ev["bad"] == sum(i["status"] == "bad" for s in ev["subphases"] for i in s["items"])  # wait non conta nei bad
     assert not any(i["status"] == "bad" and i["id"] == fc for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": 4}))["subphases"] for i in s["items"])
-    # voce di completamento: rossa fino a COMPLETED
-    for st, want in ((4, "bad"), (5, "bad"), (6, "ok")):
-        r = {i["id"]: i for s in cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": st}))["subphases"] for i in s["items"]}
+    # voce di completamento: rossa 1-3, wait a REQUESTED/IN PROGRESS, verde a COMPLETED
+    for st, want, det in ((1, "bad", None), (2, "bad", None), (3, "bad", None), (4, "wait", "Requested"), (5, "wait", "In progress"), (6, "ok", None)):
+        ev = cl.evaluate_phase(ph, mon.clean_labels({"gsx_refuel": st}))
+        r = {i["id"]: i for s in ev["subphases"] for i in s["items"]}
         assert r[cr]["status"] == want, st
+        assert det is None or r[cr]["detail"] == det
+        assert ev["bad"] == sum(i["status"] == "bad" for s in ev["subphases"] for i in s["items"])  # wait non conta nei bad
     assert rows[bd]["status"] == "wait" and rows[bd]["type"] == "announce"  # boarding REQUESTED (4)
     # grezzo sempre accanto allo stato (live_raw, anche senza --test-links) e riga NOW sempre mostrata
     lv = {i["id"]: i for s in cl.evaluate_phase(ph, labels, live_raw={"gsx_refuel": 6, "gsx_cater": 5, "gsx_board": 1})["subphases"] for i in s["items"]}
@@ -1200,6 +1222,7 @@ if __name__ == "__main__":
     test_tcas_links()
     test_cabin_fuel_links()
     test_gsx_links()
+    test_catering_completed_item()
     test_atc_transponder_checks_xpdr_operation()
     test_after_landing_atc_checks_xpdr_stby()
     test_ai_links()

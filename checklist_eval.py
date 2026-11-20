@@ -347,10 +347,15 @@ def _evaluate_link(check: dict | None, labels: dict, verified: bool, optional: b
     return res
 
 
-def _gsx_requested(check: dict, labels: dict) -> bool:
-    """Voce "start" (set active): tutti i servizi non ancora avviati sono REQUESTED (almeno uno); AVAIL/NOT AVAIL/BYPASSED restano rossi, non letto resta neutro."""
-    pend = [labels.get(k) for k in check["gsx"] if labels.get(k) not in mon.GSX_ACTIVE]
-    return bool(pend) and all(v == "REQUESTED" for v in pend)
+def _gsx_requested(check: dict, labels: dict) -> str | None:
+    """Voce GSX in attesa: servizi non ancora nel set tutti in attesa, altrimenti None (AVAIL/NOT AVAIL/BYPASSED restano rossi, non letto neutro).
+    "active" (start): solo REQUESTED -> "requested". "done" (completamento): REQUESTED o IN PROGRESS -> "requested" se almeno uno REQUESTED, altrimenti "inprogress"."""
+    states = mon.GSX_SETS[check.get("set", "active")]
+    waiting = ("REQUESTED",) if check.get("set", "active") == "active" else ("REQUESTED", "IN PROGRESS")
+    pend = [labels.get(k) for k in check["gsx"] if labels.get(k) not in states]
+    if not pend or not all(v in waiting for v in pend):
+        return None
+    return "requested" if "REQUESTED" in pend else "inprogress"
 
 
 def _evaluate(check: dict, labels: dict, verified: bool, expected: dict | None = None) -> dict:
@@ -359,8 +364,9 @@ def _evaluate(check: dict, labels: dict, verified: bool, expected: dict | None =
     if "detent" in check:
         check = detent_all(check)
     if "gsx" in check:
-        if check.get("set", "active") == "active" and _gsx_requested(check, labels):
-            return _res("wait", "Requested", "requested")  # servizio chiesto, GSX non e' ancora partito: si aspetta (non e' "bad")
+        wk = _gsx_requested(check, labels)
+        if wk:
+            return _res("wait", "Requested" if wk == "requested" else "In progress", wk)  # servizio chiesto/in corso: si aspetta (non e' "bad")
         check = gsx_all(check)
     if "ai" in check:
         check = ai_all(check)

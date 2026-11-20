@@ -243,7 +243,8 @@ def test_gsx():
     assert evaluate(c, ok, verified=False)["status"] == "na"
     d = {"gsx": ["gsx_board"], "set": "done"}
     assert evaluate(d, {"gsx_board": "COMPLETED"})["status"] == "ok"
-    assert all(evaluate(d, {"gsx_board": st})["status"] == "bad" for st in mon.GSX_STATES.values() if st not in mon.GSX_DONE)  # anche IN PROGRESS
+    assert all(evaluate(d, {"gsx_board": st})["status"] == "bad" for st in mon.GSX_STATES.values() if st not in mon.GSX_DONE and st not in ("REQUESTED", "IN PROGRESS"))  # REQUESTED/IN PROGRESS: wait (vedi test_checklist_latch)
+    assert evaluate(d, {"gsx_board": "REQUESTED"})["status"] == "wait" and evaluate(d, {"gsx_board": "IN PROGRESS"})["status"] == "wait"
     assert evaluate(d, {"gsx_board": None})["status"] == "na" and evaluate(d, {})["status"] == "na"
 
 def test_ai():

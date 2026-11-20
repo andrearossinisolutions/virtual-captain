@@ -258,7 +258,8 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if(s.test_links&&it.raw&&it.raw.length)tx.appendChild(mk("div","rw",it.raw.map(l=>l[0]+"="+l[1]).join(" \u00b7 ")));
       const noNow=it.type==="announce"&&!s.test_links;  // announce: niente NOW/was OK/mismatch (azioni chiare, nessun valore atteso); restano solo con test links
       if(!noNow&&(it.show||it.kind==="wait")&&it.live&&it.live.length)tx.appendChild(nowNode(mk,"NOW: "+it.live.map(l=>l[1]).join(", "),true));
-      if(it.kind==="requested")tx.appendChild(nowNode(mk,"Requested",true));  // GSX start: servizio chiesto, in attesa (blu); solo questo testo, anche senza test links
+      if(it.kind==="requested")tx.appendChild(nowNode(mk,"Requested",true));
+      if(it.kind==="inprogress")tx.appendChild(nowNode(mk,"In progress",true));  // GSX start: servizio chiesto, in attesa (blu); solo questo testo, anche senza test links
       if(it.kind==="wait")tx.appendChild(nowNode(mk,"Waiting: "+(it.gate||it.detail||""),true));
       if(!noNow&&it.was_ok&&it.live&&it.live.length)tx.appendChild(nowNode(mk,"was OK \u00b7 NOW: "+it.live.map(l=>l[1]).join(", "),true));
       if(!noNow&&it.kind==="mismatch"&&!it.show){

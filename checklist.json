@@ -682,6 +682,12 @@
        "type": "action"
       },
       {
+       "id": "fmgs-performance-glareshield.check-catering-completed",
+       "text": "Check Catering Completed",
+       "response": "ANNOUNCE",
+       "type": "announce"
+      },
+      {
        "id": "fmgs-performance-glareshield.check-boarding-completed",
        "text": "Check Boarding Completed",
        "response": "ANNOUNCE",

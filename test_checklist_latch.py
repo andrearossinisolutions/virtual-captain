@@ -185,9 +185,9 @@ def test_gsx_completion_latch_green_after_return_to_avail():
     import monitor as mon
     chk = {"gsx": ["gsx_refuel"], "set": "done"}  # voce di completamento (es. refueling completed)
     la, t = Latch(), 0.0
-    for st in ("AVAIL", "REQUESTED", "IN PROGRESS"):  # non completato: rosso, niente latch
+    for st, want in (("AVAIL", "bad"), ("REQUESTED", "wait"), ("IN PROGRESS", "wait")):  # non completato: rosso/wait, niente latch
         r = evaluate(chk, {"gsx_refuel": st})
-        assert r["status"] == "bad" and la.observe("fc", r["status"] == "ok", t) is False
+        assert r["status"] == want and la.observe("fc", r["status"] == "ok", t) is False
         t += 1.0
     for _ in range(3):  # COMPLETED stabile: verde e congelato
         la.observe("fc", evaluate(chk, {"gsx_refuel": "COMPLETED"})["status"] == "ok", t)
@@ -203,8 +203,20 @@ def test_gsx_start_item_green_from_in_progress():
     for st, want in (("AVAIL", "bad"), ("NOT AVAIL", "bad"), ("BYPASSED", "bad"), ("REQUESTED", "wait"), ("IN PROGRESS", "ok"), ("COMPLETED", "ok"), (None, "na")):
         assert evaluate(chk, {"gsx_refuel": st})["status"] == want, st
     assert evaluate(chk, {"gsx_refuel": "REQUESTED"}) == {"status": "wait", "kind": "requested", "detail": "Requested"}
-    done = {"gsx": ["gsx_refuel"], "set": "done"}  # completamento invariato: REQUESTED e IN PROGRESS restano rossi
-    assert evaluate(done, {"gsx_refuel": "REQUESTED"})["status"] == "bad" and evaluate(done, {"gsx_refuel": "IN PROGRESS"})["status"] == "bad"
+
+
+def test_gsx_done_items_wait_on_requested_and_in_progress():
+    from checklist_eval import evaluate
+    for k in ("gsx_refuel", "gsx_cater", "gsx_board"):  # le tre voci di completamento
+        done = {"gsx": [k], "set": "done"}
+        for st in ("AVAIL", "NOT AVAIL", "BYPASSED"):
+            assert evaluate(done, {k: st})["status"] == "bad", st
+        assert evaluate(done, {k: "REQUESTED"}) == {"status": "wait", "kind": "requested", "detail": "Requested"}
+        assert evaluate(done, {k: "IN PROGRESS"}) == {"status": "wait", "kind": "inprogress", "detail": "In progress"}
+        assert evaluate(done, {k: "COMPLETED"})["status"] == "ok" and evaluate(done, {k: None})["status"] == "na"
+    two = {"gsx": ["gsx_refuel", "gsx_cater"], "set": "done"}
+    assert evaluate(two, {"gsx_refuel": "AVAIL", "gsx_cater": "IN PROGRESS"})["status"] == "bad"  # un rosso vale piu' di un wait
+    assert evaluate(two, {"gsx_refuel": "COMPLETED", "gsx_cater": "IN PROGRESS"})["kind"] == "inprogress"
 
 
 def test_gsx_start_item_latch_unchanged_by_requested():
