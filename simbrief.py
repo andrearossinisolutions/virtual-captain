@@ -119,6 +119,7 @@ def extract_plan(ofp: dict) -> dict:
         "aircraft": _g(ofp, "aircraft", "icaocode"),
         "route": g.get("route") or _g(ofp, "atc", "route"),
         "sid": g.get("sid_ident") or None,
+        "sid_trans": g.get("sid_trans") or None,  # nome campo da verificare su un OFP reale
         "star": g.get("star_ident") or None,
         "cruise_alt": _num(g.get("initial_altitude")),
         "distance_nm": _num(g.get("air_distance") or g.get("route_distance")),

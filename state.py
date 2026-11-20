@@ -132,6 +132,13 @@ def _txt(v) -> str:
     return "" if n is None else str(n)
 
 
+def sid_full(plan) -> str:
+    """SID del piano per il cross check: "<SID> <transizione>", solo "<SID>" se manca la transizione, vuoto se manca la SID."""
+    p = plan or {}
+    sid, tr = str(p.get("sid") or "").strip(), str(p.get("sid_trans") or "").strip()
+    return f"{sid} {tr}".strip() if sid else ""
+
+
 class State:
     def __init__(self, cfg_path: pathlib.Path = CFG, weather=None, session_path: pathlib.Path | None = None,
                  session_debounce: float = sess.DEBOUNCE_S, wall=time.time):
@@ -610,6 +617,7 @@ class State:
         gnd = mon.to_number(self.core.get("on_ground"))
         e["sys.gnd"] = "" if gnd is None else ("1" if gnd >= 0.5 else "0")
         e["plan.sid"] = str((self.plan or {}).get("sid") or "")
+        e["plan.sid_full"] = sid_full(self.plan)
         return e
 
     # -- letture --

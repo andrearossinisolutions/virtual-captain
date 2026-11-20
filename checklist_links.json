@@ -1073,6 +1073,12 @@
   },
   "verified": true
  },
+ "fmgs-initialization.sid-filed": {
+  "check": {
+   "show_ref": "plan.sid_full"
+  },
+  "verified": true
+ },
  "fmgs-initialization.fob": {
   "check": {
    "key": "fob_now",

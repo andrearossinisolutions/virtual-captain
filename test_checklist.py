@@ -1063,6 +1063,20 @@ if __name__ == "__main__":
     print("ok")
 
 
+def test_sid_filed_show():
+    import state as S
+    assert S.sid_full({"sid": "PEP2Q", "sid_trans": "PEPAG"}) == "PEP2Q PEPAG"
+    assert S.sid_full({"sid": "PEP2Q"}) == "PEP2Q" and S.sid_full({"sid_trans": "X"}) == "" and S.sid_full(None) == ""
+    cl = C.load()
+    k = "fmgs-initialization.sid-filed"
+    assert cl.links[k] == {"check": {"show_ref": "plan.sid_full"}, "verified": True}
+    def row(exp):
+        r = cl.evaluate_phase("fmgs-initialization", {}, expected=exp)
+        return {i["id"]: i for s in r["subphases"] for i in s["items"]}[k]
+    assert row({"plan.sid_full": "PEP2Q PEPAG"})["expected"] == "PEP2Q PEPAG"
+    assert row({"plan.sid_full": ""})["expected"] == "" and row({"plan.sid_full": ""})["status"] == "none"
+
+
 def test_tcas_links():
     cl = C.load()
     for k, eq in (("before-takeoff.tcas-mode-selector", ["TA", "TA/RA"]), ("after-takeoff.tcas-mode-selector", "TA/RA"),
@@ -1168,6 +1182,7 @@ def test_gsx_links():
             pass
 
 if __name__ == "__main__":
+    test_sid_filed_show()
     test_tcas_links()
     test_cabin_fuel_links()
     test_gsx_links()

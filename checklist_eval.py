@@ -17,7 +17,7 @@ from monitor import LB_PER_KG
 BY_KEY = {it.key: it for it in mon.ITEMS}
 UNVERIFIED = "unverified"
 UNREADABLE = "unreadable"
-REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "fld.v1", "fld.vr", "fld.v2", "fld.flap", "fld.fob", "fld.zfw", "fld.zfwcg", "plan.sid", "wx.qnh_dep", "wx.qnh_dest")
+REFS = ("clr.c", "clr.r", "clr.a", "clr.f", "clr.t", "fld.runway", "fld.ta", "fld.v1", "fld.vr", "fld.v2", "fld.flap", "fld.fob", "fld.zfw", "fld.zfwcg", "plan.sid", "plan.sid_full", "wx.qnh_dep", "wx.qnh_dest")
 GATE_ALT_REFS = ("fld.ta",)  # gate: quota >= valore del campo (piedi, anche FLnnn)
 GATE_AGL_REFS = ("fld.thr_red_agl", "fld.accel_agl")  # gate: AGL >= valore del campo
 GATE_RULES = ("alt_ge", "alt_le", "alt_ge_ref", "agl_ge_ref", "agl_le", "airborne", "ground", "vs_gt", "ias_le", "after_item")
