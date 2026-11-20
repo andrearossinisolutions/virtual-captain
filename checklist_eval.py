@@ -308,9 +308,23 @@ def evaluate(check: dict | None, labels: dict, verified: bool = True, optional: 
     return res
 
 
+def _unfilled(check: dict, labels: dict) -> dict | None:
+    """{"all": [...], "required": true}: valore letto 0 o assente = non compilato (V1/VR/V2 non inseriti nell'MCDU) => "bad" anche con i campi della pagina vuoti.
+    Detail con tutti i valori ("V1: expected set, actual 0; VR: ...; V2: ... actual not set"): la pagina scrive "NOW: V1 0 \u00b7 VR 0 \u00b7 V2 0".
+    Tutti compilati: None (si prosegue col confronto normale con i campi)."""
+    vals = [(BY_KEY[sub["key"]].name, _num(labels.get(sub["key"]))) for sub in check["all"]]
+    if all(v is not None and v != 0 for _, v in vals):
+        return None
+    return _res("bad", "; ".join(f"{n}: expected set, actual {'not set' if v is None else f'{v:g}'}" for n, v in vals), "mismatch")
+
+
 def _evaluate_link(check: dict | None, labels: dict, verified: bool, optional: bool, expected: dict | None) -> dict:
     if not check or "show" in check or "show_ref" in check:
         return _res("none")
+    if check.get("required") and "all" in check and verified:
+        res = _unfilled(check, labels)
+        if res:
+            return res
     if "ai" in check:
         if not _want(expected, "ai.on"):
             return _res("none")  # regola non attiva (promemoria, METAR assente, niente icing): solo testo e NOW

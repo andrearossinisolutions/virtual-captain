@@ -405,7 +405,30 @@ def test_expected_links():
     assert rw[P + "flex-toga"]["live"] == [["Flex temp", "55"]] and rw[P + "t-o-flaps-conf-ths"]["live"] == [["Flaps", "1"]]
     assert cl.evaluate_phase("fmgs-performance-glareshield", lab, expected={})["bad"] >= 0
     emp = {i["id"]: i for s in cl.evaluate_phase("fmgs-performance-glareshield", {"v1": "0"}, demo=True, expected={})["subphases"] for i in s["items"]}
-    assert emp[P + "v1-vr-v2"]["status"] == "none" and emp[P + "v1-vr-v2"]["show"] is True and emp[P + "v1-vr-v2"]["expected"] == " / "*2
+    assert emp[P + "v1-vr-v2"]["status"] == "bad" and emp[P + "v1-vr-v2"]["expected"] == " / "*2  # letti 0/assenti = non compilati: rosso anche con i campi vuoti
+    # V1/VR/V2 non compilati (letti 0 o assenti) = rosso; compilati: confronto coi campi come prima
+    def vv(lab, exp, pid="fmgs-performance-glareshield", iid="v1-vr-v2", live=False):
+        r = cl.evaluate_phase(pid, lab, demo=True, expected=exp)
+        return {i["id"]: i for s in r["subphases"] for i in s["items"]}[(P if pid == "fmgs-performance-glareshield" else "taxi-checklist.") + iid]
+    full = {"fld.v1": "140", "fld.vr": "145", "fld.v2": "150"}
+    for lab in ({"v1": "0", "vr": "0", "v2": "0"}, {"v1": "140", "vr": "0", "v2": "150"}, {}, {"v1": "140", "vr": "145"}):
+        for exp in ({}, full):
+            r = vv(lab, exp)
+            assert r["status"] == "bad" and r["kind"] == "mismatch" and "expected set" in r["detail"], (lab, exp)
+    assert vv({"v1": "0", "vr": "0", "v2": "0"}, {})["detail"] == "V1: expected set, actual 0; VR: expected set, actual 0; V2: expected set, actual 0"
+    assert "V2: expected set, actual not set" in vv({"v1": "140", "vr": "145"}, {})["detail"]
+    assert vv({"v1": "140", "vr": "145", "v2": "150"}, full)["status"] == "ok"
+    assert vv({"v1": "140", "vr": "145", "v2": "150"}, {})["status"] == "none"  # compilati, campi vuoti: come prima (dubbio per Andrea)
+    d = vv({"v1": "140", "vr": "145", "v2": "151"}, full)
+    assert d["status"] == "bad" and d["detail"] == "V2: expected 150, actual 151" and d["live"] == [["V1", "140"], ["VR", "145"], ["V2", "151"]]
+    assert vv({"v1": "0", "vr": "0", "v2": "0"}, {}, "taxi-checklist", "t-o-data-v1-vr-v2")["status"] == "bad"
+    # il check "required" e' ammesso solo su 'all' di voci numeriche
+    for bad in ({"all": [{"key": "pack1", "eq": "ON"}], "required": True}, {"all": [{"key": "v1", "eq_ref": "fld.v1"}], "required": False}, {"required": True}):
+        try:
+            C.Checklist(cl.data, {P + "v1-vr-v2": {"check": bad, "verified": True}})
+            assert False, bad
+        except ValueError:
+            pass
     # Initial climb: quota FCU contro clearance (demo = link verificato)
     def ic(lab, clr):
         r = cl.evaluate_phase("fmgs-performance-glareshield", {"fcu_alt": lab}, demo=True, expected={"clr.a": clr})

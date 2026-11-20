@@ -50,7 +50,8 @@ def _check_keys(check: dict, where: str, inner: bool = False) -> None:
             raise ValueError(f"{where}: 'qnh' non valido")
         return
     if "all" in check:
-        if not isinstance(check["all"], list) or not check["all"] or set(check) != {"all"}:
+        if not isinstance(check["all"], list) or not check["all"] or set(check) - {"all", "required"} or "all" not in check or check.get("required", True) is not True \
+                or ("required" in check and not all(isinstance(c, dict) and c.get("key") in BY_KEY and BY_KEY[c["key"]].kind == "numeric" for c in check["all"])):
             raise ValueError(f"{where}: 'all' non valido")
         for sub in check["all"]:
             if "all" in sub:

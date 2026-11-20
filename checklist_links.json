@@ -824,7 +824,8 @@
      "key": "v2",
      "eq_ref": "fld.v2"
     }
-   ]
+   ],
+   "required": true
   },
   "verified": true
  },
@@ -915,7 +916,8 @@
      "key": "v2",
      "eq_ref": "fld.v2"
     }
-   ]
+   ],
+   "required": true
   },
   "verified": true
  },
