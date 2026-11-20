@@ -1123,6 +1123,20 @@ def test_atc_transponder_checks_xpdr_operation():
     assert "XPDR ATC (raw)" in [n for g, rows in mon.build({"xpdr_atc": 2}) for n, *_ in rows]
 
 
+def test_after_landing_atc_checks_xpdr_stby():
+    """After landing: ATC su STBY (0 verde, 1 e 2 rosso, non letto neutro)."""
+    cl = C.load()
+    iid = "after-landing.atc"
+    assert cl.links[iid]["check"] == {"key": "xpdr_operation", "eq": "STBY"} and cl.links[iid]["verified"] is True
+    assert cl.links["after-landing.tcas-mode-selector"]["check"] == {"key": "tcas", "eq": "STBY"}
+    for simp in (False, True):
+        for v, st in ((0, "ok"), (1, "bad"), (2, "bad"), (None, "na")):
+            mv = {} if v is None else {"xpdr_operation": v}
+            r = cl.evaluate_phase("after-landing", mon.clean_labels(mv), simplified=simp, raw=mv)
+            rows = {i["id"]: i for s in r["subphases"] for i in s["items"]}
+            assert rows[iid]["status"] == st, (simp, v, rows[iid]["status"])  # voce presente anche nella semplificata (Andrea, 20/11)
+
+
 def test_gsx_links():
     cl = C.load()
     fc, ct, bd = "cockpit-preparation.start-fueling", "cockpit-preparation.start-catering", "cockpit-preparation.start-boarding-passengers"
@@ -1187,6 +1201,7 @@ if __name__ == "__main__":
     test_cabin_fuel_links()
     test_gsx_links()
     test_atc_transponder_checks_xpdr_operation()
+    test_after_landing_atc_checks_xpdr_stby()
     test_ai_links()
     test_snapshot_ai_with_metar()
     print("ok tcas/cabin")

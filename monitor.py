@@ -122,7 +122,7 @@ ITEMS: list[Item] = [
     Item("wx_mode", "Weather radar", "WX Mode", "numeric", {"Prep": "as required"}, None, "S_WR_MODE"),
     Item("squawk", "Transponder", "Squawk code", "numeric", {"Before start": "as cleared"}, None, "N_FREQ_XPDR_SELECTED"),  # verificata dal vivo 13/11
     Item("tcas", "Transponder", "TCAS mode selector", "tcas", {"Before T/O": "TA or TA/RA", "After landing": "STBY"}, None, "S_XPDR_MODE"),  # valori 0/1/2 ipotizzati
-    Item("xpdr_operation", "Transponder", "XPDR operation", "xpdrop", {"Before start": "AUTO"}, None, "S_XPDR_OPERATION"),  # 0 STBY, 1 AUTO, 2 ON (Andrea 20/11)
+    Item("xpdr_operation", "Transponder", "XPDR operation", "xpdrop", {"Before start": "AUTO", "After landing": "STBY"}, None, "S_XPDR_OPERATION"),  # 0 STBY, 1 AUTO, 2 ON (Andrea 20/11)
     Item("xpdr_atc", "Transponder", "XPDR ATC (raw)", "numeric", {}, None, "S_XPDR_ATC"),  # solo grezzo, per capire la mappa
     # GSX (mappa da confermare, vedi GSX_STATES): voce senza colore se la L-var non risponde o il valore e' fuori mappa
     Item("gsx_refuel", "GSX", "GSX refueling state", "gsx", {}, None, "FSDT_GSX_REFUELING_STATE"),

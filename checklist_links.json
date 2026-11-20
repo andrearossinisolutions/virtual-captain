@@ -993,6 +993,13 @@
   },
   "verified": true
  },
+ "after-landing.atc": {
+  "check": {
+   "key": "xpdr_operation",
+   "eq": "STBY"
+  },
+  "verified": true
+ },
  "before-start.thrust-levers": {
   "check": {
    "detent": "IDLE"
