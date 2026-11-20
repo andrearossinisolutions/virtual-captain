@@ -1,9 +1,10 @@
-"""Voce locale: pyttsx3 (SAPI su Windows) in un thread dedicato; in assenza stampa soltanto.
+"""Voce locale: pyttsx3 (SAPI su Windows) in un thread dedicato; in assenza scrive soltanto nel log.
 
 Un motore nuovo per ogni frase: su Windows riusare lo stesso motore fa spesso parlare solo la prima volta.
 """
 from __future__ import annotations
 
+import logging
 import os
 import queue
 import threading
@@ -14,6 +15,7 @@ try:
 except Exception:  # noqa: BLE001
     pyttsx3 = None
 
+log = logging.getLogger("captain.voice")
 _q: queue.Queue = queue.Queue()
 _listed = False
 # Preferenze, in ordine: variabile d'ambiente CAPTAIN_VOICE (parte del nome), poi voci inglesi note.
@@ -34,8 +36,7 @@ def _pick_voice(e):
                 return
     if not _listed:
         _listed = True
-        print("[VOCE] nessuna voce inglese trovata. Disponibili: "
-              + ", ".join(v.name for v in voices), flush=True)
+        log.warning("[VOICE] no English voice found. Available: %s", ", ".join(v.name for v in voices))
 
 
 def _worker():
@@ -47,7 +48,7 @@ def _worker():
     while True:
         text, on_start, shown = _q.get()
         try:
-            print(f"[CAPITANO] {text}", flush=True)
+            log.info("[CAPTAIN] %s", text)
             if on_start:
                 on_start(shown or text)  # la pagina mostra la frase quando inizia a essere letta, non quando è in coda
             if not pyttsx3:
@@ -60,7 +61,7 @@ def _worker():
                 e.stop()
                 del e
         except Exception as ex:  # noqa: BLE001
-            print(f"[VOCE] errore: {ex}", flush=True)
+            log.error("[VOICE] error: %s", ex)
         finally:
             _q.task_done()
 

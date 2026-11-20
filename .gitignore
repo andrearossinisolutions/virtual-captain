@@ -5,3 +5,4 @@ __pycache__/
 vendor/
 *.part
 .requirements.sha256
+logs/

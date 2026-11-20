@@ -27,7 +27,7 @@ def _read(name: str) -> str:
         with open(WEB_DIR / name, encoding="utf-8", newline="") as f:
             return f.read()
     except FileNotFoundError:
-        raise RuntimeError(f"cartella web/ incompleta: manca {name}; fai git pull") from None
+        raise RuntimeError(f"web/ folder incomplete: {name} is missing; run git pull") from None
 
 
 def build_page() -> str:

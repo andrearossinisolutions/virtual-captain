@@ -593,12 +593,9 @@ def test_inputs_markup():
 
 
 
-def test_firewall_noop_off_windows():
+def test_firewall_is_a_noop():
     import firewall
-    import os
-    if os.name != "nt":
-        assert firewall.ensure(8080) is True
-    assert "100.64.0.0/10" in firewall.manual_command(8080)
+    assert firewall.ensure(8080) is True  # no rule, no prompt (Tailscale removed, page on 127.0.0.1)
 
 
 def test_plan_extraction():
@@ -799,7 +796,7 @@ def test_build_page_missing_file_message():
         web.build_page()
         assert False, "doveva fallire"
     except RuntimeError as e:
-        assert "cartella web/ incompleta: manca index.html" in str(e) and "git pull" in str(e)
+        assert "web/ folder incomplete: index.html is missing" in str(e) and "git pull" in str(e)
     finally:
         web.WEB_DIR = orig
 
@@ -861,7 +858,7 @@ if __name__ == "__main__":
     test_simvars_monitor_requests_and_missing_is_zero()
     test_sim_state_snapshot_and_old_aao_url_ignored()
     test_sim_endpoints_and_markup()
-    test_firewall_noop_off_windows()
+    test_firewall_is_a_noop()
     test_plan_extraction()
     test_old_mode_values_migrate()
     test_page_assembled_from_files()

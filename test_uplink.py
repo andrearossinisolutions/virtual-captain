@@ -288,7 +288,7 @@ def test_first_run_links_saves_connects_then_stops_on_4001(tmp_path):
     assert rig.connects[0][0] == "wss://vc.example.test/ws/agent"
     assert rig.connects[0][1] == A1 and rig.connects[0][2]["refresh"] == R1
     assert len(rig.connects) == 1  # 4001: no reconnection
-    assert "un'altra istanza" in rig.say_text()
+    assert "another instance" in rig.say_text()
     assert rig.shown and rig.shown[0]["user_code"] == "ABCD-EFGH"
     hello = ws.sent[0]
     assert hello == {"t": "hello", "v": 1, "app": "virtual-captain/" + uplink.APP_VERSION, "platform": sys.platform}
@@ -309,7 +309,7 @@ def test_silent_server_is_dropped_after_stale_and_reconnected(tmp_path):
     ws = FakeWs(rig.clock, [WELCOME] + [None] * 200)
     rig.ws_factory = ws
     rig.run()
-    assert ws.closed and "collegamento perso" in rig.say_text()
+    assert ws.closed and "link lost" in rig.say_text()
     assert rig.waits == [pytest.approx(1.0)]
 
 
@@ -333,7 +333,7 @@ def test_4002_stops_without_retry(tmp_path):
     rig = Rig(tmp_path, FakeHttp({}), tokens=good_tokens())
     rig.ws_factory = FakeWs(rig.clock, [WELCOME, ConnClosed(4002)])
     rig.run()
-    assert rig.up.state == "stopped" and len(rig.connects) == 1 and "aggiorna" in rig.say_text()
+    assert rig.up.state == "stopped" and len(rig.connects) == 1 and "update" in rig.say_text()
     assert rig.store.load() is not None  # tokens are fine: only the program is old
 
 
@@ -374,7 +374,7 @@ def test_server_unreachable_at_login_retries(tmp_path):
     rig = Rig(tmp_path, http, wait_limit=3)
     rig.run()
     assert rig.waits == [1, 2, 4] and rig.up.state in ("unlinked", "linking")
-    assert "resta utilizzabile in locale" in rig.say_text()
+    assert "stays usable locally" in rig.say_text()
     assert rig.msgs.count(rig.msgs[0]) == 1  # the same message is not repeated every retry
 
 
@@ -429,7 +429,7 @@ def test_save_failure_keeps_running_with_the_new_tokens(tmp_path):
     rig.ws_factory = FakeWs(rig.clock, [WELCOME, ConnClosed(1006)])
     rig.wait_limit = 1
     rig.run()
-    assert rig.connects[0][1] == A1 and "impossibile salvare" in rig.say_text()
+    assert rig.connects[0][1] == A1 and "cannot save" in rig.say_text()
     assert rig.up._dirty is not None  # retried at the next loop
     fail["on"] = False
     rig.up._stop.clear()
@@ -453,7 +453,7 @@ def test_repeated_401_after_a_fresh_refresh_ends_in_relink_needed(tmp_path):
     rig.run()
     assert rig.up.state == "relink_needed" and rig.store.load() is None
     assert http.paths().count("/api/device/token") == 1 and len(rig.connects) == 4  # 1 stale + 3 fresh rejections
-    assert "appena rinnovati" in rig.say_text() and len(rig.waits) == 3  # backoff between tries, none after the end
+    assert "freshly renewed" in rig.say_text() and len(rig.waits) == 3  # backoff between tries, none after the end
 
 
 def test_a_good_connection_clears_the_rejection_count(tmp_path):
@@ -707,7 +707,7 @@ def test_source_errors_are_contained_reported_once_and_recover(tmp_path):
     rig, ws = _run_with_source(tmp_path, src, ticks=30)
     assert [m["seq"] for m in _snaps(ws)] == [1]  # recovered, connection never dropped
     said = rig.say_text()
-    assert said.count("snapshot del volo non disponibile") == 1 and "SECRET-CONTENT" not in said and "lat=" not in said
+    assert said.count("flight snapshot unavailable") == 1 and "SECRET-CONTENT" not in said and "lat=" not in said
 
 
 def test_source_returning_none_sends_nothing(tmp_path):
@@ -725,14 +725,14 @@ def test_server_rejection_1008_after_snapshots_is_reported_once_without_content(
     rig.ws_factory = lambda n: FakeWs(rig.clock, [WELCOME, None, None, ConnClosed(1008 if n < 3 else 4001)])
     rig.run()
     said = rig.say_text()
-    assert said.count("snapshot e' stato rifiutato dal server") == 1 and "SECRET-X" not in said
+    assert said.count("snapshot was rejected by the server") == 1 and "SECRET-X" not in said
 
 
 def test_1008_without_snapshots_sent_is_not_reported_as_rejected(tmp_path):
     rig = Rig(tmp_path, FakeHttp({}), tokens=good_tokens(), wait_limit=2)
     rig.ws_factory = lambda n: FakeWs(rig.clock, [WELCOME, ConnClosed(1008 if n < 2 else 4001)])
     rig.run()
-    assert "rifiutato" not in rig.say_text()
+    assert "rejected" not in rig.say_text()
 
 
 def test_local_validation_failure_is_reported_once_and_nothing_is_sent(tmp_path):
@@ -741,7 +741,7 @@ def test_local_validation_failure_is_reported_once_and_nothing_is_sent(tmp_path)
     def src():
         return S.remote_view({"phase": "flying", "fields": {"a": 5}})  # numeric value: the allowlist refuses it
     rig, ws = _run_with_source(tmp_path, src, ticks=20)
-    assert _snaps(ws) == [] and rig.say_text().count("snapshot del volo non disponibile (SnapshotError)") == 1
+    assert _snaps(ws) == [] and rig.say_text().count("flight snapshot unavailable (SnapshotError)") == 1
 
 
 # ---------------------------------------------------------------- instance lock
@@ -761,7 +761,7 @@ def test_second_instance_starts_without_uplink_and_says_so(tmp_path):
     held = InstanceLock(tmp_path / uplink.LOCK_NAME)
     assert held.acquire()
     assert uplink.launch([], lambda i: None, say=msgs.append, directory=tmp_path) is None
-    assert "un'altra istanza" in msgs[0] and "senza" in msgs[0]
+    assert "instance already has the server link" in msgs[0] and "without it" in msgs[0]
     held.release()
 
 
@@ -816,7 +816,7 @@ def test_launch_default_starts_a_thread_and_no_server_does_not(tmp_path):
     before = {t.name for t in threading.enumerate()}
     assert uplink.launch(["--no-server"], lambda i: None, say=msgs.append, directory=tmp_path / "b") is None
     assert {t.name for t in threading.enumerate()} == before
-    assert any("disattivato" in m for m in msgs)
+    assert any("disabled" in m for m in msgs)
     assert uplink.launch(["--local"], lambda i: None, say=msgs.append, directory=tmp_path / "c") is None
 
 
@@ -824,7 +824,7 @@ def test_launch_bad_url_disables_the_uplink_but_does_not_raise(tmp_path):
     msgs = []
     assert uplink.launch(["--server-url", "http://evil.example.test"], lambda i: None, say=msgs.append,
                          directory=tmp_path) is None
-    assert "senza collegamento" in msgs[0]
+    assert "without the server link" in msgs[0]
 
 
 # ---------------------------------------------------------------- unlink
@@ -1061,7 +1061,7 @@ def test_resync_works_even_without_commands_and_with_delta_off(tmp_path):
 def test_unknown_server_messages_are_ignored(tmp_path):
     junk = [json.dumps({"t": "mystery", "x": 1}), "not json", json.dumps([1]), json.dumps({"t": "delta"}), json.dumps({"t": "resync", "x": "y" * 5000})]
     rig, ws = _rig_source(tmp_path, lambda: {"phase": "flying"}, [WELCOME_DELTA, None] + junk + [None] * 5 + [ConnClosed(4001)])
-    assert _types(ws) == ["snapshot"] and rig.say_text().count("errore") == 0   # the oversized "resync" is dropped too
+    assert _types(ws) == ["snapshot"] and rig.say_text().count("error") == 0   # the oversized "resync" is dropped too
 
 
 def test_keyframe_every_60_sends(tmp_path):

@@ -81,12 +81,12 @@ def check_base_url(url: str) -> str:
         parts = urlparse(text)
         host = parts.hostname
     except ValueError:
-        raise ValueError("indirizzo del server non valido") from None
+        raise ValueError("invalid server address") from None
     if (parts.scheme not in ("http", "https") or not host or parts.path or parts.query
             or parts.fragment or parts.username or parts.password):
-        raise ValueError("l'indirizzo del server deve essere solo schema://host[:porta]")
+        raise ValueError("the server address must be just scheme://host[:port]")
     if parts.scheme == "http" and host not in LOOPBACK:
-        raise ValueError("indirizzo http rifiutato: serve https (http solo su localhost)")
+        raise ValueError("http address rejected: https is required (http only on localhost)")
     return text
 
 
@@ -402,7 +402,7 @@ class Uplink:
             self._dirty = None
         except OSError:
             self._dirty = tokens
-            self._tell("impossibile salvare i token su disco: il collegamento funziona ma non sopravvive al riavvio")
+            self._tell("cannot save the tokens to disk: the link works but will not survive a restart")
 
     def _load(self) -> Optional[dict]:
         tokens = self.store.load()
@@ -415,9 +415,9 @@ class Uplink:
         try:
             self._loop()
         except ImportError:
-            self._set(STOPPED, "libreria 'websockets' mancante: esegui  pip install -r requirements.txt  (il programma resta in locale)")
+            self._set(STOPPED, "the 'websockets' library is missing: run  pip install -r requirements.txt  (the program stays local)")
         except Exception as e:  # noqa: BLE001  (il thread non deve mai portare giu' il programma)
-            self._set(STOPPED, f"uplink interrotto da un errore inatteso ({type(e).__name__}): il programma resta in locale")
+            self._set(STOPPED, f"uplink stopped by an unexpected error ({type(e).__name__}): the program stays local")
 
     def _loop(self) -> None:
         old = self._load() if self.force_link else None  # --link: i vecchi token restano finche' il nuovo collegamento non riesce
@@ -444,9 +444,9 @@ class Uplink:
                     self._persist(tokens)  # PRIMA di usarli: il vecchio refresh e' gia' ruotato
                     self._unproven = True
             except InvalidGrant:
-                return self._revoked("autorizzazione scaduta o revocata")
+                return self._revoked("authorization expired or revoked")
             except NetworkError:
-                self._set(CONNECTING, "server non raggiungibile, riprovo (il programma resta utilizzabile in locale)")
+                self._set(CONNECTING, "server unreachable, retrying (the program stays usable locally)")
                 if self._wait(self.backoff.failure()):
                     return
                 continue
@@ -457,15 +457,15 @@ class Uplink:
                 if e.status == 401 and self._unproven:
                     self._rejects += 1
                     if self._rejects >= MAX_FRESH_REJECTS:
-                        return self._revoked("il server rifiuta anche i token appena rinnovati")
+                        return self._revoked("the server rejects even the freshly renewed tokens")
                 elif e.status == 401:
                     tokens = dict(tokens, access_exp=0.0)  # token non valido: prossimo giro rinnova
-                self._tell(f"collegamento rifiutato dal server (HTTP {e.status}), riprovo")
+                self._tell(f"connection rejected by the server (HTTP {e.status}), retrying")
                 if self._wait(self.backoff.failure()):
                     return
                 continue
             except ConnError:
-                self._tell("server non raggiungibile, riprovo (il programma resta utilizzabile in locale)")
+                self._tell("server unreachable, retrying (the program stays usable locally)")
                 if self._wait(self.backoff.failure()):
                     return
                 continue
@@ -476,12 +476,12 @@ class Uplink:
             if outcome == "stop":
                 return
             if outcome == "closed" and code == protocol.CLOSE_REPLACED:
-                return self._set(STOPPED, "un'altra istanza ha preso il collegamento: questa resta in locale")
+                return self._set(STOPPED, "another instance took over the link: this one stays local")
             if outcome == "closed" and code == protocol.CLOSE_REVOKED:
-                return self._revoked("autorizzazione revocata dal server")
+                return self._revoked("authorization revoked by the server")
             if outcome == "closed" and code == protocol.CLOSE_BAD_VERSION:
-                return self._set(STOPPED, "il server non supporta questa versione del protocollo: aggiorna il programma")
-            self._set(CONNECTING, "collegamento perso, riprovo")
+                return self._set(STOPPED, "the server does not support this protocol version: update the program")
+            self._set(CONNECTING, "link lost, retrying")
             if self._wait(self.backoff.failure()):
                 return
 
@@ -491,17 +491,17 @@ class Uplink:
         if kind == "ok":
             return tokens
         if kind == "denied":
-            self._set(STOPPED, "collegamento rifiutato dal sito: riavvia il programma o usa --link per riprovare")
+            self._set(STOPPED, "link refused by the site: restart the program or use --link to try again")
         elif kind == "expired":
-            self._set(RELINK_NEEDED, "codice scaduto: riavvia il programma o usa --link per un nuovo collegamento")
+            self._set(RELINK_NEEDED, "code expired: restart the program or use --link for a new link")
         elif kind == "network":
-            self._set(UNLINKED, "server non raggiungibile, riprovo (il programma resta utilizzabile in locale)")
+            self._set(UNLINKED, "server unreachable, retrying (the program stays usable locally)")
         return None
 
     def _revoked(self, why: str) -> None:
         self.store.clear()
         self._dirty = None
-        self._set(RELINK_NEEDED, f"{why}: riavvia il programma (o usa --link) per collegarlo di nuovo")
+        self._set(RELINK_NEEDED, f"{why}: restart the program (or use --link) to link it again")
 
     def _session(self, ws):
         """Una connessione: ("stop"|"closed"|"error"|"bad", codice). Chiude sempre il socket."""
@@ -532,7 +532,7 @@ class Uplink:
             if self.command_target is not None:
                 worker = commands.CommandWorker(self.command_target, enabled=self.remote_commands, mono=self.mono)
                 worker.start()
-            self._set(CONNECTED, "collegato al server")
+            self._set(CONNECTED, "connected to the server")
             now = self.mono()
             next_ping, last_rx = now + beat, now
             snap = _SnapshotSender(self.snapshot_source, self._tell, deltas=deltas, mono=self.mono)  # per connessione: seq da 1, il primo invio e' subito dopo l'hello
@@ -574,7 +574,7 @@ class Uplink:
         except ConnClosed as e:
             if e.code == 1008 and snap is not None and snap.seq > 0 and not self._told_rejected:
                 self._told_rejected = True
-                self._tell("lo snapshot e' stato rifiutato dal server: aggiorna il programma o segnala il problema")
+                self._tell("the snapshot was rejected by the server: update the program or report the problem")
             return "closed", e.code
         except ConnError:
             return "error", None
@@ -631,7 +631,7 @@ class _SnapshotSender:
         except Exception as e:  # noqa: BLE001  (la sorgente non deve mai fermare il collegamento; mai il contenuto in console)
             if not self.failing:
                 self.failing = True
-                self.tell(f"snapshot del volo non disponibile ({type(e).__name__}): il collegamento continua senza dati")
+                self.tell(f"flight snapshot unavailable ({type(e).__name__}): the link continues without data")
             return None
         self.failing = False
         digest = hashlib.sha1(body.encode("utf-8")).digest()
@@ -738,13 +738,13 @@ def unlink_cli(argv: list, say: Callable[[str], None] = print, store: Optional[T
     store = store or TokenStore()
     tokens = store.load()
     if tokens is None:
-        say("[uplink] nessun collegamento salvato su questo PC.")
+        say("[uplink] no saved link on this PC.")
         return 0
     if not revoke(http or UrllibHttp(), tokens["base_url"], tokens):
-        say("[uplink] revoca sul server non riuscita (server irraggiungibile?): i token restano su questo PC, riprova piu' tardi.")
+        say("[uplink] revocation on the server failed (server unreachable?): the tokens stay on this PC, try again later.")
         return 1
     store.clear()
-    say("[uplink] collegamento revocato sul server e cancellato da questo PC.")
+    say("[uplink] link revoked on the server and removed from this PC.")
     return 0
 
 
@@ -756,19 +756,19 @@ def launch(argv: list, show_login: Callable[[dict], None], say: Callable[[str], 
     directory = Path(directory) if directory else default_dir()
     opts = parse_options(argv, load_config(directory), lambda cfg: save_config(directory, cfg))
     if opts.error:
-        say(f"[uplink] {opts.error}: avvio senza collegamento al server.")
+        say(f"[uplink] {opts.error}: starting without the server link.")
         return None
     if not opts.enabled:
-        say("[uplink] collegamento al server disattivato (--no-server / --local): solo pagina locale.")
+        say("[uplink] server link disabled (--no-server / --local): local page only.")
         return None
     lock = InstanceLock(directory / LOCK_NAME)
     if not lock.acquire():
-        say("[uplink] un'altra istanza di Virtual Captain ha gia' il collegamento al server: questa parte senza.")
+        say("[uplink] another Virtual Captain instance already has the server link: this one starts without it.")
         return None
     up = Uplink(opts.base_url, store or TokenStore(directory), http=http, connect=connect, say=say,
                 show_login=show_login, force_link=opts.link, lock=lock, snapshot_source=snapshot_source,
                 command_target=command_target, remote_commands=opts.remote_commands)
     if command_target is not None and not opts.remote_commands:
-        say("[uplink] comandi dal sito disattivati (--no-remote-commands / uplink.json): il sito mostra solo lo stato.")
+        say("[uplink] commands from the site disabled (--no-remote-commands / uplink.json): the site only shows the status.")
     up.start()
     return up
