@@ -250,7 +250,7 @@ function checklist(s){const ph=s.cl_phases||[],cur=s.cl_phase,c=s.checklist;if(!
       if((it.show||it.kind==="wait")&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","NOW: "+it.live.map(l=>l[1]).join(", ")));
       if(it.kind==="wait")tx.appendChild(mk("div","now nv","Waiting: "+(it.gate||it.detail||"")));
       if(it.was_ok&&it.live&&it.live.length)tx.appendChild(mk("div","now nv","was OK \u00b7 NOW: "+it.live.map(l=>l[1]).join(", ")));
-      if(it.kind==="mismatch"){
+      if(it.kind==="mismatch"&&!it.show){
         const nt=nowText(it.detail);tx.appendChild(nt?mk("div","now","NOW: "+nt):mk("div","d",it.detail))}
       r.appendChild(tx);body.appendChild(r)}}
   if(keep){const i=craftEl.querySelector('[data-c="'+keep[0]+'"]');if(i){i.focus({preventScroll:true});try{i.setSelectionRange(keep[1],keep[2])}catch(e){}}}

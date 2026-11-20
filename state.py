@@ -674,5 +674,5 @@ class State:
                     "checklist": self.cl.evaluate_phase(self.cl_phase, self.labels, self.cl_demo or self.cl_trust_links,
                                                        self.checklist_mode == "simplified",
                                                        self.raw if self.cl_trust_links else None, self._expected(), self._wx_data(), self.gates,
-                                                       latched=self.latch),
+                                                       latched=self.latch, live_raw=self.raw),
                     "test_links": self.cl_trust_links, "clearance": dict(self.clearance)}

@@ -162,8 +162,11 @@ def raw_values(check: dict | None, raw: dict) -> list:
     return out
 
 
-def live_values(check: dict | None, labels: dict) -> list:
-    """Valori reali letti per un check: [[nome, etichetta|"n/d"], ...] (sola lettura, vuoto se la voce non ha variabile)."""
+def live_values(check: dict | None, labels: dict, live_raw: dict | None = None) -> list:
+    """Valori reali letti per un check: [[nome, etichetta|"n/d"], ...] (sola lettura, vuoto se la voce non ha variabile).
+    Check "gsx": il valore e' "<servizio> <grezzo> <stato>" (es. "boarding 1 available"), sempre con il grezzo (live_raw), anche senza --test-links."""
+    if "gsx" in (check or {}):
+        return [[BY_KEY[k].name, mon.gsx_live_text(k, (live_raw or {}).get(k))] for k in check["gsx"]]
     if "qnh" in (check or {}) or "std" in (check or {}):
         a = qnh_actual(labels)
         return [["Baro", "STD" if a == "STD" else (f"{a:.0f}" if a is not None else mon.NA)]]
@@ -271,7 +274,7 @@ class Checklist:
 
     def evaluate_phase(self, phase_id: str, labels: dict, demo: bool = False, simplified: bool = False, raw: dict | None = None,
                        expected: dict | None = None, wx: dict | None = None, gates: dict | None = None, update: bool = False,
-                       latched=None, now: float = 0.0) -> dict:
+                       latched=None, now: float = 0.0, live_raw: dict | None = None) -> dict:
         """Sottofasi e voci della fase con status/detail; "bad" = numero di voci rosse (solo quelle visibili). demo=True tratta i link come verificati.
         raw (solo --test-links): aggiunge a ogni voce con link "raw" = [[variabile, grezzo], ...].
         expected: valori attesi {riferimento: testo} per i link eq_ref/show_ref (da state.snapshot).
@@ -280,6 +283,7 @@ class Checklist:
         (solo da State.set_monitor, mai dallo snapshot). Gate non aperto => status "wait" (non conta in "bad").
         latched: Latch di State (voci soddisfatte congelate): con update=True osserva lo stato grezzo (istante now); una voce congelata ha status "ok",
         kind "latched", latched=True e detail = quello grezzo (vuoto se ancora ok), la riga live resta quella reale. Non conta in "bad".
+        live_raw: valori grezzi sempre disponibili (anche senza --test-links), solo per la riga live dei check GSX (grezzo accanto allo stato).
         simplified=True salta le voci escluse prima della valutazione e scarta le sottofasi rimaste vuote."""
         ph, bad, subs = self.phase(phase_id), 0, []
         g_open, g_done = (gates["open"], gates["done"]) if gates is not None else (set(), set())
@@ -311,14 +315,14 @@ class Checklist:
                         g_done.add(it["id"])
                 bad += res["status"] == "bad"
                 row = {"id": it["id"], "text": it["text"], "response": it["response"], "type": it["type"],
-                       "live": live_values(link["check"], labels) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
+                       "live": live_values(link["check"], labels, live_raw) if link else [], "status": res["status"], "kind": res["kind"], "detail": res["detail"]}
                 if is_latched:
                     row["latched"] = True
                     if not raw_ok:
                         row["was_ok"] = True  # grezzo non ok: la pagina scrive "was OK \u00b7 NOW: <live>"
                 if res["kind"] == "wait":
                     row["gate"] = res["detail"]
-                if link and ("show" in link["check"] or ("detent" in link["check"] and res["status"] == "none") or (_refs(link["check"]) and res["status"] == "none") or (ai is not None and res["status"] == "none")):
+                if link and ("show" in link["check"] or "gsx" in link["check"] or ("detent" in link["check"] and res["status"] == "none") or (_refs(link["check"]) and res["status"] == "none") or (ai is not None and res["status"] == "none")):
                     row["show"] = True  # solo da mostrare: la pagina scrive sempre "NOW: <valore>"
                 refs = ([link["check"]["show_ref"]] if "show_ref" in link["check"] else _refs(link["check"])) if link else []
                 if ai is not None:

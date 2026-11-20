@@ -3,6 +3,8 @@
 Le richieste del monitor restano scritte come "(A:NOME, Unità)" / "(L:NOME, Number)" (vedi monitor.py) e qui diventano
 (nome, unità) per SimConnect. Una variabile assente o sconosciuta vale 0 (nessuna gestione degli n/d).
 Compatibilità voluta: solo Fenix A320, niente ripiego sulle variabili standard.
+Eccezione: le L-var GSX (FSDT_GSX_*, gruppo "GSX") valgono None finche' non arriva un dato (0 non e' uno stato valido) e stanno in blocchi
+a parte, rinviabili: GSX/Couatl puo' partire dopo Virtual Captain (vedi simconnect_backend: riregistrazione tardiva).
 """
 from __future__ import annotations
 
@@ -10,7 +12,7 @@ import math
 import re
 from dataclasses import dataclass
 
-from monitor import ITEMS, lvar_request
+from monitor import GSX_GROUP, ITEMS, lvar_request
 
 MAX_PER_DEF = 48  # voci per definizione SimConnect (limite mai provato: da verificare sul Shadow)
 
@@ -43,6 +45,7 @@ def monitor_source(item) -> str | None:
 
 
 MONITOR = {i.key: monitor_source(i) for i in ITEMS}  # chiave -> richiesta o None (voce virtuale, calcolata altrove)
+GSX_KEYS = frozenset(i.key for i in ITEMS if i.group == GSX_GROUP and i.lvar)  # L-var GSX: None finche' non arriva un dato
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,7 @@ class Block:
     target: str
     keys: tuple
     reqs: tuple
+    retry: bool = False  # blocco GSX: se non risponde (tutto 0) si riregistra periodicamente (backend)
 
 
 def build_blocks() -> list:
@@ -59,11 +63,11 @@ def build_blocks() -> list:
     una variabile A: errata (eccezione, nessun dato per il blocco) non rompe le L-var."""
     blocks = [Block(1, "core", tuple(VARS), tuple(parse_request(v) for v in VARS.values()))]
     wanted = [(k, parse_request(r)) for k, r in MONITOR.items() if r]
-    for lvars in (False, True):
-        part = [(k, nu) for k, nu in wanted if nu[0].startswith("L:") == lvars]
+    for lvars, gsx in ((False, False), (True, False), (True, True)):  # A:, poi L-var Fenix, poi L-var GSX (blocco a parte)
+        part = [(k, nu) for k, nu in wanted if nu[0].startswith("L:") == lvars and (k in GSX_KEYS) == gsx]
         for i in range(0, len(part), MAX_PER_DEF):
             chunk = part[i:i + MAX_PER_DEF]
-            blocks.append(Block(len(blocks) + 1, "monitor", tuple(k for k, _ in chunk), tuple(nu for _, nu in chunk)))
+            blocks.append(Block(len(blocks) + 1, "monitor", tuple(k for k, _ in chunk), tuple(nu for _, nu in chunk), gsx))
     return blocks
 
 
@@ -72,8 +76,8 @@ def default_core() -> dict:
 
 
 def default_monitor() -> dict:
-    """0 per ogni voce con sorgente (anche se non arriva mai il dato), None per le virtuali."""
-    return {k: (0.0 if r else None) for k, r in MONITOR.items()}
+    """0 per ogni voce con sorgente (anche se non arriva mai il dato), None per le virtuali e per le L-var GSX (non lette)."""
+    return {k: (0.0 if r and k not in GSX_KEYS else None) for k, r in MONITOR.items()}
 
 
 def number(v) -> float:

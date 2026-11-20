@@ -164,11 +164,16 @@ def test_read_all_missing_values_are_zero():
 
 
 def test_gsx_states():
-    assert [label(BY[k], 6) for k in ("gsx_refuel", "gsx_cater", "gsx_board")] == ["PERFORMING (6)"] * 3
-    assert label(BY["gsx_board"], 7) == "COMPLETED (7)" and label(BY["gsx_board"], 0) == "n/d (0)" and label(BY["gsx_board"], None) == "n/d"
+    assert [label(BY[k], 6) for k in ("gsx_refuel", "gsx_cater", "gsx_board")] == ["COMPLETED (6)"] * 3
+    assert label(BY["gsx_board"], 5) == "IN PROGRESS (5)" and label(BY["gsx_board"], 7) == "n/d (7)" and label(BY["gsx_board"], 0) == "n/d (0)" and label(BY["gsx_board"], None) == "n/d"
     assert BY["gsx_refuel"].lvar == "FSDT_GSX_REFUELING_STATE" and BY["gsx_cater"].lvar == "FSDT_GSX_CATERING_STATE" and BY["gsx_board"].lvar == "FSDT_GSX_BOARDING_STATE"
     assert set(monitor.GSX_ACTIVE) <= set(monitor.GSX_STATES.values())
-    assert monitor.clean_label(BY["gsx_cater"], 7) == "COMPLETED" and monitor.clean_label(BY["gsx_cater"], 99) is None
+    assert monitor.gsx_live_text("gsx_board", 1) == "boarding 1 available" and monitor.gsx_live_text("gsx_board", None) == "boarding n/d"
+    assert monitor.gsx_live_text("gsx_cater", 0) == "catering 0 n/d" and monitor.gsx_live_text("gsx_refuel", 5.0) == "refueling 5 in progress"
+    diag = [i for i in monitor.ITEMS if i.group == "GSX" and i.key.startswith("gsx_d_")]
+    assert len(diag) == 13 and all(i.kind == "numeric" and i.lvar.startswith("FSDT_GSX_") for i in diag)
+    assert {i.lvar for i in diag} >= {"FSDT_GSX_COUATL_STARTED", "FSDT_GSX_HEARTBEAT", "FSDT_GSX_STATE", "FSDT_GSX_PUSHBACK_STATUS"}
+    assert monitor.clean_label(BY["gsx_cater"], 6) == "COMPLETED" and monitor.clean_label(BY["gsx_cater"], 99) is None
 
 if __name__ == "__main__":
     test_flight_items_std_only()

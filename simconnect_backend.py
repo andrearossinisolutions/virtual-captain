@@ -36,6 +36,9 @@ MAX_MSG_PER_STEP = 64
 WATCHDOG_S = 15.0                # connesso ma nessun dato del core da tanto: si riconnette
 MAX_BAD_DISPATCH = 20            # giri consecutivi con errore di GetNextDispatch (diverso da E_FAIL) -> disconnessione
 E_FAIL = 0x80004005              # "nessun messaggio": normale
+PERIOD_NEVER = 0                 # SIMCONNECT_PERIOD_NEVER: ferma una richiesta periodica
+GSX_RETRY_S = 12.0               # blocco GSX muto (tutto 0): si riregistra ogni tanto, GSX/Couatl puo' partire dopo Virtual Captain
+GEN_STEP = 1000                  # id definizione/richiesta di una riregistrazione = id del blocco + GEN_STEP * generazione
 
 
 class BackendError(Exception):
@@ -161,6 +164,10 @@ class SimConnectBackend:
         self._last_exc: Optional[str] = None
         self._warned_size = False
         self._blocks = simvars.build_blocks()
+        self._by_req: dict = {}               # id richiesta (anche delle riregistrazioni) -> blocco
+        self._gsx_answered = False            # almeno una L-var GSX ha risposto con un valore diverso da 0
+        self._gsx_gen = 0
+        self._gsx_next = 0.0
         self._lock = threading.Lock()
         self._cond = threading.Condition(self._lock)
         self._core: dict = {}
@@ -263,6 +270,7 @@ class SimConnectBackend:
         self._drain(now)
         if self._h is not None and self._connected:
             now = self._clock()
+            self._gsx_retry(now)
             if now - self._last_data_at > WATCHDOG_S:
                 log.warning("Nessun dato da MSFS da %.0f s: chiudo e riapro SimConnect.", WATCHDOG_S)
                 self._disconnect(now, "no data from MSFS (SimConnect OFF)")
@@ -330,23 +338,47 @@ class SimConnectBackend:
             elif msg_id == RECV_SIMOBJECT_DATA:
                 self._on_data(pp)
 
+    def _register(self, b, ident: int) -> bool:
+        """Definizione + richiesta periodica di un blocco con l'id dato (id richiesta = id definizione). True se nessun errore."""
+        ok = True
+        for i, (name, unit) in enumerate(b.reqs):
+            hr = self._dll.SimConnect_AddToDataDefinition(self._h, ident, name.encode(), unit.encode(), FLOAT64, C.c_float(0.0), i)
+            if self._hr_failed(hr):
+                log.error("AddToDataDefinition %s fallita (hr=0x%08X): vale 0", name, hr & 0xFFFFFFFF)
+                ok = False
+        hr = self._dll.SimConnect_RequestDataOnSimObject(self._h, ident, ident, USER_AIRCRAFT,
+                                                         PERIOD_VISUAL_FRAME, 0, 0, INTERVAL_FRAMES, 0)
+        if self._hr_failed(hr):
+            log.error("RequestDataOnSimObject (blocco %d) fallita (hr=0x%08X)", ident, hr & 0xFFFFFFFF)
+            ok = False
+        self._by_req[ident] = b
+        return ok
+
+    def _gsx_retry(self, now: float) -> None:
+        """Riregistrazione tardiva: finche' nessuna L-var GSX risponde (tutto 0), ogni GSX_RETRY_S si ferma la richiesta vecchia e se ne fa una
+        nuova (nuovi id) per i soli blocchi GSX. Solo lettura: nessuna scrittura di variabili."""
+        if self._gsx_answered or now < self._gsx_next:
+            return
+        self._gsx_next = now + GSX_RETRY_S
+        blocks = [b for b in self._blocks if b.retry]
+        if not blocks:
+            return
+        self._gsx_gen += 1
+        log.info("GSX: nessuna risposta dalle L-var, riregistro (tentativo %d).", self._gsx_gen)
+        for b in blocks:
+            old = b.ident + GEN_STEP * (self._gsx_gen - 1)
+            self._dll.SimConnect_RequestDataOnSimObject(self._h, old, old, USER_AIRCRAFT, PERIOD_NEVER, 0, 0, INTERVAL_FRAMES, 0)
+            self._register(b, b.ident + GEN_STEP * self._gsx_gen)
+
     def _on_open(self) -> None:
         self._warned_size = False
         self._bad_dispatch = 0
         self._last_data_at = self._clock()
+        self._by_req, self._gsx_answered, self._gsx_gen = {}, False, 0
+        self._gsx_next = self._clock() + GSX_RETRY_S
         ok = True
         for b in self._blocks:  # una definizione per blocco, una richiesta periodica per definizione (id richiesta = id definizione)
-            for i, (name, unit) in enumerate(b.reqs):
-                hr = self._dll.SimConnect_AddToDataDefinition(self._h, b.ident, name.encode(), unit.encode(),
-                                                              FLOAT64, C.c_float(0.0), i)
-                if self._hr_failed(hr):
-                    log.error("AddToDataDefinition %s fallita (hr=0x%08X): vale 0", name, hr & 0xFFFFFFFF)
-                    ok = False
-            hr = self._dll.SimConnect_RequestDataOnSimObject(self._h, b.ident, b.ident, USER_AIRCRAFT,
-                                                             PERIOD_VISUAL_FRAME, 0, 0, INTERVAL_FRAMES, 0)
-            if self._hr_failed(hr):
-                log.error("RequestDataOnSimObject (blocco %d) fallita (hr=0x%08X)", b.ident, hr & 0xFFFFFFFF)
-                ok = False
+            ok = self._register(b, b.ident) and ok
         with self._cond:
             self._connected = True
             self._core, self._monitor, self._core_ts = {}, {}, None
@@ -365,13 +397,17 @@ class SimConnectBackend:
                             d.hdr.dwSize, size + 8 * count)
             return
         values = list((C.c_double * count).from_address(C.addressof(d) + size))  # copia subito dal buffer
-        block = next((b for b in self._blocks if b.ident == d.dwRequestID), None)
+        block = self._by_req.get(d.dwRequestID)
         if block is None:
             return
         got = simvars.decode(block, values)
         if not got:
             log.warning("SimConnect: %d valori invece di %d nel blocco %d (ignorati)", count, len(block.keys), block.ident)
             return
+        if block.retry:
+            if not self._gsx_answered and not any(got.values()):
+                return  # L-var GSX ancora mute (0 non e' uno stato): restano None, si riprova a registrarle
+            self._gsx_answered = True
         with self._cond:
             if block.target == "core":
                 self._core.update(got)
@@ -409,11 +445,14 @@ def probe(dll_path: Optional[str] = None, wait_s: float = 20.0) -> int:
     be = SimConnectBackend(dll_path=dll_path)
     be.start()
     end = time.monotonic() + wait_s
+    gsx_end = time.monotonic() + GSX_RETRY_S * 2 + 3
     try:
         while True:
             try:
                 core, mon = be.read_all(timeout=1.0)
-                break
+                if any(mon[k] is not None for k in simvars.GSX_KEYS) or time.monotonic() > gsx_end:
+                    break
+                time.sleep(0.5)  # core gia' letto: si lascia il tempo alle L-var GSX (anche a una riregistrazione)
             except BackendError as e:
                 if be.dll_missing or time.monotonic() > end:
                     print("PROBE FAILED:", e)
@@ -421,10 +460,12 @@ def probe(dll_path: Optional[str] = None, wait_s: float = 20.0) -> int:
         print("SimConnect OK. Core:")
         for k, v in core.items():
             print(f"  {k:12} {v}")
-        print("Monitor (0 may also mean variable missing or unknown):")
+        print("Monitor (0 may also mean variable missing or unknown; GSX: 'not read' = no answer yet, see GSX_RETRY_S):")
         for k, v in mon.items():
             if v is not None:
                 print(f"  {k:16} {v}  <- {simvars.MONITOR[k]}")
+            elif k in simvars.GSX_KEYS:
+                print(f"  {k:16} not read  <- {simvars.MONITOR[k]}")
         return 0
     finally:
         be.stop()

@@ -224,10 +224,10 @@ def test_detent():
 def test_gsx():
     import monitor as mon
     c = {"gsx": ["gsx_refuel", "gsx_cater"]}
-    ok = {"gsx_refuel": "PERFORMING", "gsx_cater": "COMPLETED"}
+    ok = {"gsx_refuel": "IN PROGRESS", "gsx_cater": "COMPLETED"}
     assert all(evaluate(c, {"gsx_refuel": a, "gsx_cater": b})["status"] == "ok" for a in mon.GSX_ACTIVE for b in mon.GSX_ACTIVE)
     assert evaluate(c, ok)["status"] == "ok"
-    r = evaluate(c, {"gsx_refuel": "PERFORMING", "gsx_cater": "REQUESTED"})
+    r = evaluate(c, {"gsx_refuel": "IN PROGRESS", "gsx_cater": "REQUESTED"})
     assert r["status"] == "bad" and "GSX catering state" in r["detail"]
     assert evaluate(c, {"gsx_refuel": "AVAILABLE", "gsx_cater": None})["status"] == "bad"  # un rosso vale piu' di un n/d
     assert evaluate(c, {"gsx_refuel": "COMPLETED", "gsx_cater": None})["status"] == "na"  # lvar muta: senza colore
@@ -235,7 +235,7 @@ def test_gsx():
     assert evaluate(c, ok, verified=False)["status"] == "na"
     d = {"gsx": ["gsx_board"], "set": "done"}
     assert evaluate(d, {"gsx_board": "COMPLETED"})["status"] == "ok"
-    assert all(evaluate(d, {"gsx_board": st})["status"] == "bad" for st in mon.GSX_STATES.values() if st not in mon.GSX_DONE)  # anche PERFORMING
+    assert all(evaluate(d, {"gsx_board": st})["status"] == "bad" for st in mon.GSX_STATES.values() if st not in mon.GSX_DONE)  # anche IN PROGRESS
     assert evaluate(d, {"gsx_board": None})["status"] == "na" and evaluate(d, {})["status"] == "na"
 
 def test_ai():

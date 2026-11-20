@@ -22,11 +22,23 @@ AI_CLOUD_COVERS_ALWAYS = ("VV",)  # coperture che contano sempre
 AI_CLOUD_COVERS_AIR = ("BKN", "OVC")  # coperture che contano solo in volo (FEW/SCT escluse)
 FLIGHT_GROUP = "Flight data"  # voci cinematiche: solo nella card Flight data (restano nella richiesta SimConnect)
 
-# Stati GSX (FSDT_GSX_*_STATE): IPOTESI dalla documentazione GSX, da verificare dal vivo col grezzo (--test-links) e correggere qui.
-GSX_STATES = {1: "NOT AVAILABLE", 2: "AVAILABLE", 3: "UNAVAILABLE", 4: "BYPASSED", 5: "REQUESTED", 6: "PERFORMING", 7: "COMPLETED"}
-GSX_ACTIVE = ("PERFORMING", "COMPLETED")  # unico posto: stati GSX che valgono "servizio avviato" (in corso o completato) per i check {"gsx": [...]}
+# Stati GSX (FSDT_GSX_*_STATE): mappa da confermare dal vivo (fonte non ufficiale: issue mrlm-net/simconnect #663, che cita il manuale GSX).
+# 1 available (callable, richiamabile), 2 non disponibile, 3 bypassed, 4 requested, 5 in progress, 6 completed. 0 = non letta (nessuno stato valido).
+GSX_STATES = {1: "AVAILABLE", 2: "NOT AVAILABLE", 3: "BYPASSED", 4: "REQUESTED", 5: "IN PROGRESS", 6: "COMPLETED"}
+GSX_ACTIVE = ("IN PROGRESS", "COMPLETED")  # unico posto: stati GSX che valgono "servizio avviato" (in corso o completato) per i check {"gsx": [...]}
 GSX_DONE = ("COMPLETED",)  # unico posto: stati GSX che valgono "servizio concluso" (check {"gsx": [...], "set": "done"})
 GSX_SETS = {"active": GSX_ACTIVE, "done": GSX_DONE}  # nome del set nel check; default "active"
+GSX_GROUP = "GSX"
+GSX_SHORT = {"gsx_refuel": "refueling", "gsx_cater": "catering", "gsx_board": "boarding"}  # nome breve nella riga Actual/NOW
+
+
+def gsx_live_text(key: str, raw) -> str:
+    """Testo "<servizio> <grezzo> <stato>" per la pagina (es. "boarding 1 available"); L-var non letta: "boarding n/d"; fuori mappa: "boarding 0 n/d"."""
+    v = to_number(raw)
+    if v is None:
+        return f"{GSX_SHORT[key]} {NA}"
+    state = GSX_STATES.get(int(v)) if v == int(v) else None
+    return f"{GSX_SHORT[key]} {raw_text(v)} {state.lower() if state else NA}"
 
 MAPS = {
     "onoff": {0: "OFF", 1: "ON"},
@@ -110,10 +122,24 @@ ITEMS: list[Item] = [
     Item("tcas", "Transponder", "TCAS mode selector", "tcas", {"Before T/O": "TA or TA/RA", "After landing": "STBY"}, None, "S_XPDR_MODE"),  # valori 0/1/2 ipotizzati
     Item("xpdr_operation", "Transponder", "XPDR operation (raw)", "numeric", {}, None, "S_XPDR_OPERATION"),  # solo grezzo, per capire la mappa
     Item("xpdr_atc", "Transponder", "XPDR ATC (raw)", "numeric", {}, None, "S_XPDR_ATC"),  # solo grezzo, per capire la mappa
-    # GSX (ipotesi sui valori, vedi GSX_STATES): voce senza colore se la L-var non risponde o il valore e' fuori mappa
+    # GSX (mappa da confermare, vedi GSX_STATES): voce senza colore se la L-var non risponde o il valore e' fuori mappa
     Item("gsx_refuel", "GSX", "GSX refueling state", "gsx", {}, None, "FSDT_GSX_REFUELING_STATE"),
     Item("gsx_cater", "GSX", "GSX catering state", "gsx", {}, None, "FSDT_GSX_CATERING_STATE"),
     Item("gsx_board", "GSX", "GSX boarding state", "gsx", {}, None, "FSDT_GSX_BOARDING_STATE"),
+    # GSX, sola diagnostica (solo grezzo, mai interpretato): per capire dal vivo cosa risponde Couatl (python simconnect_backend.py --probe)
+    Item("gsx_d_couatl_started", "GSX", "COUATL_STARTED (raw)", "numeric", {}, None, "FSDT_GSX_COUATL_STARTED"),
+    Item("gsx_d_couatl_alive", "GSX", "COUATL_ALIVE (raw)", "numeric", {}, None, "FSDT_GSX_COUATL_ALIVE"),
+    Item("gsx_d_heartbeat", "GSX", "HEARTBEAT (raw)", "numeric", {}, None, "FSDT_GSX_HEARTBEAT"),
+    Item("gsx_d_version_major", "GSX", "VERSION_MAJOR (raw)", "numeric", {}, None, "FSDT_GSX_VERSION_MAJOR"),
+    Item("gsx_d_version_minor", "GSX", "VERSION_MINOR (raw)", "numeric", {}, None, "FSDT_GSX_VERSION_MINOR"),
+    Item("gsx_d_version_build", "GSX", "VERSION_BUILD (raw)", "numeric", {}, None, "FSDT_GSX_VERSION_BUILD"),
+    Item("gsx_d_deboarding_state", "GSX", "DEBOARDING_STATE (raw)", "numeric", {}, None, "FSDT_GSX_DEBOARDING_STATE"),
+    Item("gsx_d_departure_state", "GSX", "DEPARTURE_STATE (raw)", "numeric", {}, None, "FSDT_GSX_DEPARTURE_STATE"),
+    Item("gsx_d_pushback_status", "GSX", "PUSHBACK_STATUS (raw)", "numeric", {}, None, "FSDT_GSX_PUSHBACK_STATUS"),
+    Item("gsx_d_jetway", "GSX", "JETWAY (raw)", "numeric", {}, None, "FSDT_GSX_JETWAY"),
+    Item("gsx_d_stairs", "GSX", "STAIRS (raw)", "numeric", {}, None, "FSDT_GSX_STAIRS"),
+    Item("gsx_d_gpu_state", "GSX", "GPU_STATE (raw)", "numeric", {}, None, "FSDT_GSX_GPU_STATE"),
+    Item("gsx_d_state", "GSX", "STATE (raw)", "numeric", {}, None, "FSDT_GSX_STATE"),
     Item("fcu_alt", "FCU", "FCU altitude", "numeric", {"Climb": "as cleared"}, None, "N_FCU_ALTITUDE"),  # piedi, verificata dal vivo 13/11
     # FMGS performance & glareshield (nodi, 0 = non inserita; lampade 0/1; da verificare dal vivo col grezzo)
     Item("v1", "FMGS performance", "V1", "numeric", {"Before start": "as briefing"}, None, "N_MISC_PERF_TO_V1"),

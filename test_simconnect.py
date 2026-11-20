@@ -414,6 +414,50 @@ def test_thread_start_stop():
     assert dll.closes == 1 and not be._connected
 
 
+def test_gsx_none_until_answered_and_late_reregistration():
+    gb = [b for b in BLOCKS if b.retry]
+    assert len(gb) == 1 and all(k in V.GSX_KEYS for k in gb[0].keys) and len(gb[0].keys) <= V.MAX_PER_DEF
+    assert gb[0].keys[:3] == ("gsx_refuel", "gsx_cater", "gsx_board") and all(not b.retry for b in BLOCKS if b is not gb[0])
+    assert all(k in gb[0].keys for k in V.GSX_KEYS) and "pack1" not in gb[0].keys
+    dm = V.default_monitor()
+    assert all(dm[k] is None for k in V.GSX_KEYS) and dm["pack1"] == 0.0  # le altre voci restano 0
+    be, dll, t = make()
+    connect(be)
+    dll.msgs.append(msg_block(CORE, ias=1.0))
+    dll.msgs.append(msg_block(gb[0]))  # tutto 0: GSX non risponde ancora
+    for _ in range(3):
+        be.step()
+    assert all(be.read_all(0.5)[1][k] is None for k in V.GSX_KEYS)
+    n = len(dll.requests)
+    t[0] += SB.GSX_RETRY_S - 1
+    be.step()
+    assert len(dll.requests) == n  # non ancora
+    t[0] += 2
+    dll.msgs.append(msg_block(CORE, ias=1.0))
+    be.step()
+    assert dll.requests[n:] == [(gb[0].ident, gb[0].ident, SB.PERIOD_NEVER, SB.INTERVAL_FRAMES),  # ferma la vecchia
+                                (gb[0].ident + SB.GEN_STEP, gb[0].ident + SB.GEN_STEP, SB.PERIOD_VISUAL_FRAME, SB.INTERVAL_FRAMES)]
+    assert sum(1 for a in dll.adds if a[0] == gb[0].ident + SB.GEN_STEP) == len(gb[0].reqs)
+    assert not any(a[1].startswith("L:S_OH") for a in dll.adds if a[0] == gb[0].ident + SB.GEN_STEP)
+    # i dati del nuovo id arrivano al blocco giusto: GSX parte tardi, valori diversi da 0
+    dll.msgs.append(msg_data(gb[0].ident + SB.GEN_STEP, [1.0 if k == "gsx_board" else 0.0 for k in gb[0].keys]))
+    be.step()
+    mon = be.read_all(0.5)[1]
+    assert mon["gsx_board"] == 1.0 and mon["gsx_refuel"] == 0.0  # risposto: ora 0 e' un dato
+    n = len(dll.requests)
+    t[0] += SB.GSX_RETRY_S * 2
+    dll.msgs.append(msg_block(CORE, ias=1.0))
+    be.step()
+    assert len(dll.requests) == n  # risposto: niente piu' riregistrazioni
+    # riconnessione: si riparte da zero (generazione e stato)
+    dll.msgs.append(msg_simple(SB.RECV_QUIT))
+    be.step()
+    assert not be._connected
+    t[0] += 2
+    connect(be)
+    assert be._gsx_gen == 0 and not be._gsx_answered
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):
