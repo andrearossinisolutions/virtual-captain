@@ -281,7 +281,7 @@ def test_exception_logged_and_reported():
         connect(be)
         dll.msgs.append(msg_exception(7, 42, 3))
         be.step()
-        assert any("eccezione 7" in r.getMessage() and r.levelno == logging.WARNING for r in cap.records)
+        assert any("exception 7" in r.getMessage() and r.levelno == logging.WARNING for r in cap.records)
         assert be._connected  # un'eccezione non interrompe nulla
         msg = raises(lambda: be.read_all(0.05))
         assert "last SimConnect exception: code 7, index 3" in msg, msg
@@ -290,7 +290,7 @@ def test_exception_logged_and_reported():
         dll.msgs.extend([short, short])
         be.step()
         be.step()
-        assert sum("troncato" in r.getMessage() for r in cap.records) == 1
+        assert sum("truncated" in r.getMessage() for r in cap.records) == 1
     finally:
         lg.removeHandler(cap)
         lg.setLevel(old)

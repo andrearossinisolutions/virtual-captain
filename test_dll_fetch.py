@@ -62,7 +62,7 @@ def test_wrong_hash():
         lim = limits(wheel, dll)
         lim["wheel_sha256"] = "0" * 64
         r = run(wheel, d, dll, lim=lim)
-        assert not r.ok and r.code == D.HASH and "SimConnect.dll accanto" in r.message, r
+        assert not r.ok and r.code == D.HASH and "SimConnect.dll next to" in r.message, r
         lim = limits(wheel, dll)
         lim["dll_sha256"] = "0" * 64
         assert run(wheel, d, dll, lim=lim).code == D.HASH
@@ -111,7 +111,7 @@ def test_dll_too_big_or_false_size():
 
 def test_download_over_limit():
     def big(url, mx):
-        raise D.DownloadError(D.TOO_BIG, "file troppo grande")
+        raise D.DownloadError(D.TOO_BIG, "file too large")
     with tempfile.TemporaryDirectory() as d:
         assert D.fetch_dll(d, big).code == D.TOO_BIG
         r = D.fetch_dll(d, lambda u, m: b"x" * (m + 1))
@@ -128,7 +128,7 @@ def test_network_errors():
     with tempfile.TemporaryDirectory() as d:
         for e in (urllib.error.URLError("no rete"), TimeoutError("timeout"), OSError("x")):
             r = D.fetch_dll(d, err(e))
-            assert not r.ok and r.code == D.NETWORK and "SimConnect.dll accanto" in r.message, r
+            assert not r.ok and r.code == D.NETWORK and "SimConnect.dll next to" in r.message, r
         assert os.listdir(d) == []
 
 

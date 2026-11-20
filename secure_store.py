@@ -106,8 +106,8 @@ class TokenStore:
         raw = self.protector.protect(json.dumps(payload).encode("utf-8"))
         if not self.protector.encrypted and not self._warned:
             self._warned = True
-            self._warn(f"Avviso: su questo sistema i token del collegamento sono in un file NON cifrato "
-                       f"(permessi 0600): {self.path}")
+            self._warn(f"Warning: on this system the link tokens are stored in an UNENCRYPTED file "
+                       f"(permissions 0600): {self.path}")
         self.dir.mkdir(parents=True, exist_ok=True)
         if os.name == "posix":
             os.chmod(self.dir, 0o700)

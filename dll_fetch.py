@@ -31,7 +31,7 @@ TIMEOUT_S = 15.0
 OK, NETWORK, HASH, BAD_WHEEL, NO_MEMBER, TOO_BIG, NOT_WRITABLE = (
     "OK", "NETWORK", "HASH", "BAD_WHEEL", "NO_MEMBER", "TOO_BIG", "NOT_WRITABLE")
 
-MANUAL = "In alternativa copia SimConnect.dll accanto a main.py o in vendor\\ (vedi README)."
+MANUAL = "Alternatively, copy SimConnect.dll next to main.py or into vendor\\ (see README)."
 
 
 class FetchResult(NamedTuple):
@@ -51,7 +51,7 @@ class DownloadError(Exception):
 class _HttpsOnlyRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         if not newurl.lower().startswith("https://"):
-            raise urllib.error.URLError("redirect non https rifiutato")
+            raise urllib.error.URLError("non-HTTPS redirect refused")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -62,7 +62,7 @@ class _HostRedirect(_HttpsOnlyRedirect):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         parts = urllib.parse.urlsplit(newurl)
         if (parts.hostname or "").lower() != self.host or parts.port not in (None, 443):
-            raise urllib.error.URLError("redirect verso un host o una porta diversi rifiutato")
+            raise urllib.error.URLError("redirect to a different host or port refused")
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -70,7 +70,7 @@ def _check_url(url: str, host: str) -> None:
     parts = urllib.parse.urlsplit(url)
     if parts.scheme.lower() != "https" or (parts.hostname or "").lower() != host \
             or parts.port not in (None, 443):
-        raise urllib.error.URLError("indirizzo non consentito")
+        raise urllib.error.URLError("address not allowed")
 
 
 def default_download(url: str, max_bytes: int, timeout: float = TIMEOUT_S, host: str = ALLOWED_HOST) -> bytes:
@@ -86,7 +86,7 @@ def default_download(url: str, max_bytes: int, timeout: float = TIMEOUT_S, host:
                 break
             total += len(block)
             if total > max_bytes:
-                raise DownloadError(TOO_BIG, "file troppo grande")
+                raise DownloadError(TOO_BIG, "file too large")
             chunks.append(block)
     return b"".join(chunks)
 
@@ -104,31 +104,31 @@ def extract_dll(wheel: bytes, wheel_sha256: str = WHEEL_SHA256, wheel_size: int 
                 member: str = MEMBER, dll_size: int = DLL_SIZE, dll_sha256: str = DLL_SHA256) -> bytes:
     """Verifica il wheel e ritorna i byte della DLL; DownloadError altrimenti. Niente extract: un solo read."""
     if len(wheel) != wheel_size:
-        raise DownloadError(HASH, "il file scaricato non e' quello atteso (dimensione)")
+        raise DownloadError(HASH, "the downloaded file is not the expected one (size)")
     if hashlib.sha256(wheel).hexdigest() != wheel_sha256:
-        raise DownloadError(HASH, "il file scaricato non e' quello atteso (SHA-256)")
+        raise DownloadError(HASH, "the downloaded file is not the expected one (SHA-256)")
     if not zipfile.is_zipfile(io.BytesIO(wheel)):
-        raise DownloadError(BAD_WHEEL, "il file scaricato non e' un archivio valido")
+        raise DownloadError(BAD_WHEEL, "the downloaded file is not a valid archive")
     try:
         with zipfile.ZipFile(io.BytesIO(wheel)) as z:
             try:
                 info = z.getinfo(member)
             except KeyError:
-                raise DownloadError(NO_MEMBER, "la DLL non e' nel pacchetto scaricato") from None
+                raise DownloadError(NO_MEMBER, "the DLL is not in the downloaded package") from None
             if info.file_size != dll_size:
-                raise DownloadError(TOO_BIG, "dimensione della DLL inattesa")
+                raise DownloadError(TOO_BIG, "unexpected DLL size")
             with z.open(info) as f:
                 data = f.read(dll_size + 1)
     except DownloadError:
         raise
     except (zipfile.BadZipFile, OSError, RuntimeError, NotImplementedError, EOFError):
-        raise DownloadError(BAD_WHEEL, "il file scaricato non e' un archivio valido") from None
+        raise DownloadError(BAD_WHEEL, "the downloaded file is not a valid archive") from None
     if len(data) != dll_size:
-        raise DownloadError(TOO_BIG, "dimensione della DLL inattesa")
+        raise DownloadError(TOO_BIG, "unexpected DLL size")
     if hashlib.sha256(data).hexdigest() != dll_sha256:
-        raise DownloadError(HASH, "la DLL estratta non e' quella attesa (SHA-256)")
+        raise DownloadError(HASH, "the extracted DLL is not the expected one (SHA-256)")
     if not is_pe64(data):
-        raise DownloadError(BAD_WHEEL, "la DLL estratta non e' a 64 bit")
+        raise DownloadError(BAD_WHEEL, "the extracted DLL is not 64-bit")
     return data
 
 
@@ -161,28 +161,28 @@ def fetch_dll(dest_dir: str, download: Callable = default_download, url: str = W
         except DownloadError:
             raise
         except Exception as e:  # URLError, TimeoutError, OSError, ValueError...
-            raise DownloadError(NETWORK, "download non riuscito (%s)" % (str(e) or type(e).__name__)[:80]) from None
+            raise DownloadError(NETWORK, "download failed (%s)" % (str(e) or type(e).__name__)[:80]) from None
         if not isinstance(wheel, (bytes, bytearray)):
-            raise DownloadError(NETWORK, "download non riuscito")
+            raise DownloadError(NETWORK, "download failed")
         if len(wheel) > max_wheel:
-            raise DownloadError(TOO_BIG, "file troppo grande")
+            raise DownloadError(TOO_BIG, "file too large")
         data = extract_dll(bytes(wheel), **limits)
         try:
             path = write_atomic(dest_dir, DLL_NAME, data)
         except Exception as e:
-            raise DownloadError(NOT_WRITABLE, "impossibile salvare in %s (%s)" % (dest_dir, type(e).__name__)) from None
+            raise DownloadError(NOT_WRITABLE, "cannot save to %s (%s)" % (dest_dir, type(e).__name__)) from None
         try:
             present = os.path.isfile(path)
         except Exception:
             present = False
         if not present:
-            raise DownloadError(NOT_WRITABLE, "la DLL salvata e' sparita: controlla l'antivirus")
-        return FetchResult(True, path, OK, "SimConnect.dll salvata in %s" % dest_dir)
+            raise DownloadError(NOT_WRITABLE, "the saved DLL disappeared: check your antivirus")
+        return FetchResult(True, path, OK, "SimConnect.dll saved to %s" % dest_dir)
     except DownloadError as e:
-        extra = " Controlla l'antivirus." if e.code == NOT_WRITABLE else ""
+        extra = " Check your antivirus." if e.code == NOT_WRITABLE else ""
         return FetchResult(False, "", e.code, "%s.%s %s" % (e.message, extra, MANUAL))
     except Exception as e:  # rete di sicurezza
-        return FetchResult(False, "", NETWORK, "errore (%s). %s" % (type(e).__name__, MANUAL))
+        return FetchResult(False, "", NETWORK, "error (%s). %s" % (type(e).__name__, MANUAL))
 
 
 _lock = threading.Lock()
@@ -219,7 +219,7 @@ def start_fetch(dest_dir: str, on_done: Optional[Callable[[FetchResult], None]] 
                 if on_done is not None:
                     on_done(result)
             except Exception:
-                log.exception("Download SimConnect.dll: errore in on_done")
+                log.exception("Download SimConnect.dll: error in on_done")
         finally:
             with _lock:
                 _running = False

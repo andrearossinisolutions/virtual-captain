@@ -78,7 +78,7 @@ def test_unencrypted_warning_once_and_never_with_tokens(tmp_path):
     s = store(tmp_path, warn=msgs.append)
     s.save(TOK)
     s.save(TOK)
-    assert len(msgs) == 1 and "NON cifrato" in msgs[0]
+    assert len(msgs) == 1 and "UNENCRYPTED" in msgs[0]
     assert TOK["refresh"] not in msgs[0] and TOK["access"] not in msgs[0]
     msgs2 = []
     d = store(tmp_path / "d", DpapiProtector(FakeDpapi().apis()), warn=msgs2.append)

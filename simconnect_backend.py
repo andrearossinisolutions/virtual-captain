@@ -251,7 +251,7 @@ class SimConnectBackend:
                 try:
                     wait = self.step()
                 except Exception:
-                    log.exception("SimConnect: errore nel thread di dispatch")
+                    log.exception("SimConnect: error in the dispatch thread")
                     wait = 0.5
                 self._stop.wait(wait)
         finally:
@@ -272,7 +272,7 @@ class SimConnectBackend:
             now = self._clock()
             self._gsx_retry(now)
             if now - self._last_data_at > WATCHDOG_S:
-                log.warning("Nessun dato da MSFS da %.0f s: chiudo e riapro SimConnect.", WATCHDOG_S)
+                log.warning("No data from MSFS for %.0f s: closing and reopening SimConnect.", WATCHDOG_S)
                 self._disconnect(now, "no data from MSFS (SimConnect OFF)")
         return POLL_S
 
@@ -290,7 +290,7 @@ class SimConnectBackend:
         if self._hr_failed(hr) or not h.value:
             delay = OPEN_BACKOFF[min(self._open_failures, len(OPEN_BACKOFF) - 1)]
             if self._open_failures == 0:
-                log.warning("MSFS non raggiungibile (SimConnect_Open hr=0x%08X): riprovo ogni %.0f-%.0f s",
+                log.warning("MSFS unreachable (SimConnect_Open hr=0x%08X): retrying every %.0f-%.0f s",
                             hr & 0xFFFFFFFF, OPEN_BACKOFF[0], OPEN_BACKOFF[-1])
             self._open_failures += 1
             self._next_open = now + delay
@@ -298,7 +298,7 @@ class SimConnectBackend:
             return
         self._h = h
         self._open_failures = 0
-        log.info("SimConnect aperto: attendo RECV_OPEN.")
+        log.info("SimConnect open: waiting for RECV_OPEN.")
 
     def _set_error(self, msg: str) -> None:
         with self._cond:
@@ -317,7 +317,7 @@ class SimConnectBackend:
             if self._hr_failed(hr) and (hr & 0xFFFFFFFF) != E_FAIL:
                 self._bad_dispatch += 1
                 if self._bad_dispatch >= MAX_BAD_DISPATCH:
-                    log.warning("GetNextDispatch in errore da %d giri (hr=0x%08X): riconnessione.",
+                    log.warning("GetNextDispatch failing for %d cycles (hr=0x%08X): reconnecting.",
                                 self._bad_dispatch, hr & 0xFFFFFFFF)
                     self._disconnect(now, "SimConnect errors (SimConnect OFF)")
                 return
@@ -328,12 +328,12 @@ class SimConnectBackend:
             if msg_id == RECV_OPEN:
                 self._on_open()
             elif msg_id == RECV_QUIT:
-                log.warning("MSFS ha chiuso SimConnect: riconnessione in corso.")
+                log.warning("MSFS closed SimConnect: reconnecting.")
                 self._disconnect(now, "MSFS closed (SimConnect OFF)")
                 return
             elif msg_id == RECV_EXCEPTION:
                 e = C.cast(pp, C.POINTER(RecvExc)).contents
-                log.warning("SimConnect: eccezione %d (sendID %d, indice %d)", e.dwException, e.dwSendID, e.dwIndex)
+                log.warning("SimConnect: exception %d (sendID %d, index %d)", e.dwException, e.dwSendID, e.dwIndex)
                 self._last_exc = "code %d, index %d" % (e.dwException, e.dwIndex)
             elif msg_id == RECV_SIMOBJECT_DATA:
                 self._on_data(pp)
@@ -344,12 +344,12 @@ class SimConnectBackend:
         for i, (name, unit) in enumerate(b.reqs):
             hr = self._dll.SimConnect_AddToDataDefinition(self._h, ident, name.encode(), unit.encode(), FLOAT64, C.c_float(0.0), i)
             if self._hr_failed(hr):
-                log.error("AddToDataDefinition %s fallita (hr=0x%08X): vale 0", name, hr & 0xFFFFFFFF)
+                log.error("AddToDataDefinition %s failed (hr=0x%08X): value is 0", name, hr & 0xFFFFFFFF)
                 ok = False
         hr = self._dll.SimConnect_RequestDataOnSimObject(self._h, ident, ident, USER_AIRCRAFT,
                                                          PERIOD_VISUAL_FRAME, 0, 0, INTERVAL_FRAMES, 0)
         if self._hr_failed(hr):
-            log.error("RequestDataOnSimObject (blocco %d) fallita (hr=0x%08X)", ident, hr & 0xFFFFFFFF)
+            log.error("RequestDataOnSimObject (block %d) failed (hr=0x%08X)", ident, hr & 0xFFFFFFFF)
             ok = False
         self._by_req[ident] = b
         return ok
@@ -364,7 +364,7 @@ class SimConnectBackend:
         if not blocks:
             return
         self._gsx_gen += 1
-        log.info("GSX: nessuna risposta dalle L-var, riregistro (tentativo %d).", self._gsx_gen)
+        log.info("GSX: no response from the L-vars, re-registering (attempt %d).", self._gsx_gen)
         for b in blocks:
             old = b.ident + GEN_STEP * (self._gsx_gen - 1)
             self._dll.SimConnect_RequestDataOnSimObject(self._h, old, old, USER_AIRCRAFT, PERIOD_NEVER, 0, 0, INTERVAL_FRAMES, 0)
@@ -384,7 +384,7 @@ class SimConnectBackend:
             self._core, self._monitor, self._core_ts = {}, {}, None
             self._last_error = "waiting for data from MSFS" if ok else "data request refused by SimConnect"
             self._cond.notify_all()
-        log.info("SimConnect connesso a MSFS.")
+        log.info("SimConnect connected to MSFS.")
 
     def _on_data(self, pp) -> None:
         d = C.cast(pp, C.POINTER(RecvData)).contents
@@ -393,7 +393,7 @@ class SimConnectBackend:
         if d.hdr.dwSize < size + 8 * count:
             if not self._warned_size:
                 self._warned_size = True
-                log.warning("SimConnect: pacchetto dati troncato (dwSize %d, attesi almeno %d): ignorato",
+                log.warning("SimConnect: truncated data packet (dwSize %d, at least %d expected): ignored",
                             d.hdr.dwSize, size + 8 * count)
             return
         values = list((C.c_double * count).from_address(C.addressof(d) + size))  # copia subito dal buffer
@@ -402,7 +402,7 @@ class SimConnectBackend:
             return
         got = simvars.decode(block, values)
         if not got:
-            log.warning("SimConnect: %d valori invece di %d nel blocco %d (ignorati)", count, len(block.keys), block.ident)
+            log.warning("SimConnect: %d values instead of %d in block %d (ignored)", count, len(block.keys), block.ident)
             return
         if block.retry:
             if not self._gsx_answered and not any(got.values()):
