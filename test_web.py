@@ -593,9 +593,6 @@ def test_inputs_markup():
 
 
 
-def test_firewall_is_a_noop():
-    import firewall
-    assert firewall.ensure(8080) is True  # no rule, no prompt (Tailscale removed, page on 127.0.0.1)
 
 
 def test_plan_extraction():
@@ -858,7 +855,6 @@ if __name__ == "__main__":
     test_simvars_monitor_requests_and_missing_is_zero()
     test_sim_state_snapshot_and_old_aao_url_ignored()
     test_sim_endpoints_and_markup()
-    test_firewall_is_a_noop()
     test_plan_extraction()
     test_old_mode_values_migrate()
     test_page_assembled_from_files()

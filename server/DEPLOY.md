@@ -248,7 +248,7 @@ Variabili facoltative (default tra parentesi): `RATE_DEVICE_START_IP_HOURLY` (10
 ### Flusso
 
 1. Il programma chiama `POST /api/device/start` (JSON, senza login): riceve `device_code` (segreto, solo per il programma), `user_code` `ABCD-EFGH` (8 caratteri, senza 0/O/1/I/L), `verification_uri` (`<PUBLIC_BASE_URL>/link`), `verification_uri_complete` (con il codice nel **frammento**: `/link#ABCD-EFGH`, non in query), `expires_in` (600) e `interval` (5).
-2. L'utente apre `/link` (o il link completo/QR), accede se serve (dopo il login si torna sempre a `/link`, il codice resta solo nella memoria della scheda), vede IP, ora e user agent della richiesta e l'avviso "Only approve if you started this on your own PC", poi preme **Approve** o **Deny**.
+2. L'utente apre `/link` (o il link completo), accede se serve (dopo il login si torna sempre a `/link`, il codice resta solo nella memoria della scheda), vede IP, ora e user agent della richiesta e l'avviso "Only approve if you started this on your own PC", poi preme **Approve** o **Deny**.
 3. Il programma fa polling di `POST /api/device/poll` `{device_code}` ogni `interval` secondi: `authorization_pending`, `slow_down` (troppo frequente: l'intervallo sale di 5 s, max 60), `expired_token` (scaduto, sconosciuto o gia' ritirato), `access_denied`. Appena approvato, **una sola** risposta contiene `access_token` (opaco, 10 minuti) e `refresh_token` (90 giorni); il codice passa a `consumed` e il poll successivo fallisce.
 4. `POST /api/device/token` `{grant_type: "refresh_token", refresh_token}`: ruota la coppia (il vecchio refresh si invalida). Un refresh gia' ruotato presentato di nuovo **revoca l'intera famiglia** (puo' essere rubato; se la risposta di rotazione si perde per rete, serve un nuovo collegamento). `POST /api/device/revoke` `{token}` (refresh o access): idempotente, risposta sempre `{"ok": true}`, revoca tutta l'autorizzazione del programma.
 
@@ -326,7 +326,7 @@ $ sudo systemctl restart virtual-captain
 
 ### Come provarlo (U1)
 
-Con il programma sul PC avviato (`python main.py`, di default collega al server) e un account verificato: al primo avvio la console mostra il codice (e un QR); approvalo da `/link` (ultimi 4 caratteri), poi apri `/waiting` da loggato: dopo pochi secondi il titolo diventa **Program connected** e **Start flight** si abilita (mostra solo un messaggio). Chiudi il programma: entro ~12 secondi torna **Program not connected**.
+Con il programma sul PC avviato (`python main.py`, di default collega al server) e un account verificato: al primo avvio la finestra "Link to server" mostra il codice e il link (Open/Copy, niente QR né console); approvalo da `/link` (ultimi 4 caratteri), poi apri `/waiting` da loggato: dopo pochi secondi il titolo diventa **Program connected** e **Start flight** si abilita (mostra solo un messaggio). Chiudi il programma: entro ~12 secondi torna **Program not connected**.
 
 ### Note dopo la review (U1)
 

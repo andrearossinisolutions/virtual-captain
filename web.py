@@ -1,13 +1,10 @@
 """Pagina web (briefing e stato) per il tablet. Solo libreria standard.
 
-Si lega all'IP di Tailscale (rete privata): mai a tutte le interfacce.
+Di default si lega a 127.0.0.1 (`--host` per cambiarlo).
 """
 from __future__ import annotations
 
 import json
-import shutil
-import socket
-import subprocess
 import threading
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -38,25 +35,6 @@ def build_page() -> str:
 
 
 PAGE = build_page()
-
-
-def tailscale_ip() -> str | None:
-    """IPv4 di Tailscale: dal comando `tailscale ip -4`, altrimenti cerca un indirizzo 100.64.0.0/10."""
-    exe = shutil.which("tailscale") or r"C:\Program Files\Tailscale\tailscale.exe"
-    try:
-        out = subprocess.run([exe, "ip", "-4"], capture_output=True, text=True, timeout=5).stdout.split()
-        if out:
-            return out[0]
-    except (OSError, subprocess.SubprocessError):
-        pass
-    try:
-        for ip in socket.gethostbyname_ex(socket.gethostname())[2]:
-            a, b = (int(x) for x in ip.split(".")[:2])
-            if a == 100 and 64 <= b <= 127:
-                return ip
-    except (OSError, ValueError):
-        pass
-    return None
 
 
 def make_handler(st: State):
